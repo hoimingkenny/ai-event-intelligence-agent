@@ -1,0 +1,30 @@
+{
+  "name": "vendor-threat-watch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:eval": "tsx src/eval/sample-eval.ts"
+  },
+  "dependencies": {
+    "@langchain/langgraph": "latest",
+    "@openai/agents": "latest",
+    "@qdrant/js-client-rest": "latest",
+    "openai": "latest",
+    "zod": "latest",
+    "dotenv": "latest",
+    "pino": "latest",
+    "pino-pretty": "latest",
+    "rss-parser": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
