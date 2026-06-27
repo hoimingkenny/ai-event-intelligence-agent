@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -14,15 +15,17 @@
     "@langchain/langgraph": "latest",
     "@openai/agents": "latest",
     "@qdrant/js-client-rest": "latest",
-    "openai": "latest",
-    "zod": "latest",
     "dotenv": "latest",
+    "openai": "latest",
+    "pg": "^8.22.0",
     "pino": "latest",
     "pino-pretty": "latest",
-    "rss-parser": "latest"
+    "rss-parser": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
+    "@types/pg": "^8.20.0",
     "tsx": "latest",
     "typescript": "latest",
     "vitest": "latest"
