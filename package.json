@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "db:migrate": "tsx scripts/migrate.ts",
+    "seed:feeds": "tsx scripts/seed-feeds.ts",
+    "seed:vendors": "tsx scripts/seed-vendors.ts",
+    "db:seed": "npm run seed:feeds && npm run seed:vendors",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

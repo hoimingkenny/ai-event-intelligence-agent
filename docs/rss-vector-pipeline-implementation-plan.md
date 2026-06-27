@@ -20,6 +20,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 1: Add Local Infrastructure Config
 
+**Status:** Completed in commit `4fc85c4`.
+
 **Description:** Add local development services for PostgreSQL with pgvector and Redis.
 
 **Acceptance Criteria:**
@@ -41,6 +43,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Small
 
 ### Task 2: Add PostgreSQL Connection and Migration Runner
+
+**Status:** Completed in commit `4fc85c4`.
 
 **Description:** Introduce a small database layer with a pooled Postgres connection and a migration script.
 
@@ -66,6 +70,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 3: Create Core Schema
 
+**Status:** Completed in commit `4fc85c4`.
+
 **Description:** Add tables and indexes for feeds, vendors, articles, entities, events, event/article relationships, and alerts.
 
 **Acceptance Criteria:**
@@ -88,14 +94,16 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Database Foundation
 
-- [ ] Local Postgres and Redis run.
-- [ ] Migrations apply cleanly.
-- [ ] Existing tests still pass.
-- [ ] `npm run check` passes.
+- [x] Local Postgres 18 with pgvector and Redis 8 run.
+- [x] Migrations apply cleanly and are idempotent.
+- [x] Existing offline tests pass with live MiniMax tests skipped.
+- [x] `npm run check` passes.
 
 ## Phase 2: Seed Data and Repositories
 
 ### Task 4: Add Feed and Vendor Seed Scripts
+
+**Status:** Completed.
 
 **Description:** Move configured RSS feeds and monitored vendors into seedable database records.
 
@@ -120,6 +128,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 5: Add Repository Layer
 
+**Status:** Completed.
+
 **Description:** Add repository classes for database reads/writes while keeping business logic out of persistence code.
 
 **Acceptance Criteria:**
@@ -141,9 +151,15 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Data Access
 
-- [ ] Seed data loads into Postgres.
-- [ ] Repository tests cover core insert/read paths.
-- [ ] In-memory store remains available only for legacy flow or tests.
+- [x] Seed data loads into Postgres.
+- [x] Repository tests cover duplicate article URL handling and vendor/product alias lookup.
+- [x] In-memory store remains available for the legacy graph flow and tests.
+
+**Verification Completed:**
+- `npm run check`
+- `env MINIMAX_API_KEY= DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm test`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run db:seed`
+- Seed counts after repeated runs: 4 feeds, 4 vendors, 4 products, 13 product aliases.
 
 ## Phase 3: RSS Ingestion
 

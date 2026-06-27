@@ -47,6 +47,9 @@ docker compose up -d postgres redis
 # Apply database migrations.
 npm run db:migrate
 
+# Seed configured RSS feeds and monitored vendors.
+npm run db:seed
+
 # Optional during the Qdrant prototype transition: start Qdrant for vector dedup.
 ./scripts/qdrant-up.sh
 
@@ -76,6 +79,7 @@ After the containers are healthy, run:
 
 ```bash
 npm run db:migrate
+npm run db:seed
 ```
 
 PostgreSQL 18 stores container data under a major-version-specific layout. This
