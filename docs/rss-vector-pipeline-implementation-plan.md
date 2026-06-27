@@ -165,6 +165,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 6: Implement URL Normalization and Hashing
 
+**Status:** Completed.
+
 **Description:** Add deterministic URL normalization, title normalization, URL hash, title hash, and content hash helpers.
 
 **Acceptance Criteria:**
@@ -187,6 +189,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Small
 
 ### Task 7: Implement RSS Ingestion Stage
+
+**Status:** Completed.
 
 **Description:** Fetch active RSS feeds, normalize items, store new article metadata, and skip exact URL duplicates.
 
@@ -213,9 +217,18 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Ingestion
 
-- [ ] RSS ingestion can populate Postgres.
-- [ ] Exact URL duplicates are skipped.
-- [ ] Logs include feed fetched, article discovered, and duplicate skipped events.
+- [x] RSS ingestion can populate Postgres.
+- [x] Exact URL duplicates are skipped.
+- [x] Logs include feed fetched, article discovered, and duplicate skipped events.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/url-normalizer.test.ts`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npx vitest run tests/rss-ingestion.test.ts`
+- `env MINIMAX_API_KEY= DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm test`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run ingest:rss -- --feed-url=https://www.cisa.gov/cybersecurity-advisories/all.xml`
+- Live CISA ingest first run: 30 fetched, 30 created, 0 duplicates, 0 skipped, 0 errors.
+- Live CISA ingest second run: 30 fetched, 0 created, 30 duplicates, 0 skipped, 0 errors.
 
 ## Phase 4: Article Extraction and Cheap Filtering
 
