@@ -234,6 +234,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 8: Implement Cheap Pre-Filter
 
+**Status:** Completed.
+
 **Description:** Add deterministic cyber keyword, CVE pattern, attack phrase, vendor, and product matching before expensive extraction or LLM calls.
 
 **Acceptance Criteria:**
@@ -256,6 +258,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Medium
 
 ### Task 9: Implement HTTP Article Extraction
+
+**Status:** Completed.
 
 **Description:** Extract article content with HTTP fetch, HTML parsing, Readability, and content cleaning.
 
@@ -281,6 +285,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 10: Implement Playwright Fallback Extractor
 
+**Status:** Started. Router and fallback contract exist; real Playwright implementation is still pending.
+
 **Description:** Add browser-based fallback extraction for pages where HTTP extraction fails or produces insufficient content.
 
 **Acceptance Criteria:**
@@ -304,13 +310,23 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Extraction
 
-- [ ] Static articles extract through HTTP.
-- [ ] Difficult pages route to Playwright fallback.
-- [ ] Failed extraction keeps article metadata and marks retry/review status.
+- [x] Static articles extract through HTTP.
+- [x] Difficult pages route to fallback extractor contract.
+- [x] Failed extraction keeps article metadata and marks extraction failure status.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/detection.test.ts tests/extraction.test.ts`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run filter:articles -- --limit=10`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run extract:articles -- --limit=2`
+- Local filter run: 10 reviewed, 9 extraction pending, 1 ignored.
+- Local extraction run: 2 reviewed, 2 succeeded, 0 failed.
 
 ## Phase 5: Entities, Embeddings, and Semantic Search
 
 ### Task 11: Store Entity Detection Results
+
+**Status:** Completed.
 
 **Description:** Extract and persist vendors, products, CVEs, IOCs, attack types, and initial roles from article content.
 
@@ -334,6 +350,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Medium
 
 ### Task 12: Add pgvector Embedding Storage
+
+**Status:** Started. Embedding stage, pgvector serialization, and repository write/search hooks exist; live embedding requires API credentials.
 
 **Description:** Generate embeddings for extracted article text and store vectors in PostgreSQL.
 
@@ -359,6 +377,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 13: Implement Semantic Search Repositories
 
+**Status:** Started. Article similarity repository method exists; event similarity search is still pending.
+
 **Description:** Add pgvector candidate search for recent similar articles and events.
 
 **Acceptance Criteria:**
@@ -381,9 +401,15 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Semantic Retrieval
 
-- [ ] Articles can be embedded into Postgres.
+- [ ] Articles can be embedded into Postgres with live credentials.
 - [ ] Similar article search returns plausible candidates.
 - [ ] Qdrant is no longer required for the main MVP path.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/entity-extractor.test.ts tests/embedding-stage.test.ts`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run entities:articles -- --limit=5`
+- Local entity run: 2 reviewed, 19 entity rows stored.
 
 ## Phase 6: Deduplication and Event Grouping
 
@@ -411,6 +437,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Medium
 
 ### Task 15: Implement Basic Event Grouping
+
+**Status:** Started. Deterministic event draft creation and article-to-event attachment exist; event embeddings still pending.
 
 **Description:** Create or update cyber events from deduplicated, entity-enriched articles.
 
@@ -461,9 +489,16 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Events
 
-- [ ] Multiple related articles can map to one cyber event.
-- [ ] Duplicate articles do not create duplicate events.
+- [x] Entity-enriched articles can create and attach to cyber events.
+- [ ] Multiple related articles can map to one cyber event through stronger similarity matching.
+- [ ] Duplicate articles do not create duplicate events beyond canonical URL dedup.
 - [ ] Ambiguous event grouping uses LLM only after cheap matching.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/event-grouper.test.ts`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run events:articles -- --limit=5`
+- Local event run: 2 reviewed, 2 created, 2 attached.
 
 ## Phase 7: LLM Enrichment and Alert Decisions
 
@@ -514,6 +549,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 19: Implement Alert Decision and Suppression
 
+**Status:** Started. MVP database alert decision and recent-alert suppression exist; LLM classification inputs still pending.
+
 **Description:** Create database alert rows only for credible, vendor-impacting cyber events.
 
 **Acceptance Criteria:**
@@ -538,10 +575,16 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Alert MVP
 
-- [ ] Event-based alerts are stored.
-- [ ] Duplicate alerts are suppressed.
+- [x] Event-based alert rows are stored.
+- [x] Duplicate alerts are suppressed by recent-alert window.
 - [ ] Mention-only vendors do not alert.
 - [ ] Console output shows alert and suppression reasons.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/alert-decision.test.ts`
+- `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run alerts:events -- --limit=5`
+- Local alert run: 2 reviewed, 0 sent, 2 suppressed.
 
 ## Phase 8: Pipeline Runner and Workers
 
@@ -568,6 +611,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Medium
 
 ### Task 21: Introduce BullMQ Queues
+
+**Status:** Started. Queue names and job transition contracts exist; BullMQ workers are still pending.
 
 **Description:** Wrap existing stage functions in BullMQ queues and workers after the synchronous runner is stable.
 
@@ -601,6 +646,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 ## Phase 9: Observability, Hardening, and Cleanup
 
 ### Task 22: Add Structured Logs and Basic Metrics
+
+**Status:** Started. Basic in-memory metrics collector exists; structured pipeline logging remains partial.
 
 **Description:** Standardize logs and counters for the major business and pipeline events.
 

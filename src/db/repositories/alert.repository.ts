@@ -45,4 +45,21 @@ export class AlertRepository {
 
     return result.rows[0].id;
   }
+
+  async hasRecentAlert(eventId: string, suppressionHours: number): Promise<boolean> {
+    const result = await this.db.query<{ exists: boolean }>(
+      `
+        SELECT EXISTS (
+          SELECT 1
+          FROM alerts
+          WHERE event_id = $1
+            AND suppressed = false
+            AND created_at > now() - make_interval(hours => $2)
+        ) AS exists
+      `,
+      [eventId, suppressionHours]
+    );
+
+    return result.rows[0].exists;
+  }
 }
