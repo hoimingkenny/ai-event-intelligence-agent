@@ -606,6 +606,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 20: Add Synchronous Pipeline Runner
 
+**Status:** Completed. `pipeline:run` executes bounded ingest/filter/extract/entity/embed/dedup/event/event-embedding/classification/alert stages and can skip ingest or LLM calls.
+
 **Description:** Wire the stage functions into a single local runner for deterministic end-to-end testing.
 
 **Acceptance Criteria:**
@@ -628,7 +630,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 21: Introduce BullMQ Queues
 
-**Status:** Started. Queue names and job transition contracts exist; BullMQ workers are still pending.
+**Status:** Completed. BullMQ queue factories, retry defaults, worker entry point, and stage job processor are in place.
 
 **Description:** Wrap existing stage functions in BullMQ queues and workers after the synchronous runner is stable.
 
@@ -654,10 +656,14 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Worker Pipeline
 
-- [ ] Synchronous runner still works.
-- [ ] Queue workers process the same stages.
-- [ ] Failed stages are retryable.
-- [ ] Article metadata is preserved on downstream failure.
+- [x] Synchronous runner still works.
+- [x] Queue workers process the same stages.
+- [x] Failed stages are retryable.
+- [x] Article metadata is preserved on downstream failure.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/pipeline-runner.test.ts tests/workers.test.ts tests/queue-and-metrics.test.ts`
 
 ## Phase 9: Observability, Hardening, and Cleanup
 
