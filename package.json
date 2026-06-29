@@ -14,6 +14,7 @@
     "extract:articles": "tsx scripts/run-extraction.ts",
     "entities:articles": "tsx scripts/run-entities.ts",
     "embed:articles": "tsx scripts/run-embeddings.ts",
+    "embed:events": "tsx scripts/run-event-embeddings.ts",
     "events:articles": "tsx scripts/run-events.ts",
     "alerts:events": "tsx scripts/run-alerts.ts",
     "playwright:install": "playwright install chromium",

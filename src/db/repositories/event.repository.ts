@@ -1,4 +1,5 @@
 import type { Queryable } from './types.js';
+import { vectorToSqlLiteral } from './article.repository.js';
 
 export interface CreateEventInput {
   eventTitle: string;
@@ -21,6 +22,9 @@ export interface EventRecord {
   urgency?: string | null;
   confidence?: number | null;
   affectedVendors?: string[];
+  affectedProducts?: string[];
+  cves?: string[];
+  attackTypes?: string[];
 }
 
 interface EventRow {
@@ -32,6 +36,9 @@ interface EventRow {
   urgency?: string | null;
   confidence?: string | null;
   affected_vendors?: string[];
+  affected_products?: string[];
+  cves?: string[];
+  attack_types?: string[];
 }
 
 export class EventRepository {
@@ -54,7 +61,8 @@ export class EventRepository {
           attack_types
         )
         VALUES ($1, $2, $3, $4, $5, now(), now(), $6, $7, $8, $9)
-        RETURNING id, event_title, event_summary, event_status
+        RETURNING id, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types
       `,
       [
         input.eventTitle,
@@ -74,7 +82,12 @@ export class EventRepository {
 
   async findById(eventId: string): Promise<EventRecord | null> {
     const result = await this.db.query<EventRow>(
-      'SELECT id, event_title, event_summary, event_status, severity, urgency, confidence, affected_vendors FROM cyber_events WHERE id = $1',
+      `
+        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types
+        FROM cyber_events
+        WHERE id = $1
+      `,
       [eventId]
     );
 
@@ -84,7 +97,8 @@ export class EventRepository {
   async findOpenByTitle(eventTitle: string): Promise<EventRecord | null> {
     const result = await this.db.query<EventRow>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence, affected_vendors
+        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types
         FROM cyber_events
         WHERE event_title = $1 AND event_status = 'open'
         LIMIT 1
@@ -98,7 +112,8 @@ export class EventRepository {
   async listAlertCandidates(limit = 20): Promise<EventRecord[]> {
     const result = await this.db.query<EventRow>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence, affected_vendors
+        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types
         FROM cyber_events
         WHERE event_status = 'open'
           AND source_count > 0
@@ -109,6 +124,66 @@ export class EventRepository {
     );
 
     return result.rows.map(mapEvent);
+  }
+
+  async listEventsMissingEmbedding(limit = 20): Promise<EventRecord[]> {
+    const result = await this.db.query<EventRow>(
+      `
+        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types
+        FROM cyber_events
+        WHERE event_embedding IS NULL
+          AND event_status = 'open'
+          AND source_count > 0
+        ORDER BY last_seen_at DESC NULLS LAST, id ASC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    return result.rows.map(mapEvent);
+  }
+
+  async saveEventEmbedding(eventId: string, vector: number[]): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE cyber_events
+        SET event_embedding = $2::vector,
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [eventId, vectorToSqlLiteral(vector)]
+    );
+  }
+
+  async findSimilarEvents(
+    vector: number[],
+    options: { limit?: number; daysBack?: number; excludeEventId?: string } = {}
+  ): Promise<Array<EventRecord & { distance: number }>> {
+    const result = await this.db.query<EventRow & { distance: string }>(
+      `
+        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types,
+          event_embedding <=> $1::vector AS distance
+        FROM cyber_events
+        WHERE event_embedding IS NOT NULL
+          AND last_seen_at > now() - make_interval(days => $2)
+          AND ($3::BIGINT IS NULL OR id <> $3)
+        ORDER BY event_embedding <=> $1::vector
+        LIMIT $4
+      `,
+      [
+        vectorToSqlLiteral(vector),
+        options.daysBack ?? 30,
+        options.excludeEventId ?? null,
+        options.limit ?? 10,
+      ]
+    );
+
+    return result.rows.map((row) => ({
+      ...mapEvent(row),
+      distance: Number(row.distance),
+    }));
   }
 
   async attachArticle(input: {
@@ -171,5 +246,8 @@ function mapEvent(row: EventRow): EventRecord {
     urgency: row.urgency ?? null,
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
     affectedVendors: row.affected_vendors ?? [],
+    affectedProducts: row.affected_products ?? [],
+    cves: row.cves ?? [],
+    attackTypes: row.attack_types ?? [],
   };
 }

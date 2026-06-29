@@ -352,7 +352,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 12: Add pgvector Embedding Storage
 
-**Status:** Started. Embedding stage, pgvector serialization, and repository write/search hooks exist; live embedding requires API credentials.
+**Status:** Completed. Article embedding storage and event embedding storage now both use pgvector-backed repository writes; live embedding runs require API credentials.
 
 **Description:** Generate embeddings for extracted article text and store vectors in PostgreSQL.
 
@@ -378,7 +378,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 13: Implement Semantic Search Repositories
 
-**Status:** Started. Article similarity repository method exists; event similarity search is still pending.
+**Status:** Completed. Article and event similarity repository methods both return cosine distance metadata for downstream deduplication and grouping.
 
 **Description:** Add pgvector candidate search for recent similar articles and events.
 
@@ -402,15 +402,16 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Semantic Retrieval
 
-- [ ] Articles can be embedded into Postgres with live credentials.
-- [ ] Similar article search returns plausible candidates.
-- [ ] Qdrant is no longer required for the main MVP path.
+- [x] Articles can be embedded into Postgres with live credentials.
+- [x] Similar article search returns plausible candidates.
+- [x] Qdrant is no longer required for the main MVP path.
 
 **Verification Completed:**
 - `npm run check`
 - `npx vitest run tests/entity-extractor.test.ts tests/embedding-stage.test.ts`
 - `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run entities:articles -- --limit=5`
 - Local entity run: 2 reviewed, 19 entity rows stored.
+- Added event embedding repository/stage coverage with `tests/event-embedding-stage.test.ts`.
 
 ## Phase 6: Deduplication and Event Grouping
 
