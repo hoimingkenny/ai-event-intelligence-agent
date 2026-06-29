@@ -250,6 +250,20 @@ export class ArticleRepository {
     );
   }
 
+  async saveClassification(articleId: string, classification: unknown): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE articles
+        SET llm_classification = $2::jsonb,
+          processing_status = 'CLASSIFIED',
+          last_processed_at = now(),
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [articleId, JSON.stringify(classification)]
+    );
+  }
+
   async findSimilarArticles(
     vector: number[],
     options: { limit?: number; daysBack?: number; excludeArticleId?: string } = {}

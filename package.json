@@ -17,6 +17,7 @@
     "embed:events": "tsx scripts/run-event-embeddings.ts",
     "dedup:articles": "tsx scripts/run-dedup.ts",
     "events:articles": "tsx scripts/run-events.ts",
+    "classify:articles": "tsx scripts/run-classification.ts",
     "alerts:events": "tsx scripts/run-alerts.ts",
     "playwright:install": "playwright install chromium",
     "check": "tsc --noEmit",

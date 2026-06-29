@@ -511,6 +511,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 17: Implement Cyber Classification
 
+**Status:** Completed. Cyber classification uses strict Zod schemas, injectable LLM callers for tests, article JSON persistence, and audit logging.
+
 **Description:** Classify cyber relevance, vendor roles, affected products, severity, urgency, confidence, and reasoning with strict JSON output.
 
 **Acceptance Criteria:**
@@ -535,6 +537,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 18: Implement Event Summarization
 
+**Status:** Completed. Event comparison and summarization wrappers use strict JSON schemas, and event summaries can be persisted with raw JSON.
+
 **Description:** Generate and update event summaries from the primary article, material updates, affected vendors/products, CVEs, and attack types.
 
 **Acceptance Criteria:**
@@ -556,7 +560,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 19: Implement Alert Decision and Suppression
 
-**Status:** Started. MVP database alert decision and recent-alert suppression exist; LLM classification inputs still pending.
+**Status:** Completed. MVP database alert decisions exist, recent-alert suppression exists, and LLM classification output now records vendor roles for mention-only suppression inputs.
 
 **Description:** Create database alert rows only for credible, vendor-impacting cyber events.
 
@@ -584,8 +588,13 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 - [x] Event-based alert rows are stored.
 - [x] Duplicate alerts are suppressed by recent-alert window.
-- [ ] Mention-only vendors do not alert.
-- [ ] Console output shows alert and suppression reasons.
+- [x] Mention-only vendors do not alert.
+- [x] Console output shows alert and suppression reasons.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/llm-schemas.test.ts tests/llm-reasoning.test.ts`
+- Added `llm_audit_logs` migration for classification/comparison/summary traceability.
 
 **Verification Completed:**
 - `npm run check`

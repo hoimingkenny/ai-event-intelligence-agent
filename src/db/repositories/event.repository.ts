@@ -156,6 +156,23 @@ export class EventRepository {
     );
   }
 
+  async saveLlmSummary(eventId: string, summary: unknown): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE cyber_events
+        SET llm_summary = $2::jsonb,
+          event_title = COALESCE(($2::jsonb ->> 'title'), event_title),
+          event_summary = COALESCE(($2::jsonb ->> 'summary'), event_summary),
+          severity = COALESCE(($2::jsonb ->> 'severity'), severity),
+          urgency = COALESCE(($2::jsonb ->> 'urgency'), urgency),
+          confidence = COALESCE(($2::jsonb ->> 'confidence')::numeric, confidence),
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [eventId, JSON.stringify(summary)]
+    );
+  }
+
   async findSimilarEvents(
     vector: number[],
     options: { limit?: number; daysBack?: number; excludeEventId?: string } = {}
