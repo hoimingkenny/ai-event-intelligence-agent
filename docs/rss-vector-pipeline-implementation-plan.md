@@ -285,7 +285,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 10: Implement Playwright Fallback Extractor
 
-**Status:** Started. Router and fallback contract exist; real Playwright implementation is still pending.
+**Status:** Completed. Router and real Playwright fallback extractor exist.
 
 **Description:** Add browser-based fallback extraction for pages where HTTP extraction fails or produces insufficient content.
 
@@ -311,7 +311,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 ### Checkpoint: Extraction
 
 - [x] Static articles extract through HTTP.
-- [x] Difficult pages route to fallback extractor contract.
+- [x] Difficult pages route to Playwright fallback extractor.
 - [x] Failed extraction keeps article metadata and marks extraction failure status.
 
 **Verification Completed:**
@@ -321,6 +321,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 - `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run extract:articles -- --limit=2`
 - Local filter run: 10 reviewed, 9 extraction pending, 1 ignored.
 - Local extraction run: 2 reviewed, 2 succeeded, 0 failed.
+- `npx vitest run tests/playwright-extractor.test.ts`
 
 ## Phase 5: Entities, Embeddings, and Semantic Search
 

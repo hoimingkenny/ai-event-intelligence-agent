@@ -18,6 +18,8 @@ export const env = {
   rssFetchIntervalMinutes: Number(process.env.RSS_FETCH_INTERVAL_MINUTES ?? 30),
   httpExtractionConcurrency: Number(process.env.HTTP_EXTRACTION_CONCURRENCY ?? 10),
   playwrightExtractionConcurrency: Number(process.env.PLAYWRIGHT_EXTRACTION_CONCURRENCY ?? 2),
+  playwrightExtractionTimeoutMs: Number(process.env.PLAYWRIGHT_EXTRACTION_TIMEOUT_MS ?? 15000),
+  playwrightMinTextLength: Number(process.env.PLAYWRIGHT_MIN_TEXT_LENGTH ?? 250),
   llmConcurrency: Number(process.env.LLM_CONCURRENCY ?? 3),
   alertSuppressionHours: Number(process.env.ALERT_SUPPRESSION_HOURS ?? 6),
   minAlertConfidence: Number(process.env.MIN_ALERT_CONFIDENCE ?? 0.75),

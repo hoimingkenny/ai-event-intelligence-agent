@@ -4,7 +4,7 @@ import type {
   ArticleExtractor,
 } from './article-extractor.interface.js';
 import { HttpArticleExtractor } from './http-article-extractor.js';
-import { UnavailablePlaywrightExtractor } from './playwright-article-extractor.js';
+import { PlaywrightArticleExtractor } from './playwright-article-extractor.js';
 
 export interface ExtractionRouterOptions {
   minRssSummaryLength?: number;
@@ -20,7 +20,7 @@ export class ExtractionRouter implements ArticleExtractor {
   constructor(options: ExtractionRouterOptions = {}) {
     this.minRssSummaryLength = options.minRssSummaryLength ?? 500;
     this.httpExtractor = options.httpExtractor ?? new HttpArticleExtractor();
-    this.fallbackExtractor = options.fallbackExtractor ?? new UnavailablePlaywrightExtractor();
+    this.fallbackExtractor = options.fallbackExtractor ?? new PlaywrightArticleExtractor();
   }
 
   async extract(input: ArticleExtractionInput): Promise<ArticleExtractionResult> {

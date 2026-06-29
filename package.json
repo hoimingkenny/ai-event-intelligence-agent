@@ -16,6 +16,7 @@
     "embed:articles": "tsx scripts/run-embeddings.ts",
     "events:articles": "tsx scripts/run-events.ts",
     "alerts:events": "tsx scripts/run-alerts.ts",
+    "playwright:install": "playwright install chromium",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -30,6 +31,7 @@
     "pg": "^8.22.0",
     "pino": "latest",
     "pino-pretty": "latest",
+    "playwright": "^1.61.1",
     "rss-parser": "latest",
     "zod": "latest"
   },

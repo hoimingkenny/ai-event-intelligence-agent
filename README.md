@@ -35,6 +35,7 @@ User request: "Find latest cyber attack news of today"
 
 ```bash
 npm install
+npm run playwright:install
 cp .env.example .env
 # Add your MINIMAX_API_KEY to .env
 
