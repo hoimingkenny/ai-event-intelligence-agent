@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start a local Qdrant instance via Docker. Vector dedup will not work without this.
+# Start a local Qdrant instance via Docker for optional legacy prototype flows.
+# The RSS MVP pipeline uses PostgreSQL + pgvector and does not require Qdrant.
 # Stop with: docker stop vendor-threat-watch-qdrant
 
 set -euo pipefail

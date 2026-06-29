@@ -1,5 +1,7 @@
 import { env } from '../config/env.js';
 import type { Queryable } from '../db/repositories/types.js';
+import { logInfo } from '../utils/logger.js';
+import { recordStageResult } from '../utils/metrics.js';
 import { runAlertStage } from './alert-stage.js';
 import { runClassificationStage } from './classification-stage.js';
 import { runDedupStage } from './dedup-stage.js';
@@ -37,15 +39,25 @@ export async function runPipeline(
   const limit = options.limit ?? 20;
   const includeLlm = options.includeLlm ?? Boolean(env.minimaxApiKey);
   const ingest = options.includeIngest === false ? undefined : await ingestRssFeeds(db, { limitFeeds: limit });
+  if (ingest) recordAndLog('ingest', ingest);
   const filter = await runCheapFilterStage(db, { limit });
+  recordAndLog('filter', filter);
   const extraction = await runExtractionStage(db, { limit });
+  recordAndLog('extraction', extraction);
   const entities = await runEntityStage(db, { limit });
+  recordAndLog('entities', entities);
   const articleEmbeddings = await runEmbeddingStage(db, { limit });
+  recordAndLog('article_embeddings', articleEmbeddings);
   const dedup = await runDedupStage(db, { limit });
+  recordAndLog('dedup', dedup);
   const events = await runEventStage(db, { limit });
+  recordAndLog('events', events);
   const eventEmbeddings = await runEventEmbeddingStage(db, { limit });
+  recordAndLog('event_embeddings', eventEmbeddings);
   const classification = includeLlm ? await runClassificationStage(db, { limit }) : undefined;
+  if (classification) recordAndLog('classification', classification);
   const alerts = await runAlertStage(db, { limit });
+  recordAndLog('alerts', alerts);
 
   return {
     ingest,
@@ -59,4 +71,9 @@ export async function runPipeline(
     classification,
     alerts,
   };
+}
+
+function recordAndLog(stageName: string, result: object): void {
+  recordStageResult(stageName, result);
+  logInfo({ stage: stageName, result }, 'pipeline_stage_completed');
 }

@@ -27,8 +27,8 @@ User request: "Find latest cyber attack news of today"
 - OpenAI Agents SDK for specialist reasoning agents
 - LangGraph for workflow orchestration
 - PostgreSQL + pgvector for durable article/event storage and semantic retrieval
-- Redis for future background job queues
-- Qdrant for vector-based deduplication
+- Redis for background job queues
+- Optional legacy Qdrant adapter for prototype vector dedup experiments
 - RSS feeds (CISA, Krebs, Bleeping Computer, The Hacker News) for cyber signal
 
 ## Setup
@@ -51,10 +51,8 @@ npm run db:migrate
 # Seed configured RSS feeds and monitored vendors.
 npm run db:seed
 
-# Optional during the Qdrant prototype transition: start Qdrant for vector dedup.
-./scripts/qdrant-up.sh
-
-npm run dev
+# Run the bounded RSS-to-alert MVP path.
+npm run pipeline:run -- --limit=5
 ```
 
 ## Docker Notes
@@ -89,8 +87,8 @@ Compose file mounts the database volume at `/var/lib/postgresql` and uses a
 
 ## Notes
 
-- Vector dedup is optional: if Qdrant is unreachable, the dedup agent falls back to
-  structured-signal matching (CVE / vendor+product+type) only.
+- The MVP vector path uses PostgreSQL + pgvector. Qdrant is not required for the
+  RSS pipeline; the old Qdrant adapter remains only for prototype agent flows.
 - Embedding dimensions are auto-detected on first call to MiniMax's `/v1/embeddings`
   endpoint, which uses a non-standard `{model, type, texts}` request shape distinct
   from the OpenAI JS SDK's `embeddings.create({ input })`.

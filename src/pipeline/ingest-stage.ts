@@ -3,6 +3,7 @@ import { FeedRepository } from '../db/repositories/feed.repository.js';
 import { normalizeFeedItem } from '../rss/feed-normalizer.js';
 import { ParserRssFetcher, type RssFetcher } from '../rss/rss-fetcher.js';
 import type { Queryable } from '../db/repositories/types.js';
+import { logInfo } from '../utils/logger.js';
 
 export interface IngestFeedResult {
   feedId: string;
@@ -74,18 +75,15 @@ export async function ingestRssFeeds(db: Queryable, options: IngestOptions = {})
         const saved = await articleRepository.insertDiscoveredArticle(normalized);
         if (saved.created) {
           result.created += 1;
-          console.log({ source: feed.sourceName, url: normalized.canonicalUrl }, 'article_discovered');
+          logInfo({ source: feed.sourceName, url: normalized.canonicalUrl }, 'article_discovered');
         } else {
           result.duplicates += 1;
-          console.log(
-            { source: feed.sourceName, url: normalized.canonicalUrl },
-            'article_skipped_duplicate'
-          );
+          logInfo({ source: feed.sourceName, url: normalized.canonicalUrl }, 'article_skipped_duplicate');
         }
       }
 
       await feedRepository.updateLastFetchedAt(feed.id);
-      console.log({ source: feed.sourceName, fetched: result.fetched }, 'feed_fetched');
+      logInfo({ source: feed.sourceName, fetched: result.fetched }, 'feed_fetched');
     } catch (error) {
       result.errors.push(error instanceof Error ? error.message : String(error));
     }

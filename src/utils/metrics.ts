@@ -11,3 +11,15 @@ export class MetricsCollector {
 }
 
 export const metrics = new MetricsCollector();
+
+export function recordStageResult(
+  stageName: string,
+  result: object,
+  collector: MetricsCollector = metrics
+): void {
+  for (const [key, value] of Object.entries(result)) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      collector.increment(`${stageName}_${key}_total`, value);
+    }
+  }
+}

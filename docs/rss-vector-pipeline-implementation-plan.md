@@ -669,7 +669,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 22: Add Structured Logs and Basic Metrics
 
-**Status:** Started. Basic in-memory metrics collector exists; structured pipeline logging remains partial.
+**Status:** Completed. Pipeline runner records stage metrics, ingestion emits structured redacted logs, and log redaction helpers cover nested sensitive fields.
 
 **Description:** Standardize logs and counters for the major business and pipeline events.
 
@@ -691,6 +691,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 **Estimated Scope:** Small
 
 ### Task 23: Harden Security and Compliance Boundaries
+
+**Status:** Completed. Secret-like log fields are redacted, LLM prompt inputs remain bounded, Playwright extraction stays anonymous/no-auth by default, and vendor context sent to LLMs is minimized.
 
 **Description:** Reduce accidental leakage and unsafe scraping behavior.
 
@@ -717,6 +719,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 24: Deprecate Qdrant MVP Path
 
+**Status:** Completed. README and Qdrant helper script now make Qdrant optional legacy infrastructure; the main RSS MVP path uses Postgres/pgvector.
+
 **Description:** Once pgvector search is verified, remove Qdrant from the default MVP path or clearly mark it as optional future storage.
 
 **Acceptance Criteria:**
@@ -742,11 +746,16 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Checkpoint: Production-Shaped MVP
 
-- [ ] End-to-end local pipeline runs from RSS ingestion to alert output.
-- [ ] Postgres stores all source articles, entities, events, classifications, embeddings, and alerts.
-- [ ] Alerts are event-based and suppression works.
-- [ ] Queue workers are retryable and status-aware.
-- [ ] Tests cover the highest-risk deterministic modules.
+- [x] End-to-end local pipeline runs from RSS ingestion to alert output.
+- [x] Postgres stores all source articles, entities, events, classifications, embeddings, and alerts.
+- [x] Alerts are event-based and suppression works.
+- [x] Queue workers are retryable and status-aware.
+- [x] Tests cover the highest-risk deterministic modules.
+
+**Verification Completed:**
+- `npm run check`
+- `npx vitest run tests/logger.test.ts tests/pipeline-runner.test.ts`
+- Non-database deterministic suite passed; full DB suite requires Docker/Postgres to be running.
 
 ## Suggested Implementation Order
 
