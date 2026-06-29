@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildEventDraft } from '../src/events/event-grouper.js';
+import { buildEventDraft, buildEventGroupingKey } from '../src/events/event-grouper.js';
 
 describe('buildEventDraft', () => {
   it('builds an event draft from article entities', () => {
@@ -12,8 +12,10 @@ describe('buildEventDraft', () => {
         canonicalUrl: 'https://example.test',
         urlHash: null,
         titleHash: null,
+        contentHash: null,
         rssSummary: 'Summary',
         cleanText: 'SailPoint IdentityIQ CVE-2026-12345 active exploitation.',
+        publishedAt: null,
         extractionStatus: 'http_success',
         extractionMethod: 'http',
         extractionError: null,
@@ -30,5 +32,17 @@ describe('buildEventDraft', () => {
     expect(draft.title).toContain('CVE-2026-12345');
     expect(draft.severity).toBe('high');
     expect(draft.urgency).toBe('P1');
+    expect(draft.groupingKey).toBe('cve:cve-2026-12345');
+  });
+
+  it('builds stable grouping keys from unordered entities', () => {
+    expect(
+      buildEventGroupingKey({
+        vendors: ['Microsoft', 'Cisco'],
+        products: ['VPN'],
+        cves: [],
+        attackTypes: ['ransomware', 'active exploitation'],
+      })
+    ).toBe('cisco|microsoft|vpn::active exploitation|ransomware');
   });
 });

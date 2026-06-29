@@ -8,8 +8,10 @@ export interface ArticleRecord {
   canonicalUrl: string | null;
   urlHash: string | null;
   titleHash: string | null;
+  contentHash: string | null;
   rssSummary: string | null;
   cleanText: string | null;
+  publishedAt: Date | null;
   extractionStatus: string;
   extractionMethod: string | null;
   extractionError: string | null;
@@ -40,8 +42,10 @@ interface ArticleRow {
   canonical_url: string | null;
   url_hash: string | null;
   title_hash: string | null;
+  content_hash: string | null;
   rss_summary: string | null;
   clean_text: string | null;
+  published_at: Date | null;
   extraction_status: string;
   extraction_method: string | null;
   extraction_error: string | null;
@@ -67,8 +71,9 @@ export class ArticleRepository {
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NEW')
         ON CONFLICT (canonical_url) DO NOTHING
-        RETURNING id, feed_id, source_name, title, canonical_url, url_hash, title_hash, rss_summary,
-          clean_text, extraction_status, extraction_method, extraction_error, processing_status
+        RETURNING id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
       `,
       [
         input.feedId ?? null,
@@ -97,8 +102,9 @@ export class ArticleRepository {
   async findByCanonicalUrl(canonicalUrl: string): Promise<ArticleRecord | null> {
     const result = await this.db.query<ArticleRow>(
       `
-        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, rss_summary,
-          clean_text, extraction_status, extraction_method, extraction_error, processing_status
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
         FROM articles
         WHERE canonical_url = $1
       `,
@@ -111,8 +117,9 @@ export class ArticleRepository {
   async listByProcessingStatus(status: string, limit = 50): Promise<ArticleRecord[]> {
     const result = await this.db.query<ArticleRow>(
       `
-        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, rss_summary,
-          clean_text, extraction_status, extraction_method, extraction_error, processing_status
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
         FROM articles
         WHERE processing_status = $1
         ORDER BY fetched_at ASC, id ASC
@@ -122,6 +129,52 @@ export class ArticleRepository {
     );
 
     return result.rows.map(mapArticle);
+  }
+
+  async findEarlierByContentHash(contentHash: string, excludeArticleId: string): Promise<ArticleRecord | null> {
+    const result = await this.db.query<ArticleRow>(
+      `
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
+        FROM articles
+        WHERE content_hash = $1
+          AND id <> $2
+          AND processing_status <> 'DUPLICATE'
+        ORDER BY published_at ASC NULLS LAST, fetched_at ASC, id ASC
+        LIMIT 1
+      `,
+      [contentHash, excludeArticleId]
+    );
+
+    return result.rows[0] ? mapArticle(result.rows[0]) : null;
+  }
+
+  async findRecentByTitleHash(
+    titleHash: string,
+    options: { excludeArticleId: string; daysBack?: number }
+  ): Promise<ArticleRecord | null> {
+    const result = await this.db.query<ArticleRow>(
+      `
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
+        FROM articles
+        WHERE title_hash = $1
+          AND id <> $2
+          AND processing_status <> 'DUPLICATE'
+          AND published_at > now() - make_interval(days => $3)
+        ORDER BY published_at ASC NULLS LAST, fetched_at ASC, id ASC
+        LIMIT 1
+      `,
+      [titleHash, options.excludeArticleId, options.daysBack ?? 7]
+    );
+
+    return result.rows[0] ? mapArticle(result.rows[0]) : null;
+  }
+
+  async markDuplicate(articleId: string, duplicateOfArticleId: string, reason: string): Promise<void> {
+    await this.updateProcessingStatus(articleId, 'DUPLICATE', `${reason}:${duplicateOfArticleId}`);
   }
 
   async updateProcessingStatus(
@@ -203,8 +256,9 @@ export class ArticleRepository {
   ): Promise<Array<ArticleRecord & { distance: number }>> {
     const result = await this.db.query<ArticleRow & { distance: string }>(
       `
-        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, rss_summary,
-          clean_text, extraction_status, extraction_method, extraction_error, processing_status,
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status,
           embedding <=> $1::vector AS distance
         FROM articles
         WHERE embedding IS NOT NULL
@@ -241,8 +295,10 @@ function mapArticle(row: ArticleRow): ArticleRecord {
     canonicalUrl: row.canonical_url,
     urlHash: row.url_hash,
     titleHash: row.title_hash,
+    contentHash: row.content_hash,
     rssSummary: row.rss_summary,
     cleanText: row.clean_text,
+    publishedAt: row.published_at,
     extractionStatus: row.extraction_status,
     extractionMethod: row.extraction_method,
     extractionError: row.extraction_error,

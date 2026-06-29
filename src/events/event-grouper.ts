@@ -10,6 +10,7 @@ export interface EventDraft {
   attackTypes: string[];
   severity: 'low' | 'medium' | 'high' | 'critical';
   urgency: 'P1' | 'P2' | 'P3' | 'P4';
+  groupingKey: string;
 }
 
 export function buildEventDraft(article: ArticleRecord, entities: ArticleEntityRecord[]): EventDraft {
@@ -32,7 +33,23 @@ export function buildEventDraft(article: ArticleRecord, entities: ArticleEntityR
     attackTypes,
     severity: severe || cves.length > 0 ? 'high' : 'medium',
     urgency: severe ? 'P1' : cves.length > 0 ? 'P2' : 'P3',
+    groupingKey: buildEventGroupingKey({ vendors, products, cves, attackTypes }),
   };
+}
+
+export function buildEventGroupingKey(input: {
+  vendors: string[];
+  products: string[];
+  cves: string[];
+  attackTypes: string[];
+}): string {
+  if (input.cves.length > 0) {
+    return `cve:${input.cves.map(normalizeKeyPart).sort().join('|')}`;
+  }
+
+  const vendorProductKey = [...input.vendors, ...input.products].map(normalizeKeyPart).sort().join('|');
+  const attackKey = input.attackTypes.map(normalizeKeyPart).sort().join('|');
+  return [vendorProductKey, attackKey].filter(Boolean).join('::') || 'unknown';
 }
 
 function valuesByType(entities: ArticleEntityRecord[], type: string): string[] {
@@ -43,4 +60,8 @@ function valuesByType(entities: ArticleEntityRecord[], type: string): string[] {
         .map((entity) => entity.entityValue)
     )
   );
+}
+
+function normalizeKeyPart(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }

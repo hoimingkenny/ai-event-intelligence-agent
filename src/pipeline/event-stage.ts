@@ -8,6 +8,7 @@ export interface EventStageResult {
   reviewed: number;
   created: number;
   attached: number;
+  duplicateSkipped: number;
 }
 
 export async function runEventStage(
@@ -23,8 +24,14 @@ export async function runEventStage(
   ].slice(0, options.limit ?? 20);
   let created = 0;
   let attached = 0;
+  let duplicateSkipped = 0;
 
   for (const article of candidates) {
+    if (article.processingStatus === 'DUPLICATE') {
+      duplicateSkipped += 1;
+      continue;
+    }
+
     const articleEntities = await entities.listForArticle(article.id);
     const draft = buildEventDraft(article, articleEntities);
     let event = await events.findOpenByTitle(draft.title);
@@ -59,5 +66,6 @@ export async function runEventStage(
     reviewed: candidates.length,
     created,
     attached,
+    duplicateSkipped,
   };
 }

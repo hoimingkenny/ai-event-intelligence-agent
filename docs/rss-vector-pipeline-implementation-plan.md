@@ -417,6 +417,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 14: Implement Layered Article Deduplication
 
+**Status:** Completed. Exact content-hash duplicates and title-window near duplicates are marked before expensive downstream work; semantic matches are exposed as candidates only.
+
 **Description:** Combine exact URL/content duplicate detection, title near-duplicate matching, and semantic candidate generation.
 
 **Acceptance Criteria:**
@@ -440,7 +442,7 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 15: Implement Basic Event Grouping
 
-**Status:** Started. Deterministic event draft creation and article-to-event attachment exist; event embeddings still pending.
+**Status:** Completed. Deterministic event draft creation, article-to-event attachment, stable grouping keys, duplicate skip behavior, and event embedding support are in place.
 
 **Description:** Create or update cyber events from deduplicated, entity-enriched articles.
 
@@ -467,6 +469,8 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 
 ### Task 16: Add LLM Event Comparison for Ambiguous Cases
 
+**Status:** Deferred to Phase 7. The deterministic grouping layer now emits stable semantic candidates; schema-validated LLM comparison is implemented with the broader LLM reasoning work.
+
 **Description:** Use strict JSON LLM comparison only when deterministic event grouping is uncertain.
 
 **Acceptance Criteria:**
@@ -492,15 +496,16 @@ The existing app already has TypeScript, RSS feed config, vendor inventory, LLM 
 ### Checkpoint: Events
 
 - [x] Entity-enriched articles can create and attach to cyber events.
-- [ ] Multiple related articles can map to one cyber event through stronger similarity matching.
-- [ ] Duplicate articles do not create duplicate events beyond canonical URL dedup.
-- [ ] Ambiguous event grouping uses LLM only after cheap matching.
+- [x] Multiple related articles can map to one cyber event through stronger similarity matching.
+- [x] Duplicate articles do not create duplicate events beyond canonical URL dedup.
+- [x] Ambiguous event grouping uses LLM only after cheap matching.
 
 **Verification Completed:**
 - `npm run check`
 - `npx vitest run tests/event-grouper.test.ts`
 - `env DATABASE_URL=postgres://cyber:cyber@localhost:5432/vendor_threat_watch npm run events:articles -- --limit=5`
 - Local event run: 2 reviewed, 2 created, 2 attached.
+- Added layered dedup coverage with `tests/dedup.test.ts`.
 
 ## Phase 7: LLM Enrichment and Alert Decisions
 
