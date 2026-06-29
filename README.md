@@ -53,6 +53,9 @@ npm run db:seed
 
 # Run the bounded RSS-to-alert MVP path.
 npm run pipeline:run -- --limit=5
+
+# Run the labelled quality evaluation.
+npm run eval
 ```
 
 ## Docker Notes
@@ -81,6 +84,16 @@ npm run db:migrate
 npm run db:seed
 ```
 
+## Demo Commands
+
+```bash
+npm run ingest:rss
+npm run pipeline:run -- --limit=5
+npm run eval
+npm run eval -- --persist
+npm run worker -- ingest-queue
+```
+
 PostgreSQL 18 stores container data under a major-version-specific layout. This
 Compose file mounts the database volume at `/var/lib/postgresql` and uses a
 `postgres18_data` volume so it does not collide with older Postgres volumes.
@@ -92,3 +105,5 @@ Compose file mounts the database volume at `/var/lib/postgresql` and uses a
 - Embedding dimensions are auto-detected on first call to MiniMax's `/v1/embeddings`
   endpoint, which uses a non-standard `{model, type, texts}` request shape distinct
   from the OpenAI JS SDK's `embeddings.create({ input })`.
+- The generic plan refers to `notifications`; this cyber-focused implementation uses
+  `alerts` for event-level notification decisions.

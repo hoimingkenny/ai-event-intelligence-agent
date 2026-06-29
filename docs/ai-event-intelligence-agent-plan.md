@@ -1384,23 +1384,27 @@ Phase 8: Notification Decision
 
 Phase 9: Evaluation
 
-- Create labelled dataset
-- Implement evaluation script
-- Measure duplicate reduction
-- Measure event grouping precision
-- Measure classification precision
-- Measure false positive rate
-- Measure LLM call efficiency
-- Measure extraction success rate
+- Create labelled dataset - implemented in `data/labelled-eval-set.json`
+- Implement evaluation script - implemented as `npm run eval`
+- Measure duplicate reduction - implemented
+- Measure event grouping precision - implemented
+- Measure classification precision - implemented
+- Measure false positive rate - implemented
+- Measure LLM call efficiency - implemented
+- Measure extraction success rate - implemented
 
 Phase 10: Documentation
 
-- Write README
-- Write architecture.md
-- Write data-model.md
-- Write evaluation.md
-- Write tradeoffs.md
-- Write limitations.md
+- Write README - implemented
+- Write architecture.md - implemented
+- Write data-model.md - implemented
+- Write evaluation.md - implemented
+- Write tradeoffs.md - implemented
+- Write limitations.md - implemented
+
+Implementation alignment note:
+
+This cyber-focused implementation intentionally uses `cyber_events` instead of generic `events`, and `alerts` instead of generic `notifications`. The behavior remains the same: source articles are grouped into canonical event records, and event-level alert decisions are stored with suppression metadata.
 
 ⸻
 
