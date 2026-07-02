@@ -12,6 +12,7 @@ import { runEventStage } from './event-stage.js';
 import { runExtractionStage } from './extraction-stage.js';
 import { runCheapFilterStage } from './filter-stage.js';
 import { ingestRssFeeds } from './ingest-stage.js';
+import { checkExtractionDrift } from '../monitoring/extraction-drift.js';
 
 export interface PipelineRunOptions {
   limit?: number;
@@ -44,6 +45,10 @@ export async function runPipeline(
   recordAndLog('filter', filter);
   const extraction = await runExtractionStage(db, { limit });
   recordAndLog('extraction', extraction);
+  // Per-source quality watchdog: logs a warning per drifted source so a
+  // broken selector / site redesign is visible the same day, not weeks later.
+  const drift = await checkExtractionDrift(db);
+  recordAndLog('extraction_drift', { driftedSources: drift.driftedSources });
   const entities = await runEntityStage(db, { limit });
   recordAndLog('entities', entities);
   const articleEmbeddings = await runEmbeddingStage(db, { limit });

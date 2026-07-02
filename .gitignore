@@ -46,3 +46,9 @@ Thumbs.db
 # Qdrant local volume (if ever checked in)
 qdrant_data/
 qdrant_storage/
+
+# Generated extraction review reports (npm run fixtures:review)
+review/
+
+# Claude local settings
+.claude/settings.local.json

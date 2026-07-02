@@ -31,6 +31,10 @@ export function logInfo(bindings: Record<string, unknown>, message: string): voi
   logger.info(redactLogObject(bindings), message);
 }
 
+export function logWarn(bindings: Record<string, unknown>, message: string): void {
+  logger.warn(redactLogObject(bindings), message);
+}
+
 export function logError(bindings: Record<string, unknown>, message: string): void {
   logger.error(redactLogObject(bindings), message);
 }

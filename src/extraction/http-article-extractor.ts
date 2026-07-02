@@ -4,6 +4,7 @@ import type {
   ArticleExtractor,
 } from './article-extractor.interface.js';
 import { contentQualityScore, htmlToText } from './content-cleaner.js';
+import { extractReadableContent } from './readable-content.js';
 
 export class HttpArticleExtractor implements ArticleExtractor {
   constructor(private readonly minTextLength = 250) {}
@@ -26,7 +27,9 @@ export class HttpArticleExtractor implements ArticleExtractor {
       }
 
       const rawHtml = await response.text();
-      const cleanText = htmlToText(rawHtml);
+      // Per-source selector → Readability → regex strip as last resort.
+      const readable = extractReadableContent(rawHtml, input.url);
+      const cleanText = readable.cleanText ?? htmlToText(rawHtml);
       const score = contentQualityScore(cleanText);
       if (cleanText.length < this.minTextLength || score <= 0) {
         return {

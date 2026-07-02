@@ -4,7 +4,8 @@ import type {
   ArticleExtractor,
 } from './article-extractor.interface.js';
 import { HttpArticleExtractor } from './http-article-extractor.js';
-import { PlaywrightArticleExtractor } from './playwright-article-extractor.js';
+// Playwright fallback disabled while we focus on HTTP + Readability quality.
+// import { PlaywrightArticleExtractor } from './playwright-article-extractor.js';
 
 export interface ExtractionRouterOptions {
   minRssSummaryLength?: number;
@@ -15,12 +16,14 @@ export interface ExtractionRouterOptions {
 export class ExtractionRouter implements ArticleExtractor {
   private readonly minRssSummaryLength: number;
   private readonly httpExtractor: ArticleExtractor;
-  private readonly fallbackExtractor: ArticleExtractor;
+  private readonly fallbackExtractor: ArticleExtractor | null;
 
   constructor(options: ExtractionRouterOptions = {}) {
     this.minRssSummaryLength = options.minRssSummaryLength ?? 500;
     this.httpExtractor = options.httpExtractor ?? new HttpArticleExtractor();
-    this.fallbackExtractor = options.fallbackExtractor ?? new PlaywrightArticleExtractor();
+    // Playwright fallback disabled by default; an extractor can still be injected (used in tests).
+    this.fallbackExtractor = options.fallbackExtractor ?? null;
+    // this.fallbackExtractor = options.fallbackExtractor ?? new PlaywrightArticleExtractor();
   }
 
   async extract(input: ArticleExtractionInput): Promise<ArticleExtractionResult> {
@@ -34,6 +37,8 @@ export class ExtractionRouter implements ArticleExtractor {
 
     const http = await this.httpExtractor.extract(input);
     if (http.status === 'http_success') return http;
+
+    if (!this.fallbackExtractor) return http;
 
     const fallback = await this.fallbackExtractor.extract(input);
     if (fallback.status === 'playwright_success') return fallback;

@@ -4,6 +4,7 @@ import { contentQualityScore } from '../extraction/content-cleaner.js';
 import { ExtractionRouter } from '../extraction/extraction-router.js';
 import type { ArticleExtractor } from '../extraction/article-extractor.interface.js';
 import { sha256Hex } from '../utils/hash.js';
+import { wordRecall } from '../utils/word-overlap.js';
 
 export interface ExtractionStageResult {
   reviewed: number;
@@ -33,6 +34,13 @@ export async function runExtractionStage(
       rssSummary: article.rssSummary,
     });
     const success = result.status === 'rss_only' || result.status === 'http_success' || result.status === 'playwright_success';
+    // Ground truth: the RSS summary is drawn from the article body, so its
+    // word recall against cleanText measures extraction quality for free.
+    // Not meaningful when the summary itself was used as the content.
+    const rssRecall =
+      result.status !== 'rss_only' && article.rssSummary && result.cleanText
+        ? wordRecall(article.rssSummary, result.cleanText)
+        : null;
 
     await articles.saveExtractionResult({
       articleId: article.id,
@@ -44,6 +52,7 @@ export async function runExtractionStage(
       extractionError: result.error ?? null,
       processingStatus: success ? 'EXTRACTION_SUCCESS' : 'EXTRACTION_FAILED',
       contentQualityScore: contentQualityScore(result.cleanText),
+      rssRecall,
     });
 
     if (success) succeeded += 1;

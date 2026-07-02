@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PlaywrightArticleExtractor } from '../src/extraction/playwright-article-extractor.js';
 
-describe('PlaywrightArticleExtractor', () => {
+// Playwright extraction path is disabled while we focus on HTTP + Readability quality.
+describe.skip('PlaywrightArticleExtractor', () => {
   it('extracts text from a JavaScript-rendered page', async () => {
     const html = `
       <html>

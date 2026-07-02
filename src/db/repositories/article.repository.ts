@@ -205,6 +205,7 @@ export class ArticleRepository {
     extractionError?: string | null;
     processingStatus: string;
     contentQualityScore?: number | null;
+    rssRecall?: number | null;
   }): Promise<void> {
     await this.db.query(
       `
@@ -218,6 +219,7 @@ export class ArticleRepository {
           extracted_at = now(),
           processing_status = $8,
           content_quality_score = $9,
+          rss_recall = $10,
           last_processed_at = now(),
           updated_at = now()
         WHERE id = $1
@@ -232,6 +234,7 @@ export class ArticleRepository {
         input.extractionError ?? null,
         input.processingStatus,
         input.contentQualityScore ?? null,
+        input.rssRecall ?? null,
       ]
     );
   }
