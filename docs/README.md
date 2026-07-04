@@ -31,6 +31,14 @@ Post-hoc writing about a specific challenge: what broke, how it was debugged, wh
 |---|---|
 | [extraction-quality-evaluation.md](engineering-notes/extraction-quality-evaluation.md) | Article extraction cleaning layers, debugging notes, quality metrics + drift detection |
 
+## `code-reviews/` — pre-merge reviews
+
+One document per merge to `main`, written before merging (see the Development Workflow section in `CLAUDE.md`). Copy [TEMPLATE.md](code-reviews/TEMPLATE.md), name it `YYYY-MM-DD-<topic>.md`.
+
+| Document | Scope |
+|---|---|
+| [2026-07-02-readability-extraction.md](code-reviews/2026-07-02-readability-extraction.md) | Readability extraction + quality metrics + drift detection |
+
 ## Conventions
 
-New document? Pick the folder by intent: proposing future work → `plans/`; describing how the system works today → `design/`; narrating a solved problem → `engineering-notes/`. Add a row to the matching table above.
+New document? Pick the folder by intent: proposing future work → `plans/`; describing how the system works today → `design/`; narrating a solved problem → `engineering-notes/`; reviewing a change before merge → `code-reviews/`. Add a row to the matching table above.

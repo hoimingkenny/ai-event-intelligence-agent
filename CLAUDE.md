@@ -6,46 +6,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Vendor Threat Watch is an AI-assisted cyber early-warning and vendor-impact triage agent. It identifies fresh cyber events, maps them to monitored vendor products, deduplicates related reports into canonical events, and surfaces items requiring review within a 2-hour incident response window.
 
-**LLM is not the system of record** — it performs specialist reasoning inside a deterministic workflow.
+**LLM is not the system of record** — it performs specialist reasoning inside a deterministic workflow. Postgres is the source of truth; every stage is independently retryable and auditable.
+
+## Development Workflow (mandatory)
+
+1. **Never commit directly to `main`/`master`.** All changes go on a feature branch (`feat/…`, `fix/…`, `chore/…`, `docs/…`).
+2. **Before merging to `main`, write a code review document** in `docs/code-reviews/` (copy `docs/code-reviews/TEMPLATE.md`, name it `YYYY-MM-DD-<topic>.md`). Audience: senior developer. It must cover what changed and why, risks/behaviour changes, test evidence, and an explicit verdict. The review commit belongs on the same branch as the change.
+3. Merge only after `npm run check` and `npm test` pass.
 
 ## Commands
 
 ```bash
-npm install          # Install dependencies
-cp .env.example .env # Configure environment
-npm run dev          # Run the application
-npm run check        # Type-check TypeScript
-npm test             # Run test suite (vitest)
-npm run test:watch   # Run tests in watch mode
-npm run test:eval    # Run evaluation sample
-./scripts/qdrant-up.sh   # Start local Qdrant via Docker (for vector dedup)
+npm install              # Install dependencies
+cp .env.example .env     # Configure environment (MINIMAX_API_KEY required for embeddings/LLM)
+docker compose up -d     # Postgres (pgvector) + Redis
+npm run db:migrate       # Apply SQL migrations (src/db/migrations/)
+npm run db:seed          # Seed feeds + monitored vendors
+
+npm run pipeline:run     # Full pipeline: ingest → filter → extract → entities →
+                         #   embed → dedup → events → classify → alerts
+npm run worker           # BullMQ worker mode (needs Redis)
+npm run drift:check      # Per-source extraction quality report (exit 2 on drift)
+
+npm run fixtures:fetch -- <url>   # Save real article HTML as extraction fixture
+npm run fixtures:review           # Side-by-side extraction review report (review/)
+
+npm run check            # Type-check TypeScript
+npm test                 # Run test suite (vitest)
+npm run eval             # Run labelled evaluation set
 ```
+
+Individual stage commands also exist (`ingest:rss`, `filter:articles`, `extract:articles`, `entities:articles`, `embed:articles`, `dedup:articles`, `events:articles`, `classify:articles`, `alerts:events`).
+
+Note: `npm run dev` runs the legacy in-memory scaffold (`src/graph.ts`), not the real pipeline.
 
 ## Architecture
 
 ```
-src/graph.ts              # Simple orchestrator → will become LangGraph StateGraph
-src/agents/               # OpenAI Agents SDK / MiniMax reasoning agents
-  llmHelpers.ts          # callLLMWithSchema — JSON+strip-think-block helper
-  searchPlannerAgent.ts   # Builds time-sensitive search plans
-  extractionAgent.ts      # Extracts cyber facts from articles
-  dedupAgent.ts           # Deduplication: Qdrant vector + structured-signal + LLM
-  riskScoringAgent.ts     # Scores urgency/severity
-src/nodes/                # LangGraph workflow nodes
-  searchNodes.ts          # RSS feed fetcher (CISA, Krebs, Bleeping Computer, etc.)
-  triageNodes.ts          # Article triage pipeline (extract → embed → dedup → upsert)
-src/storage/              # Source of truth
-  inMemoryStore.ts        # MVP event/article storage
-  qdrantStore.ts          # Qdrant vector index for dedup candidate retrieval
-  vendorInventory.ts      # Monitored vendors/products
-src/config/               # Configuration
-  env.ts                  # Env var reader
-  llm.ts                  # MiniMax chat-completions client (OpenAI-compatible)
-  embeddings.ts           # MiniMax embeddings client (non-standard /v1/embeddings)
-  rssFeeds.ts             # Curated cyber threat RSS feeds
-src/types/domain.ts       # Core domain types (CyberEventType, DedupRelationship, etc.)
-src/tools/searchTool.ts   # RSS feed fetcher (replaces the original WebSearchTool stub)
+src/pipeline/             # Stage functions + runner (the real system)
+  runner.ts               # Sequential orchestrator; drift check after extraction
+  ingest-stage.ts …       # One file per stage; state machine via articles.processing_status
+src/extraction/           # Article content extraction
+  readable-content.ts     # Layered cleaning: per-source selectors → DOM pruning +
+                          #   Readability → boilerplate filter; native-ad cluster removal
+  extraction-router.ts    # RSS-summary → HTTP; Playwright fallback disabled by default
+src/detection/            # Deterministic entity/CVE/vendor/keyword extractors
+src/dedup/                # Hash / title / semantic dedup decisions
+src/events/               # Article → event draft grouping
+src/llm/                  # MiniMax reasoning: classifier, event comparator, summarizer
+src/monitoring/           # extraction-drift.ts: per-source rolling quality watchdog
+src/evaluation/           # Labelled dataset evaluation
+src/db/                   # Postgres pool, SQL migrations, repositories
+src/queue/                # BullMQ queues + pipeline worker
+src/utils/word-overlap.ts # Word-level recall/precision (extraction ground truth)
+src/config/               # env, MiniMax LLM + embeddings clients, RSS feed list
+src/types/domain.ts       # Core domain types
+docs/                     # plans/ | design/ | engineering-notes/ | code-reviews/ (see docs/README.md)
 ```
+
+Legacy scaffold kept for reference: `src/graph.ts`, `src/nodes/`, `src/agents/`, `src/storage/` (in-memory + Qdrant era; superseded by the Postgres/pgvector pipeline).
 
 ## Two Operating Modes
 
@@ -57,20 +76,18 @@ src/tools/searchTool.ts   # RSS feed fetcher (replaces the original WebSearchToo
 
 `same_article_duplicate` → `same_event_no_new_information` → `same_event_new_source` → `same_event_material_update` → `related_but_separate_event` → `separate_event` → `uncertain_need_human_review`
 
+## Extraction Quality (invariants)
+
+- `articles.rss_recall` is written at extraction time (word recall of RSS summary vs cleanText); `null` for `rss_only` extractions — do not "fix" that, it prevents the metric from gaming itself.
+- Drift detection (`src/monitoring/extraction-drift.ts`) uses rolling medians per source; thresholds live in `DEFAULT_DRIFT_THRESHOLDS`.
+- Ad-cluster removal in `readable-content.ts` is structure-based (repeated offsite campaign links), deliberately not class-name-based. Its false-removal guardrails (span/char limits, same-site exemption) have dedicated tests — keep them passing.
+- linkedom requires a complete `<html><body>…` document; bare fragments silently lose content.
+
 ## Current State
 
-Done:
-- LLM integration via MiniMax (OpenAI-compatible endpoint) at `src/config/llm.ts`
-- Embeddings via MiniMax's non-standard `/v1/embeddings` endpoint at `src/config/embeddings.ts`
-- RSS-based web signal at `src/tools/searchTool.ts` (CISA, Krebs, Bleeping Computer, The Hacker News)
-- Qdrant vector dedup at `src/storage/qdrantStore.ts` (graceful fallback when Qdrant is down)
-- Vitest test suite with stubable Qdrant store
+Done: Postgres/pgvector pipeline with per-stage state machine; MiniMax LLM + embeddings; Readability-based extraction with per-source selectors and ad removal; extraction quality metrics + drift detection; real-HTML fixture harness; labelled evaluation module; BullMQ worker skeleton.
 
-Pending:
-- Convert `src/graph.ts` to formal LangGraph `StateGraph`
-- Add PostgreSQL schema and migrate from in-memory store
-- Add `qdrant-down.sh` companion to `scripts/qdrant-up.sh`
-- Add notification log persistence
+Pending: convert runner to LangGraph StateGraph; wire semantic dedup vector into the dedup stage; event grouping via groupingKey + embedding + LLM comparator ladder; feed LLM classification back into event severity/confidence; notification log persistence.
 
 ## Guardrails
 
