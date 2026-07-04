@@ -3,6 +3,7 @@ import { vectorToSqlLiteral } from './article.repository.js';
 
 export interface CreateEventInput {
   eventTitle: string;
+  groupingKey?: string | null;
   eventSummary?: string | null;
   severity?: string | null;
   urgency?: string | null;
@@ -15,6 +16,7 @@ export interface CreateEventInput {
 
 export interface EventRecord {
   id: string;
+  groupingKey: string | null;
   eventTitle: string | null;
   eventSummary: string | null;
   eventStatus: string;
@@ -29,6 +31,7 @@ export interface EventRecord {
 
 interface EventRow {
   id: string;
+  grouping_key: string | null;
   event_title: string | null;
   event_summary: string | null;
   event_status: string;
@@ -48,6 +51,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         INSERT INTO cyber_events (
+          grouping_key,
           event_title,
           event_summary,
           severity,
@@ -60,11 +64,12 @@ export class EventRepository {
           cves,
           attack_types
         )
-        VALUES ($1, $2, $3, $4, $5, now(), now(), $6, $7, $8, $9)
-        RETURNING id, event_title, event_summary, event_status, severity, urgency, confidence,
+        VALUES ($1, $2, $3, $4, $5, $6, now(), now(), $7, $8, $9, $10)
+        RETURNING id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
           affected_vendors, affected_products, cves, attack_types
       `,
       [
+        input.groupingKey ?? null,
         input.eventTitle,
         input.eventSummary ?? null,
         input.severity ?? null,
@@ -83,7 +88,7 @@ export class EventRepository {
   async findById(eventId: string): Promise<EventRecord | null> {
     const result = await this.db.query<EventRow>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+        SELECT id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
           affected_vendors, affected_products, cves, attack_types
         FROM cyber_events
         WHERE id = $1
@@ -97,7 +102,7 @@ export class EventRepository {
   async findOpenByTitle(eventTitle: string): Promise<EventRecord | null> {
     const result = await this.db.query<EventRow>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+        SELECT id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
           affected_vendors, affected_products, cves, attack_types
         FROM cyber_events
         WHERE event_title = $1 AND event_status = 'open'
@@ -109,10 +114,66 @@ export class EventRepository {
     return result.rows[0] ? mapEvent(result.rows[0]) : null;
   }
 
+  async findOpenByGroupingKey(groupingKey: string): Promise<EventRecord | null> {
+    const result = await this.db.query<EventRow>(
+      `
+        SELECT id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types
+        FROM cyber_events
+        WHERE grouping_key = $1 AND event_status = 'open'
+        ORDER BY last_seen_at DESC NULLS LAST
+        LIMIT 1
+      `,
+      [groupingKey]
+    );
+
+    return result.rows[0] ? mapEvent(result.rows[0]) : null;
+  }
+
+  async listEventsForArticle(articleId: string): Promise<EventRecord[]> {
+    const result = await this.db.query<EventRow>(
+      `
+        SELECT e.id, e.grouping_key, e.event_title, e.event_summary, e.event_status, e.severity,
+          e.urgency, e.confidence, e.affected_vendors, e.affected_products, e.cves, e.attack_types
+        FROM cyber_events e
+        JOIN event_articles ea ON ea.event_id = e.id
+        WHERE ea.article_id = $1
+      `,
+      [articleId]
+    );
+
+    return result.rows.map(mapEvent);
+  }
+
+  async getSourceCount(eventId: string): Promise<number> {
+    const result = await this.db.query<{ source_count: string | number }>(
+      `SELECT source_count FROM cyber_events WHERE id = $1`,
+      [eventId]
+    );
+    return result.rows[0] ? Number(result.rows[0].source_count) : 0;
+  }
+
+  async updateEventAssessment(
+    eventId: string,
+    assessment: { severity: string; urgency: string; confidence: number }
+  ): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE cyber_events
+        SET severity = $2,
+          urgency = $3,
+          confidence = $4,
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [eventId, assessment.severity, assessment.urgency, assessment.confidence]
+    );
+  }
+
   async listAlertCandidates(limit = 20): Promise<EventRecord[]> {
     const result = await this.db.query<EventRow>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+        SELECT id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
           affected_vendors, affected_products, cves, attack_types
         FROM cyber_events
         WHERE event_status = 'open'
@@ -129,7 +190,7 @@ export class EventRepository {
   async listEventsMissingEmbedding(limit = 20): Promise<EventRecord[]> {
     const result = await this.db.query<EventRow>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+        SELECT id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
           affected_vendors, affected_products, cves, attack_types
         FROM cyber_events
         WHERE event_embedding IS NULL
@@ -179,7 +240,7 @@ export class EventRepository {
   ): Promise<Array<EventRecord & { distance: number }>> {
     const result = await this.db.query<EventRow & { distance: string }>(
       `
-        SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
+        SELECT id, grouping_key, event_title, event_summary, event_status, severity, urgency, confidence,
           affected_vendors, affected_products, cves, attack_types,
           event_embedding <=> $1::vector AS distance
         FROM cyber_events
@@ -256,6 +317,7 @@ export class EventRepository {
 function mapEvent(row: EventRow): EventRecord {
   return {
     id: row.id,
+    groupingKey: row.grouping_key ?? null,
     eventTitle: row.event_title,
     eventSummary: row.event_summary,
     eventStatus: row.event_status,

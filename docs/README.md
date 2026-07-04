@@ -38,6 +38,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | Document | Scope |
 |---|---|
 | [2026-07-02-readability-extraction.md](code-reviews/2026-07-02-readability-extraction.md) | Readability extraction + quality metrics + drift detection |
+| [2026-07-02-event-grouping-ladder.md](code-reviews/2026-07-02-event-grouping-ladder.md) | Event-grouping ladder (key → embedding → LLM) + classification feedback |
 
 ## Conventions
 

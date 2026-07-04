@@ -239,6 +239,19 @@ export class ArticleRepository {
     );
   }
 
+  async getEmbedding(articleId: string): Promise<number[] | null> {
+    const result = await this.db.query<{ embedding: string | null }>(
+      `SELECT embedding::text AS embedding FROM articles WHERE id = $1`,
+      [articleId]
+    );
+    const raw = result.rows[0]?.embedding;
+    if (!raw) return null;
+    return raw
+      .replace(/^\[|\]$/g, '')
+      .split(',')
+      .map(Number);
+  }
+
   async saveEmbedding(articleId: string, vector: number[]): Promise<void> {
     await this.db.query(
       `
