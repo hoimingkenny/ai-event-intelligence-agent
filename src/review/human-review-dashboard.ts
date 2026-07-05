@@ -278,11 +278,13 @@ export async function loadHumanReviewDashboard(db: Queryable, limit = 50): Promi
     ),
     db.query<VerdictRow>(
       `
-        SELECT article_id, event_id, relevance_verdict, vendor_impact_verdict,
+        SELECT DISTINCT ON (article_id)
+          article_id, event_id, relevance_verdict, vendor_impact_verdict,
           llm_classification_verdict,
           grouping_verdict, alert_verdict, notes, reviewer, reviewed_at
         FROM human_review_verdicts
         WHERE article_id = ANY($1::BIGINT[])
+        ORDER BY article_id, reviewed_at DESC, id DESC
       `,
       [articleIds]
     ),
@@ -330,11 +332,25 @@ export async function loadHumanReviewDashboard(db: Queryable, limit = 50): Promi
     };
   });
 
+  const prioritized = prioritizeCases(cases);
+
   return {
     generatedAt: new Date(),
-    cases,
-    summary: summarizeCases(cases),
+    cases: prioritized,
+    summary: summarizeCases(prioritized),
   };
+}
+
+/**
+ * Review effort goes where the pipeline is least sure: attention cases first,
+ * unreviewed before reviewed, recency order preserved within each group.
+ */
+export function prioritizeCases(cases: HumanReviewCase[]): HumanReviewCase[] {
+  return [...cases].sort((a, b) => {
+    const attention = Number(needsHumanAttention(b)) - Number(needsHumanAttention(a));
+    if (attention !== 0) return attention;
+    return Number(a.verdict !== null) - Number(b.verdict !== null);
+  });
 }
 
 export function summarizeCases(cases: HumanReviewCase[]): HumanReviewSummary {
@@ -400,19 +416,9 @@ export async function saveHumanReviewVerdict(
         reviewer,
         reviewed_at
       )
+      -- Append-only: re-reviews add a new row; reads take the latest per
+      -- article. History preserved for measuring pipeline improvement.
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
-      ON CONFLICT (article_id)
-      DO UPDATE SET
-        event_id = EXCLUDED.event_id,
-        relevance_verdict = EXCLUDED.relevance_verdict,
-        vendor_impact_verdict = EXCLUDED.vendor_impact_verdict,
-        llm_classification_verdict = EXCLUDED.llm_classification_verdict,
-        grouping_verdict = EXCLUDED.grouping_verdict,
-        alert_verdict = EXCLUDED.alert_verdict,
-        notes = EXCLUDED.notes,
-        reviewer = EXCLUDED.reviewer,
-        reviewed_at = now(),
-        updated_at = now()
       RETURNING article_id, event_id, relevance_verdict, vendor_impact_verdict,
         llm_classification_verdict,
         grouping_verdict, alert_verdict, notes, reviewer, reviewed_at

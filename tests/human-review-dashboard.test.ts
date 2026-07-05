@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HumanReviewSubmissionSchema,
   needsHumanAttention,
+  prioritizeCases,
   renderHumanReviewDashboard,
   saveHumanReviewVerdict,
   summarizeCases,
@@ -256,5 +257,41 @@ describe('human review dashboard', () => {
     expect(html).toContain('LLM Classification');
     expect(html).toContain('&quot;isCyberEvent&quot;: true');
     expect(html).toContain('Cisco firewall exploited vulnerability');
+  });
+});
+
+describe('prioritizeCases', () => {
+  const reviewed = {
+    articleId: '1',
+    eventId: null,
+    relevanceVerdict: 'correct',
+    vendorImpactVerdict: 'correct',
+    llmClassificationVerdict: 'correct',
+    groupingVerdict: 'correct',
+    alertVerdict: 'correct',
+    notes: null,
+    reviewer: 'kenny',
+    reviewedAt: new Date('2026-07-05T02:00:00Z'),
+  } as HumanReviewCase['verdict'];
+
+  it('orders attention cases first, then unreviewed, preserving recency within groups', () => {
+    const calm: HumanReviewCase = structuredClone(baseCase);
+    const calmReviewed: HumanReviewCase = { ...structuredClone(baseCase), verdict: reviewed };
+    const attention: HumanReviewCase = structuredClone(baseCase);
+    attention.alerts[0] = { ...attention.alerts[0], alertTier: 'early_warning' };
+
+    const ordered = prioritizeCases([calmReviewed, calm, attention]);
+
+    expect(ordered[0]).toBe(attention);
+    expect(ordered[1]).toBe(calm); // unreviewed before reviewed
+    expect(ordered[2]).toBe(calmReviewed);
+  });
+
+  it('is stable for cases with equal priority', () => {
+    const first = structuredClone(baseCase);
+    const second = structuredClone(baseCase);
+    const ordered = prioritizeCases([first, second]);
+    expect(ordered[0]).toBe(first);
+    expect(ordered[1]).toBe(second);
   });
 });

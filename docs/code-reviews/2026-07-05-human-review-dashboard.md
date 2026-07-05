@@ -41,6 +41,15 @@ The design docs now frame the dashboard as both a monitoring surface and a quali
 - Distinguish `review_started` from `review_complete`.
 - Add authentication before any non-local deployment.
 
+## Addendum (second review, Claude)
+
+Two of the noted concerns were fixed on this branch before merge:
+
+- **Attention-first review queue**: cases are now ordered by `prioritizeCases` — needs-attention first (uncertain relationships, low-confidence events, unsuppressed early warnings), then unreviewed, recency preserved within groups. Scarce review time goes where the pipeline is least sure.
+- **Append-only verdict history** (migration `009_verdict_history.sql`): the `UNIQUE(article_id)` upsert overwrote earlier verdicts on re-review, destroying the ability to measure improvement over time. Verdicts are now insert-only; reads take the latest row per article via `DISTINCT ON`.
+
+Remaining follow-ups unchanged, with verdict→eval-set export as the priority (it closes the quality loop).
+
 ## Verdict
 
 **Approve with notes.** The change establishes the right production-AI feedback primitive: observable decisions plus auditable human corrections, without letting the LLM become the system of record.
