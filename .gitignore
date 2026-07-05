@@ -48,7 +48,6 @@ qdrant_data/
 qdrant_storage/
 
 # Generated review reports (npm run fixtures:review, npm run review:dashboard)
-/review/
 
 # Claude local settings
 .claude/settings.local.json

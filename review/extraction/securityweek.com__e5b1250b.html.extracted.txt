@@ -1,0 +1,10 @@
+Identity management and governance provider SailPoint has disclosed a cybersecurity incident involving its GitHub repositories.
+In a filing with the Securities and Exchange Commission (SEC), the company revealed that the incident occurred on April 20 and was immediately contained.
+“On April 20, 2026, we detected unauthorized access to a subset of our GitHub repositories. Our incident response team quickly terminated the unauthorized activity and resolved the issue,” the SEC filing reads.
+According to SailPoint, the repositories were compromised through a vulnerability in a third-party application. The underlying issue has been addressed, it said.
+SailPoint said its investigation into the incident, conducted in collaboration with a third-party cybersecurity firm, has found no evidence that “customer data in our production or staging environments were accessed or that our services were interrupted.”
+The company told the SEC that it had directly notified customers if their information was stored in the accessed repositories.
+“[We] informed our customers generally that no additional actions are required at this time,” SailPoint’s SEC filing reads.
+SailPoint has not shared additional information on the attack, nor on the type of data that might have been compromised.
+It did not name the threat actor responsible for the incident, and it’s unclear if the intrusion is related to the recent spree of software supply chain attacks claimed by the TeamPCP hacking group.
+SecurityWeek has emailed SailPoint for additional information on the cyberattack and will update this article if the company responds.

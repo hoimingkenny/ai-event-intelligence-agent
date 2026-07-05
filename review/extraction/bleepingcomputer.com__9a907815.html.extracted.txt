@@ -1,0 +1,27 @@
+Update: Added statement from Microsoft to the end of this article.
+A security researcher has released a new Microsoft Defender zero-day exploit named "RoguePlanet" just hours after Microsoft fixed two previously disclosed flaws during June 2026 Patch Tuesday.
+The researcher, known as Nightmare Eclipse, says the new vulnerability affects fully patched Windows 10 and Windows 11 devices, allowing attackers to spawn a command prompt with SYSTEM privileges via a Microsoft Defender race condition vulnerability.
+The researcher shared a proof-of-concept exploit on Tuesday afternoon in a self-hosted Git repository after saying that GitHub and GitLab repositories hosting their exploits had previously been removed by Microsoft.
+"The exploit is a race condition, so it's a hit or miss. I have managed to get a 100% success rate on some machines while it struggled to work on others," Nightmare Eclipse wrote in the repository.
+The flaw was reportedly tested against Windows 11 Official and Canary builds, as well as Windows 10 systems with the June 2026 security updates installed.
+When successful, a Windows command prompt will be spawned with SYSTEM privileges.
+Cybersecurity firm ThreatLocker told BleepingComputer that they successfully reproduced the flaw in their testing and confirmed the exploit worked against fully patched Windows 11 systems with KB5094126 installed, and shared a video demonstrating it.
+"Our initial analysis confirms that the RoguePlanet exploit is viable and performs as described. Organizations using application allowlisting can prevent the exploit from executing, providing an effective layer of protection against this attack," Danny Jenkins, CEO of ThreatLocker, told BleepingComputer.
+According to Nightmare Eclipse, RoguePlanet was originally developed as a remote code execution vulnerability that exploited Microsoft Defender's handling of files hosted on remote SMB shares.
+"In initial development, it was confirmed that this vulnerability was a remote code execution," the researcher explained in a blog post.
+"It required an attacker to coerce a victim to open a .vhd(x) in a remote SMB server, succesful exploitation resulted in defender overwriting its own files and obviously the end outcome was an RCE."
+The researcher says another attack scenario could lead to remote code execution simply by coercing a victim into opening an SMB share if symlink evaluation settings were enabled.
+However, the researcher claims Microsoft silently hardened Defender in mid-May by patching "mpengine!SysIO*" API, which blocked junction attacks.
+"Rewriting RoguePlanet to make it functional again drained my soul and I couldn't complete the other scenarios and for now it remains unclear if RoguePlanet is limited to LPE or there is some sort of way to turn it into an RCE," the researcher wrote.
+The release is part of an ongoing dispute between Nightmare Eclipse and Microsoft over the company's vulnerability disclosure and bug bounty practices.
+Over the past several months, the researcher has publicly released multiple Windows zero-days, including the BlueHammer, RedSun, GreenPlasma, and YellowKey flaws. Some of the zero-days targeted Microsoft Defender, while others targeted BitLocker and Windows components.
+Microsoft fixed the GreenPlasma and YellowKey flaws today as part of the June 2026 Patch Tuesday updates.
+Microsoft previously reacted to the disclosures with warnings that it would work with law enforcement when people engage in "malicious activity causing real harm to our customers," leading many in the cybersecurity community to think Microsoft was threatening the researcher.
+Nightmare Eclipse claims Microsoft repeatedly targeted and removed previous repositories hosted on GitHub and GitLab, prompting the creation of a self-hosted code platform at projectnightcrawler.dev.
+BleepingComputer has contacted Microsoft about the new zero-day and will update the story if we receive a statement.
+Update 6/10/26: After publishing this story, Microsoft told BleepingComputer that they are aware of the reported vulnerability and are investigating it.
+“Microsoft is aware of the reported vulnerability and is actively investigating the validity and potential applicability of these claims. Microsoft is committed to investigating security issues and updating impacted products to protect customers as soon as possible," a Microsoft spokesperson told BleepingComputer.
+"Importantly, we support coordinated vulnerability disclosure, an industry standard that protects customers and supports the research community by ensuring their findings are thoroughly investigated and addressed before being made public."
+Test every layer before attackers do
+Security teams log 54% of successful attacks and alert on just 14%. The rest move through your environment unseen.
+The Picus whitepaper shows how breach and attack simulation tests your SIEM and EDR rules so threats stop slipping by detection.

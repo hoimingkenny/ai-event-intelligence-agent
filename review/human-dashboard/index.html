@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Human Review Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface-soft: #f1f4f8;
+      --line: #d8dee8;
+      --text: #17202a;
+      --muted: #5f6b7a;
+      --accent: #0f766e;
+      --warn: #a15c00;
+      --bad: #b42318;
+      --good: #146c43;
+      --shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      padding: 20px 24px 16px;
+    }
+    h1 { margin: 0 0 4px; font-size: 24px; font-weight: 680; letter-spacing: 0; }
+    h2 { margin: 0 0 12px; font-size: 16px; letter-spacing: 0; }
+    h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; color: var(--muted); letter-spacing: 0; }
+    .subtle { color: var(--muted); }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      padding: 16px 24px;
+    }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+    }
+    .metric strong { display: block; font-size: 22px; line-height: 1.15; }
+    main { padding: 0 24px 24px; }
+    details {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 10px 0;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    details[open] summary { border-bottom: 1px solid var(--line); }
+    summary {
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+    }
+    .title { font-weight: 650; overflow-wrap: anywhere; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .badge {
+      border: 1px solid var(--line);
+      background: var(--surface-soft);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .badge.good { color: var(--good); border-color: #b7dfc6; background: #eef8f1; }
+    .badge.warn { color: var(--warn); border-color: #f2d29b; background: #fff8e8; }
+    .badge.bad { color: var(--bad); border-color: #f5b5ae; background: #fff1ef; }
+    .body {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.15fr) minmax(280px, 0.85fr);
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      min-width: 0;
+    }
+    .stack { display: grid; gap: 10px; }
+    .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px; margin: 4px 0; }
+    .kv span:first-child { color: var(--muted); }
+    pre {
+      margin: 0;
+      max-height: 340px;
+      overflow: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #fbfcfe;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    ul { margin: 0; padding-left: 18px; }
+    a { color: var(--accent); }
+    .review-box {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .review-box label {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: var(--surface-soft);
+    }
+    .empty { color: var(--muted); font-style: italic; }
+    @media (max-width: 900px) {
+      summary, .body { grid-template-columns: 1fr; }
+      .badges { justify-content: flex-start; }
+      .review-box { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Human Review Dashboard</h1>
+    <div class="subtle">Generated 2026-07-05 08:02:23 UTC. Review pipeline output case by case, then promote confirmed judgements into the labelled evaluation set.</div>
+  </header>
+  <section class="summary"><div class="metric"><strong>15</strong><span>Articles</span></div><div class="metric"><strong>0</strong><span>Needs review</span></div><div class="metric"><strong>0</strong><span>Early warnings</span></div><div class="metric"><strong>0</strong><span>Confirmed</span></div><div class="metric"><strong>0</strong><span>Suppressed</span></div><div class="metric"><strong>0</strong><span>Extraction failures</span></div><div class="metric"><strong>0</strong><span>Low quality</span></div><div class="metric"><strong>0</strong><span>Material updates</span></div></section>
+  <main>
+    <details open>
+    <summary>
+      <div>
+        <div class="title">Kubota says hackers had month-long access to network systems</div>
+        <div class="meta">Bleeping Computer · 2026-07-01 21:09:06 UTC · <a href="https://www.bleepingcomputer.com/news/security/kubota-says-hackers-had-month-long-access-to-network-systems" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>15</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Kubota North America Corporation disclosed that hackers had access to some of its network systems for more than a month earlier this year. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">FortiBleed credential-theft campaign linked to Lynx ransomware</div>
+        <div class="meta">Bleeping Computer · 2026-07-01 21:37:24 UTC · <a href="https://www.bleepingcomputer.com/news/security/fortibleed-credential-theft-campaign-linked-to-lynx-ransomware" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>14</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>The massive FortiBleed credential theft campaign has been linked to the INC and Lynx ransomware operations, suggesting the stolen Fortinet credentials were intended to fuel future network intrusions. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Medtronic notifies customers impacted by ShinyHunters data breach</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 04:25:42 UTC · <a href="https://www.bleepingcomputer.com/news/security/medtronic-notifies-customers-impacted-by-shinyhunters-data-breach" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>13</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Healthcare device firm Medtronic is notifying affected customers about a data breach that exposed their personal data to an unauthorized third party. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Alleged Scattered Spider hacker extradited to the United States</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 08:58:25 UTC · <a href="https://www.bleepingcomputer.com/news/security/alleged-scattered-spider-hacker-extradited-to-the-united-states" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>12</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>A dual United States and Estonian citizen has been extradited to the U.S. to face charges alleging he was a member of the Scattered Spider hacking collective. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Opera rolls out Paste Protect feature to fight ClickFix attacks</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 10:46:58 UTC · <a href="https://www.bleepingcomputer.com/news/security/opera-rolls-out-paste-protect-feature-to-fight-clickfix-attacks" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>11</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Opera has introduced Paste Protect, a security feature designed to block ClickFix-style attacks that trick users into executing malicious commands through social engineering. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">CISA: Microsoft SharePoint RCE flaw now actively exploited</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 10:52:43 UTC · <a href="https://www.bleepingcomputer.com/news/security/cisa-microsoft-sharepoint-rce-flaw-now-actively-exploited" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>10</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>CISA warned on Wednesday that attackers have begun exploiting a high-severity Microsoft SharePoint remote code execution vulnerability patched in May. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Cisco finally confirms attackers exploiting Unified CM flaw</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 11:35:25 UTC · <a href="https://www.bleepingcomputer.com/news/security/cisco-finally-confirms-attackers-exploiting-unified-cm-flaw" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>9</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Cisco confirmed that attackers are now exploiting a Unified Communications Manager (Unified CM) vulnerability patched in early June. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Microsoft fixes bug that removed Copilot buttons in Outlook</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 12:15:47 UTC · <a href="https://www.bleepingcomputer.com/news/microsoft/microsoft-fixes-bug-that-removed-copilot-button-in-outlook" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>8</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Microsoft has fixed a known issue causing the Copilot Chat or Copilot buttons in Classic Outlook to disappear for Windows users with the Copilot Chat (Basic) license. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">ConsentFix and ClickFix: How Microsoft 365 Accounts are Hijacked in 3 Seconds</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 14:00:10 UTC · <a href="https://www.bleepingcomputer.com/news/security/consentfix-and-clickfix-how-microsoft-365-accounts-are-hijacked-in-3-seconds" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>7</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>ConsentFix and ClickFix attacks steal Microsoft 365 tokens in seconds using fake prompts and OAuth flows. Learn how these MFA bypass tactics work and how to defend against them. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Google loses final appeal to overturn €4.1 billion EU fine</div>
+        <div class="meta">Bleeping Computer · 2026-07-02 15:18:51 UTC · <a href="https://www.bleepingcomputer.com/news/legal/google-loses-final-appeal-to-overturn-41-billion-eu-fine" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>6</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Court of Justice of the European Union (CJEU) has dismissed Google&#39;s final appeal against a €4.1 billion ($4.7 billion) antitrust fine over the company&#39;s use of Android to promote its Chrome browser and search service. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Claude Fable relaunch disappoints users with nerfed performance</div>
+        <div class="meta">Bleeping Computer · 2026-07-03 00:48:30 UTC · <a href="https://www.bleepingcomputer.com/news/artificial-intelligence/claude-fable-relaunch-disappoints-users-with-nerfed-performance" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>5</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Claude Fable, the company&#39;s most powerful model, is now available to all users, but early impressions are disappointing, as it appears to be nowhere near the original release. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">Claude Fable 5 isn’t permanently leaving subscriptions, Anthropic says</div>
+        <div class="meta">Bleeping Computer · 2026-07-03 01:37:09 UTC · <a href="https://www.bleepingcomputer.com/news/artificial-intelligence/claude-fable-5-isnt-permanently-leaving-subscriptions-anthropic-says" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">IGNORED</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>4</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Anthropic says Claude Fable 5 won&#39;t be accessible via Claude subscriptions after July 7, but it&#39;s not a permanent change, and the company expects the model to return outside the usage-based plan soon. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">ARToken PhaaS exposes EvilTokens&#39; Microsoft 365 phishing toolkit</div>
+        <div class="meta">Bleeping Computer · 2026-07-03 14:12:22 UTC · <a href="https://www.bleepingcomputer.com/news/security/artoken-phaas-exposes-eviltokens-microsoft-365-phishing-toolkit" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>3</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>A new phishing-as-a-service (PhaaS) platform dubbed &quot;ARToken&quot; appears to operate as an affiliate of the EvilTokens phishing platform, giving researchers a glimpse into an extensive toolkit designed to compromise Microsoft 365. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">NetNut proxy network disrupted, 2 million infected devices cut off</div>
+        <div class="meta">Bleeping Computer · 2026-07-03 17:50:04 UTC · <a href="https://www.bleepingcomputer.com/news/security/netnut-proxy-network-disrupted-2-million-infected-devices-cut-off" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>2</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>A joint operation involving Google has disrupted NetNut, a residential proxy network that gave access to millions of compromised Android devices, including smart TVs and streaming boxes. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+<details >
+    <summary>
+      <div>
+        <div class="title">JadePuffer ransomware used AI agent to automate entire attack</div>
+        <div class="meta">Bleeping Computer · 2026-07-04 14:16:38 UTC · <a href="https://www.bleepingcomputer.com/news/security/jadepuffer-ransomware-used-ai-agent-to-automate-entire-attack" target="_blank" rel="noreferrer">source</a></div>
+      </div>
+      <div class="badges">
+        <span class="badge good">ok</span>
+        <span class="badge ">EXTRACTION_PENDING</span>
+        <span class="badge ">pending</span>
+        
+        
+        
+      </div>
+    </summary>
+    <div class="body">
+      <section class="panel stack">
+        <div>
+          <h2>Article</h2>
+          <div class="kv"><span>ID</span><span>1</span></div>
+          <div class="kv"><span>Fetched</span><span>2026-07-05 05:19:59 UTC</span></div>
+          <div class="kv"><span>Extraction</span><span>unknown / pending</span></div>
+          <div class="kv"><span>Quality</span><span>n/a</span></div>
+          
+        </div>
+        <div>
+          <h3>RSS Summary</h3>
+          <pre>Researchers identified what they believe is the first documented case of a ransomware operation, JadePuffer, conducted entirely by a large language model (LLM) agent. [...]</pre>
+        </div>
+        <div>
+          <h3>Extracted Text</h3>
+          <pre>(empty)</pre>
+        </div>
+      </section>
+      <aside class="stack">
+        <section class="panel">
+          <h2>Pipeline Output</h2>
+          <h3>Entities</h3><p class="empty">No entities detected.</p>
+          <h3>Events</h3><p class="empty">No linked event.</p>
+          <h3>Alerts</h3><p class="empty">No alert decision yet.</p>
+          <h3>LLM Audit</h3><p class="empty">No LLM calls recorded for this case.</p>
+        </section>
+        <section class="panel">
+          <h2>Human Verdict</h2>
+          <div class="review-box">
+            <label><input type="checkbox"> Relevant cyber event</label>
+            <label><input type="checkbox"> Vendor impact correct</label>
+            <label><input type="checkbox"> Alert decision correct</label>
+          </div>
+          <p class="subtle">This first dashboard is read-only. Use these prompts while reviewing; the next slice can persist verdicts into a review queue and export labels.</p>
+        </section>
+      </aside>
+    </div>
+  </details>
+  </main>
+</body>
+</html>
