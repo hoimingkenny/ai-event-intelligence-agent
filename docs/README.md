@@ -57,6 +57,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-05-consolidate-production-plan.md](code-reviews/2026-07-05-consolidate-production-plan.md) | Merge duplicate production plans into one canonical doc |
 | [2026-07-05-entity-confidence.md](code-reviews/2026-07-05-entity-confidence.md) | Confidence-scored entities + corroboration gate |
 | [2026-07-05-scheduled-deployment.md](code-reviews/2026-07-05-scheduled-deployment.md) | Scheduled deployment: advisory-locked every-20-min pipeline |
+| [2026-07-05-readme-refresh.md](code-reviews/2026-07-05-readme-refresh.md) | Top-level README brought in line with the implemented system |
 
 ## `interview/` — interview preparation
 

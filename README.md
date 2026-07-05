@@ -1,109 +1,158 @@
 # Vendor Threat Watch
 
-AI-assisted cyber early-warning and vendor-impact triage agent.
+AI-assisted cyber early-warning and vendor-impact triage.
 
-The goal is not to produce a generic cyber news summary. The goal is to identify fresh cyber events, map them to monitored vendor products, deduplicate related reports into canonical events, and surface only items that may require review within a 2-hour incident response window.
+The goal is not a generic cyber news summary. It is to identify fresh cyber events, map them to a monitored vendor inventory, deduplicate related reports across sources into canonical events, and surface items that may need review within a **2-hour impact window** — alerting like a news desk: a labeled early signal now, upgraded to confirmed later.
 
-## MVP Flow
+**Design principle: the LLM is not the system of record.** It performs bounded, schema-validated reasoning (classify, compare, summarize) inside a deterministic workflow. PostgreSQL is the source of truth; every stage is a state-machine transition, independently retryable and auditable. Deterministic tiers resolve the large majority of decisions for free — the LLM only sees the genuinely ambiguous cases.
+
+## Pipeline
+
+Articles move through a state machine on `articles.processing_status`. Each stage picks up what the previous one advanced, so a crashed run resumes by simply running again.
 
 ```text
-User request: "Find latest cyber attack news of today"
-
-1. Build time-sensitive search plan
-2. Run web search
-3. Store raw search/article records
-4. Extract cyber facts
-5. Match monitored vendors/products
-6. Retrieve candidate duplicate events
-7. Decide same event / material update / separate event
-8. Score urgency
-9. Print analyst triage report
+ingest      RSS feeds → new article records
+   ↓
+filter      cheap regex/keyword/CVE/vendor match → drop irrelevant before any expensive work
+   ↓
+extract     layered cleaning: per-source selectors → Readability → boilerplate & ad removal
+   ↓         (self-scores rss_recall = word recall of RSS summary vs extracted text)
+entities    deterministic vendor/CVE/IOC/attack-type extraction, confidence-scored by
+   ↓         placement (title strong, footer weak) + corroboration
+embed       article embeddings (pgvector)
+   ↓
+dedup       content hash → title hash → semantic similarity
+   ↓
+events      grouping ladder: grouping-key match → embedding distance → LLM comparator
+   ↓         (only in the uncertain band); low-confidence entities gated out
+classify    LLM classification → rolls up into event severity/urgency/confidence;
+   ↓         cross-checks deterministic vendors against the LLM's vendor roles
+alerts      two-tier: early_warning (fresh, labeled unconfirmed) → confirmed (strict gate);
+             material updates bypass suppression
 ```
 
-## Tech Stack
+Two watchdogs run inside every pass: **extraction drift** (per-source rolling recall — a site redesign surfaces the same day) and **alert latency** (publication→alert p50/p90 vs the 2h SLO). Every LLM call is recorded in `llm_audit_logs`.
 
-- TypeScript
-- MiniMax (OpenAI-compatible) for LLM reasoning and embeddings
-- OpenAI Agents SDK for specialist reasoning agents
-- LangGraph for workflow orchestration
-- PostgreSQL + pgvector for durable article/event storage and semantic retrieval
-- Redis for background job queues
-- Optional legacy Qdrant adapter for prototype vector dedup experiments
-- RSS feeds (CISA, Krebs, Bleeping Computer, The Hacker News) for cyber signal
+Orchestration is a LangGraph StateGraph (`src/pipeline/runner.ts`) that owns sequencing only. Full design: [`docs/design/architecture.md`](docs/design/architecture.md).
 
-## Setup
+## Tech stack
+
+- **TypeScript** (Node 22), run via `tsx`
+- **PostgreSQL + pgvector** (HNSW) — source of truth and semantic retrieval
+- **LangGraph** — pipeline orchestration (analyst copilot planned)
+- **MiniMax** (OpenAI-compatible) — LLM reasoning + embeddings
+- **Redis + BullMQ** — background queue mode (optional)
+- **Mozilla Readability + linkedom** — article extraction
+- **vitest** — tests
+
+## Quick start
 
 ```bash
 npm install
-npm run playwright:install
-cp .env.example .env
-# Add your MINIMAX_API_KEY to .env
+cp .env.example .env          # set MINIMAX_API_KEY (needed for embeddings + LLM stages)
 
-# Pull local database/queue images first if they are not already present.
-docker compose pull postgres redis
-
-# Start PostgreSQL with pgvector and Redis.
 docker compose up -d postgres redis
+npm run db:migrate            # apply SQL migrations (src/db/migrations/)
+npm run db:seed               # seed RSS feeds + monitored vendor inventory
 
-# Apply database migrations.
-npm run db:migrate
-
-# Seed configured RSS feeds and monitored vendors.
-npm run db:seed
-
-# Run the bounded RSS-to-alert MVP path.
-npm run pipeline:run -- --limit=5
-
-# Run the labelled quality evaluation.
-npm run eval
+npm run pipeline:run          # run the full pipeline once (advisory-locked)
 ```
 
-## Docker Notes
+Without `MINIMAX_API_KEY` the pipeline still runs, but the embedding and classification stages are skipped/degraded (dedup loses its semantic tier).
 
-The Postgres image comes from `pgvector/pgvector:pg18`, so pulling it before first
-startup is useful on a fresh machine:
+## Running continuously (every 20 minutes)
+
+Two deployment patterns share one advisory-locked core, so overlapping runs are skipped, not stacked:
 
 ```bash
-docker compose pull postgres
-docker compose pull redis
-docker compose up -d postgres redis
-docker compose ps
+# Internal scheduler (self-contained loop)
+npm run scheduler             # runs the pipeline every RSS_FETCH_INTERVAL_MINUTES (default 20)
+
+# Full stack in Docker (postgres → migrate → scheduler → optional dashboard)
+docker compose up -d
 ```
 
-Equivalent direct image pulls:
+For an external scheduler (system cron / Kubernetes CronJob), invoke the one-shot `npm run pipeline:run` on your own cadence. Design details: [`docs/engineering-notes/deployment-and-scheduling.md`](docs/engineering-notes/deployment-and-scheduling.md).
+
+## Testing and evaluation
+
+### Deterministic local test source
+
+Live RSS changes constantly, which makes the pipeline hard to study. A frozen local "news site" lets you replay identical runs:
 
 ```bash
-docker pull pgvector/pgvector:pg18
-docker pull redis:8
+npm run test-source:serve     # terminal 1 — serves 5 scenario articles at :8787
+
+# terminal 2 — register the feed once (psql):
+#   INSERT INTO feeds (source_name, feed_url, source_type, trust_level, is_active)
+#   VALUES ('Test Security News','http://localhost:8787/feed.xml','rss','high',true)
+#   ON CONFLICT (feed_url) DO UPDATE SET is_active = true;
+
+npm run ingest:rss -- --feed-url=http://localhost:8787/feed.xml
+npm run filter:articles && npm run extract:articles   # ... walk stages one at a time
 ```
 
-After the containers are healthy, run:
+The scenarios exercise grouping-key attach, separate events, native-ad removal, and cheap-filter rejection. You can truncate and replay because the content never changes.
+
+### Unit tests and type-checking
 
 ```bash
-npm run db:migrate
-npm run db:seed
+npm run check                 # tsc --noEmit
+npm test                      # vitest (~130 tests; decision logic is pure, no DB needed)
 ```
 
-## Demo Commands
+### Quality evaluation
 
 ```bash
-npm run ingest:rss
-npm run pipeline:run -- --limit=5
-npm run eval
-npm run eval -- --persist
-npm run worker -- ingest-queue
+npm run eval                  # run the labelled eval set (data/labelled-eval-set.json)
+npm run drift:check           # per-source extraction quality (exit 2 on drift)
+npm run latency:check         # publication→alert p50/p90 vs 2h SLO (exit 2 on violation)
 ```
 
-PostgreSQL 18 stores container data under a major-version-specific layout. This
-Compose file mounts the database volume at `/var/lib/postgresql` and uses a
-`postgres18_data` volume so it does not collide with older Postgres volumes.
+### Human review dashboard
+
+Inspect every pipeline decision per article and record per-dimension verdicts:
+
+```bash
+npm run review:dashboard      # http://127.0.0.1:4321 (attention-first queue)
+```
+
+### Extraction fixtures
+
+```bash
+npm run fixtures:fetch -- <url>   # save real article HTML as a regression fixture
+npm run fixtures:review           # side-by-side original vs extracted report
+```
+
+## Inspecting results (psql)
+
+```bash
+docker exec -it vendor_threat_watch_postgres psql -U cyber -d vendor_threat_watch
+
+SELECT processing_status, count(*) FROM articles GROUP BY 1;
+SELECT id, grouping_key, severity, confidence, source_count FROM cyber_events;
+SELECT event_id, alert_tier, alert_status, alert_reason FROM alerts;
+```
+
+## Individual stage commands
+
+`ingest:rss`, `filter:articles`, `extract:articles`, `entities:articles`, `embed:articles`, `embed:events`, `dedup:articles`, `events:articles`, `classify:articles`, `alerts:events` — each runs one stage, useful for studying the flow step by step.
+
+## Documentation
+
+See [`docs/README.md`](docs/README.md) for the full index. Highlights:
+
+- [`docs/design/`](docs/design/) — architecture, data model, evaluation methodology, trade-offs, limitations
+- [`docs/engineering-notes/`](docs/engineering-notes/) — extraction quality, event-grouping ladder, early-warning redesign, entity confidence, deployment, agent-framework decision
+- [`docs/plans/production-readiness.md`](docs/plans/production-readiness.md) — prototype → enterprise-grade roadmap
+- [`docs/code-reviews/`](docs/code-reviews/) — a pre-merge review doc per change
+
+## Development workflow
+
+No direct commits to `main`; every change goes on a branch with a pre-merge code-review doc in `docs/code-reviews/`, and `npm run check` + `npm test` must pass. See [`AGENTS.md`](AGENTS.md).
 
 ## Notes
 
-- The MVP vector path uses PostgreSQL + pgvector. Qdrant is not required for the
-  RSS pipeline; the old Qdrant adapter remains only for prototype agent flows.
-- Embedding dimensions are auto-detected on first call to MiniMax's `/v1/embeddings`
-  endpoint, which uses a non-standard `{model, type, texts}` request shape distinct
-  from the OpenAI JS SDK's `embeddings.create({ input })`.
-- The generic plan refers to `notifications`; this cyber-focused implementation uses
-  `alerts` for event-level notification decisions.
+- **Legacy scaffold** (`src/graph.ts`, `src/nodes/`, `src/agents/`, `src/storage/`) is the superseded in-memory/Qdrant era, kept for reference. `npm run dev` runs that old scaffold, not the real pipeline — use `pipeline:run`.
+- The Playwright extraction fallback is disabled by default; current feeds are server-rendered.
+- MiniMax embedding dimensions are auto-detected on first call (its `/v1/embeddings` uses a non-standard `{model, type, texts}` request shape).
