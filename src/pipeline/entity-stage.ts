@@ -18,8 +18,13 @@ export async function runEntityStage(
   let entityRows = 0;
 
   for (const article of candidates) {
-    const text = [article.title, article.rssSummary, article.cleanText].filter(Boolean).join('\n');
-    const extracted = extractArticleEntities(article.id, text);
+    // Pass fields separately so zoned confidence scoring can weight by
+    // placement (title/lead strong, tail weak) — see entity-confidence.ts.
+    const extracted = extractArticleEntities(article.id, {
+      title: article.title,
+      summary: article.rssSummary,
+      body: article.cleanText,
+    });
 
     for (const entity of extracted) {
       await entities.addArticleEntity(entity);

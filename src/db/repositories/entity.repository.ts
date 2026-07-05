@@ -62,4 +62,21 @@ export class EntityRepository {
       role: row.role,
     }));
   }
+
+  /** Reconcile a vendor entity's confidence/role after the LLM cross-check. */
+  async updateVendorConfidence(
+    articleId: string,
+    vendor: string,
+    confidence: number,
+    role: string
+  ): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE article_entities
+        SET confidence = $3, role = $4
+        WHERE article_id = $1 AND entity_type = 'vendor' AND entity_value = $2
+      `,
+      [articleId, vendor, confidence, role]
+    );
+  }
 }

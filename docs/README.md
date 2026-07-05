@@ -33,6 +33,7 @@ Post-hoc writing about a specific challenge: what broke, how it was debugged, wh
 | [extraction-quality-evaluation.md](engineering-notes/extraction-quality-evaluation.md) | Article extraction cleaning layers, debugging notes, quality metrics + drift detection |
 | [agent-framework-decision.md](engineering-notes/agent-framework-decision.md) | Where LangGraph earns its place (runner, copilot) and where it deliberately does not (pipeline stages) |
 | [early-warning-redesign.md](engineering-notes/early-warning-redesign.md) | The alert gate that suppressed the product: two-tier alerting, newest-first, latency SLO |
+| [entity-confidence-and-noise-tolerance.md](engineering-notes/entity-confidence-and-noise-tolerance.md) | Tolerating imperfect extraction: confidence-scored entities + event-boundary gate |
 
 ## `code-reviews/` — pre-merge reviews
 
@@ -53,6 +54,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-05-publish-interview-prep.md](code-reviews/2026-07-05-publish-interview-prep.md) | Interview-prep docs made public |
 | [2026-07-05-production-readiness-plan.md](code-reviews/2026-07-05-production-readiness-plan.md) | Production readiness roadmap (6 maturity levels) |
 | [2026-07-05-consolidate-production-plan.md](code-reviews/2026-07-05-consolidate-production-plan.md) | Merge duplicate production plans into one canonical doc |
+| [2026-07-05-entity-confidence.md](code-reviews/2026-07-05-entity-confidence.md) | Confidence-scored entities + corroboration gate |
 
 ## `interview/` — interview preparation
 

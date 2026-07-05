@@ -16,10 +16,9 @@ describe('extractIocs', () => {
 
 describe('extractArticleEntities', () => {
   it('extracts vendor, product, CVE, IOC, and attack indicator entities', () => {
-    const entities = extractArticleEntities(
-      'article-1',
-      'SailPoint IdentityIQ CVE-2026-12345 vulnerability exploited from 203.0.113.4.'
-    );
+    const entities = extractArticleEntities('article-1', {
+      title: 'SailPoint IdentityIQ CVE-2026-12345 vulnerability exploited from 203.0.113.4.',
+    });
 
     expect(entities).toContainEqual(
       expect.objectContaining({ entityType: 'vendor', entityValue: 'SailPoint' })

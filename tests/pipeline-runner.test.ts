@@ -30,7 +30,7 @@ describe('runPipeline', () => {
       includeLlm: true,
     });
 
-    expect(result.classification).toEqual({ reviewed: 0, classified: 0, failed: 0, eventsUpdated: 0 });
+    expect(result.classification).toEqual({ reviewed: 0, classified: 0, failed: 0, eventsUpdated: 0, vendorsReconciled: 0 });
     expect(result.alerts.reviewed).toBe(0);
   });
 
