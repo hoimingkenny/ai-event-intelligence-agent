@@ -31,6 +31,7 @@ Post-hoc writing about a specific challenge: what broke, how it was debugged, wh
 |---|---|
 | [extraction-quality-evaluation.md](engineering-notes/extraction-quality-evaluation.md) | Article extraction cleaning layers, debugging notes, quality metrics + drift detection |
 | [agent-framework-decision.md](engineering-notes/agent-framework-decision.md) | Where LangGraph earns its place (runner, copilot) and where it deliberately does not (pipeline stages) |
+| [early-warning-redesign.md](engineering-notes/early-warning-redesign.md) | The alert gate that suppressed the product: two-tier alerting, newest-first, latency SLO |
 
 ## `code-reviews/` — pre-merge reviews
 
@@ -46,6 +47,8 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-02-langgraph-runner.md](code-reviews/2026-07-02-langgraph-runner.md) | Pipeline runner converted to LangGraph StateGraph |
 | [2026-07-02-agent-framework-decision-doc.md](code-reviews/2026-07-02-agent-framework-decision-doc.md) | Engineering note: agent framework decision record |
 | [2026-07-02-consolidate-agents-md.md](code-reviews/2026-07-02-consolidate-agents-md.md) | AGENTS.md canonical; CLAUDE.md becomes an @import |
+| [2026-07-05-human-review-dashboard.md](code-reviews/2026-07-05-human-review-dashboard.md) | Human review dashboard + quality-control loop (with second-review addendum) |
+| [2026-07-05-early-warning-note.md](code-reviews/2026-07-05-early-warning-note.md) | Engineering note: early-warning redesign record |
 
 ## Conventions
 
