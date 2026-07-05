@@ -5,7 +5,7 @@
 The LLM is not the system of record. It performs bounded, schema-validated reasoning inside a deterministic workflow. Postgres is the source of truth; every stage is a state-machine transition on `articles.processing_status`, independently retryable and auditable.
 
 ```text
-Pipeline stages   = deterministic orchestration (sequential runner or BullMQ workers)
+Pipeline stages   = LangGraph StateGraph orchestration (or BullMQ workers)
 LLM (MiniMax)     = bounded reasoning: classify, compare, summarize — zod-validated
 Postgres+pgvector = source of truth + semantic retrieval
 Monitoring        = the system watches its own quality (drift) and speed (latency SLO)
@@ -70,6 +70,10 @@ Both run inside every pipeline sweep and as standalone watchdogs (exit 2 on brea
 
 Stage queues process newest-published first — breaking news must not queue behind backlog. Original-detection queries (`findEarlierByContentHash`, `findRecentByTitleHash`) intentionally keep oldest-first semantics.
 
+## Orchestration
+
+The runner is a LangGraph StateGraph: one node per stage plus watchdog nodes (drift after extraction, latency after alerts), linear edges, and a single conditional edge that skips LLM classification when no API key is configured. The graph owns sequencing only — Postgres (`articles.processing_status`) remains the system of record, so a crashed run resumes by running the graph again. The planned analyst copilot will be a LangGraph agent whose tools are read-only queries over this same state.
+
 ## Legacy
 
-`src/graph.ts`, `src/nodes/`, `src/agents/`, `src/storage/` are the superseded in-memory/Qdrant scaffold, kept for reference only. Conversion of the runner to a LangGraph StateGraph is planned, not current.
+`src/graph.ts`, `src/nodes/`, `src/agents/`, `src/storage/` are the superseded in-memory/Qdrant scaffold, kept for reference only.

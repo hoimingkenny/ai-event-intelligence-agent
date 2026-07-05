@@ -45,7 +45,8 @@ Note: `npm run dev` runs the legacy in-memory scaffold (`src/graph.ts`), not the
 
 ```
 src/pipeline/             # Stage functions + runner (the real system)
-  runner.ts               # Sequential orchestrator; drift check after extraction
+  runner.ts               # LangGraph StateGraph orchestrator; watchdog nodes for
+                          #   drift (post-extraction) and latency (post-alerts)
   ingest-stage.ts …       # One file per stage; state machine via articles.processing_status
 src/extraction/           # Article content extraction
   readable-content.ts     # Layered cleaning: per-source selectors → DOM pruning +
@@ -86,9 +87,9 @@ Legacy scaffold kept for reference: `src/graph.ts`, `src/nodes/`, `src/agents/`,
 
 ## Current State
 
-Done: Postgres/pgvector pipeline with per-stage state machine; MiniMax LLM + embeddings; Readability-based extraction with per-source selectors and ad removal; extraction quality metrics + drift detection; real-HTML fixture harness; labelled evaluation module; BullMQ worker skeleton.
+Done: Postgres/pgvector pipeline with per-stage state machine; LangGraph StateGraph runner; MiniMax LLM + embeddings; Readability-based extraction with per-source selectors and ad removal; extraction quality metrics + drift detection; event-grouping ladder (groupingKey → embedding → LLM comparator); classification→event rollup; two-tier early-warning/confirmed alerting with latency SLO watchdog; real-HTML fixture harness; deterministic local test source; labelled evaluation module; BullMQ worker skeleton.
 
-Pending: convert runner to LangGraph StateGraph; wire semantic dedup vector into the dedup stage; event grouping via groupingKey + embedding + LLM comparator ladder; feed LLM classification back into event severity/confidence; notification log persistence.
+Pending: wire semantic dedup vector into the dedup stage; per-article push-through workers; grouping-key aliases; tier-0/1 sources with trust_level wired into confidence; analyst copilot agent (LangGraph); notification channels.
 
 ## Guardrails
 

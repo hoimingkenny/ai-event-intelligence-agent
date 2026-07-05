@@ -20,4 +20,22 @@ describe('runPipeline', () => {
     expect(result.classification).toBeUndefined();
     expect(result.alerts.reviewed).toBe(0);
   });
+
+  it('takes the classification edge when LLM is enabled', async () => {
+    // EmptyDb yields no candidates, so the classification node runs without
+    // making any LLM calls — this asserts the conditional edge routing only.
+    const result = await runPipeline(new EmptyDb(), {
+      limit: 1,
+      includeIngest: false,
+      includeLlm: true,
+    });
+
+    expect(result.classification).toEqual({ reviewed: 0, classified: 0, failed: 0, eventsUpdated: 0 });
+    expect(result.alerts.reviewed).toBe(0);
+  });
+
+  it('skips ingest when includeIngest is false', async () => {
+    const result = await runPipeline(new EmptyDb(), { limit: 1, includeIngest: false });
+    expect(result.ingest).toBeUndefined();
+  });
 });
