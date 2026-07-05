@@ -13,6 +13,7 @@ import { runExtractionStage } from './extraction-stage.js';
 import { runCheapFilterStage } from './filter-stage.js';
 import { ingestRssFeeds } from './ingest-stage.js';
 import { checkExtractionDrift } from '../monitoring/extraction-drift.js';
+import { checkAlertLatency } from '../monitoring/alert-latency.js';
 
 export interface PipelineRunOptions {
   limit?: number;
@@ -63,6 +64,13 @@ export async function runPipeline(
   if (classification) recordAndLog('classification', classification);
   const alerts = await runAlertStage(db, { limit });
   recordAndLog('alerts', alerts);
+  // Time-to-alert SLO watchdog: publication → alert p90 vs the 2h window.
+  const latency = await checkAlertLatency(db);
+  recordAndLog('alert_latency', {
+    p50Hours: latency.p50Hours,
+    p90Hours: latency.p90Hours,
+    sloViolated: latency.sloViolated,
+  });
 
   return {
     ingest,

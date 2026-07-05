@@ -122,7 +122,8 @@ export class ArticleRepository {
           processing_status
         FROM articles
         WHERE processing_status = $1
-        ORDER BY fetched_at ASC, id ASC
+        -- Newest first: breaking news must not queue behind backlog.
+        ORDER BY published_at DESC NULLS LAST, fetched_at DESC, id DESC
         LIMIT $2
       `,
       [status, limit]

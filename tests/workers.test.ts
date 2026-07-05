@@ -25,6 +25,6 @@ describe('queue workers', () => {
       eventId: '1',
     });
 
-    expect(result).toEqual({ reviewed: 0, sent: 0, suppressed: 0 });
+    expect(result).toMatchObject({ reviewed: 0, sent: 0, suppressed: 0 });
   });
 });

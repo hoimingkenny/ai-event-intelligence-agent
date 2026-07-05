@@ -27,6 +27,7 @@ npm run pipeline:run     # Full pipeline: ingest → filter → extract → enti
                          #   embed → dedup → events → classify → alerts
 npm run worker           # BullMQ worker mode (needs Redis)
 npm run drift:check      # Per-source extraction quality report (exit 2 on drift)
+npm run latency:check    # Publication→alert p50/p90 vs 2h SLO (exit 2 on violation)
 
 npm run fixtures:fetch -- <url>   # Save real article HTML as extraction fixture
 npm run fixtures:review           # Side-by-side extraction review report (review/)
