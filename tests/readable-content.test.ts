@@ -104,6 +104,31 @@ describe('extractReadableContent', () => {
     expect(result.cleanText).not.toContain('tines');
   });
 
+  it('removes ad clusters on the Readability path without nuking the article (nested wrapper regression)', () => {
+    // No source selector for this domain → Readability wraps output in nested
+    // divs. The cluster span must resolve against the anchors' common
+    // ancestor, not the root, or the whole article gets removed.
+    const adUrl = 'https://sponsor.example-vendor.com/whitepaper';
+    const html = `
+      <html><head><title>t</title></head><body><article class="post-body">
+        <h1>Vendor warns of phishing campaign</h1>
+        <p>${paragraph}</p>
+        <p><a href="${adUrl}?utm_source=x"><img src="/banner.jpg"></a></p>
+        <h2><a href="${adUrl}?utm_campaign=y">Stop credential phishing before it starts</a></h2>
+        <p>Legacy gateways miss 40% of credential harvesting pages according to our sponsored study.</p>
+        <p><a href="${adUrl}?utm_content=z">Get the whitepaper</a></p>
+        <p>The vendor recommends enabling phishing-resistant multi-factor authentication for all remote workers immediately.</p>
+      </article></body></html>
+    `;
+    const result = extractReadableContent(html, 'https://unknown-site.example/advisory/');
+
+    expect(result.method).toBe('readability');
+    expect(result.cleanText).toContain('actively exploiting a critical vulnerability');
+    expect(result.cleanText).toContain('phishing-resistant multi-factor authentication');
+    expect(result.cleanText).not.toContain('Stop credential phishing before it starts');
+    expect(result.cleanText).not.toContain('Legacy gateways miss 40%');
+  });
+
   it('does not remove real content that cites the same external source twice', () => {
     const html = `
       <html><head><title>t</title></head><body><div class="articleBody">

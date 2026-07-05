@@ -170,8 +170,6 @@ function removeNativeAdClusters(root: Element, articleUrl?: string | null): void
     anchorsByTarget.set(target, list);
   }
 
-  const children = () => Array.from(root.children);
-
   for (const anchors of anchorsByTarget.values()) {
     if (anchors.length < 2) continue;
     const looksLikeAd = anchors.some(
@@ -182,17 +180,27 @@ function removeNativeAdClusters(root: Element, articleUrl?: string | null): void
     );
     if (!looksLikeAd) continue;
 
-    const blocks = anchors
-      .map((anchor) => topLevelBlock(root, anchor))
-      .filter((block): block is Element => Boolean(block));
-    const indices = blocks.map((block) => children().indexOf(block)).filter((index) => index >= 0);
+    // Resolve the sibling span relative to the anchors' lowest common
+    // ancestor, NOT the root: Readability wraps its output in nested divs, so
+    // root-relative blocks would resolve everything to one wrapper and the
+    // span would swallow the whole article.
+    const ancestor = anchors.reduce<Element | null>(
+      (acc, anchor) => (acc ? lowestCommonAncestor(acc, anchor) : anchor),
+      anchors[0]
+    );
+    if (!ancestor || ancestor === root.parentElement) continue;
+
+    const children = Array.from(ancestor.children);
+    const indices = anchors
+      .map((anchor) => children.indexOf(childOfAncestor(ancestor, anchor) as never))
+      .filter((index) => index >= 0);
     if (indices.length === 0) continue;
 
     const start = Math.min(...indices);
     const end = Math.max(...indices);
     if (end - start + 1 > MAX_AD_CLUSTER_BLOCKS) continue;
 
-    const span = children().slice(start, end + 1);
+    const span = children.slice(start, end + 1);
     const spanText = normalizeWhitespace(span.map((el) => el.textContent ?? '').join(' '));
     // Too much text means we may be looking at real content citing a source twice.
     if (spanText.length > MAX_AD_CLUSTER_CHARS) continue;
@@ -208,8 +216,17 @@ function removeOffsiteImageBanners(root: Element, articleUrl?: string | null): v
     if (!isImageOnlyLink(anchor)) continue;
     const host = hostOf(normalizeLinkTarget(anchor.getAttribute('href')) ?? '');
     if (!host || isSameSite(host, articleHost)) continue;
-    const block = topLevelBlock(root, anchor);
-    (block ?? anchor).remove();
+    // Climb only through text-empty wrappers (e.g. the <p> holding the banner)
+    // so a content-bearing container is never removed.
+    let block: Element = anchor;
+    while (
+      block.parentElement &&
+      block.parentElement !== root &&
+      normalizeWhitespace(block.parentElement.textContent ?? '') === ''
+    ) {
+      block = block.parentElement;
+    }
+    block.remove();
   }
 }
 
@@ -222,9 +239,19 @@ function isLinkedHeading(anchor: Element): boolean {
   return parent !== null && /^H[1-6]$/i.test(parent.tagName) && linkDensity(parent) >= 0.9;
 }
 
-function topLevelBlock(root: Element, node: Element): Element | null {
+function lowestCommonAncestor(a: Element, b: Element): Element | null {
+  const chain = new Set<Element>();
+  for (let cur: Element | null = a; cur; cur = cur.parentElement) chain.add(cur);
+  for (let cur: Element | null = b; cur; cur = cur.parentElement) {
+    if (chain.has(cur)) return cur;
+  }
+  return null;
+}
+
+/** The child of `ancestor` on the path down to `node`. */
+function childOfAncestor(ancestor: Element, node: Element): Element | null {
   let current: Element | null = node;
-  while (current && current.parentElement !== root) {
+  while (current && current.parentElement !== ancestor) {
     current = current.parentElement;
   }
   return current;

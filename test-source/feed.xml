@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>Test Security News</title>
+  <link>http://localhost:8787/</link>
+  <description>Deterministic local test source for Vendor Threat Watch</description>
+
+  <item>
+    <title>Hackers exploit CyberArk PAM zero-day to steal privileged credentials</title>
+    <link>http://localhost:8787/articles/cyberark-zero-day.html</link>
+    <guid>http://localhost:8787/articles/cyberark-zero-day.html</guid>
+    <pubDate>Wed, 01 Jul 2026 08:00:00 GMT</pubDate>
+    <description>Threat actors are actively exploiting a critical zero-day vulnerability in CyberArk Privileged Access Manager, tracked as CVE-2026-21001, to extract privileged account credentials from enterprise vaults, security researchers warned on Monday.</description>
+  </item>
+
+  <item>
+    <title>CyberArk vault flaw now under mass exploitation, ransomware gangs join in</title>
+    <link>http://localhost:8787/articles/cyberark-zero-day-followup.html</link>
+    <guid>http://localhost:8787/articles/cyberark-zero-day-followup.html</guid>
+    <pubDate>Wed, 01 Jul 2026 14:30:00 GMT</pubDate>
+    <description>The recently disclosed CyberArk Privileged Access Manager vulnerability CVE-2026-21001 is now being exploited at scale, with ransomware affiliates joining the initial wave of targeted attacks, according to incident responders.</description>
+  </item>
+
+  <item>
+    <title>SailPoint IdentityIQ patches high-severity access control bypass</title>
+    <link>http://localhost:8787/articles/sailpoint-vulnerability.html</link>
+    <guid>http://localhost:8787/articles/sailpoint-vulnerability.html</guid>
+    <pubDate>Wed, 01 Jul 2026 10:15:00 GMT</pubDate>
+    <description>SailPoint has released security updates for IdentityIQ addressing a high-severity vulnerability, tracked as CVE-2026-22002, that allows authenticated users to escalate their entitlements beyond assigned roles.</description>
+  </item>
+
+  <item>
+    <title>Zscaler warns of phishing campaign abusing ZIA authentication pages</title>
+    <link>http://localhost:8787/articles/zscaler-advisory-with-ad.html</link>
+    <guid>http://localhost:8787/articles/zscaler-advisory-with-ad.html</guid>
+    <pubDate>Wed, 01 Jul 2026 11:45:00 GMT</pubDate>
+    <description>Zscaler has issued an advisory warning customers about a phishing campaign that clones Zscaler Internet Access authentication pages to harvest corporate credentials from remote workers.</description>
+  </item>
+
+  <item>
+    <title>Test Security News announces annual company picnic and awards</title>
+    <link>http://localhost:8787/articles/company-picnic.html</link>
+    <guid>http://localhost:8787/articles/company-picnic.html</guid>
+    <pubDate>Wed, 01 Jul 2026 09:00:00 GMT</pubDate>
+    <description>Test Security News is delighted to announce its annual company picnic, taking place next month at Riverside Park.</description>
+  </item>
+</channel>
+</rss>

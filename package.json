@@ -21,6 +21,7 @@
     "alerts:events": "tsx scripts/run-alerts.ts",
     "pipeline:run": "tsx scripts/run-pipeline.ts",
     "drift:check": "tsx scripts/run-drift-check.ts",
+    "test-source:serve": "tsx scripts/serve-test-source.ts",
     "fixtures:fetch": "tsx scripts/fetch-fixture.ts",
     "fixtures:review": "tsx scripts/review-extraction.ts",
     "worker": "tsx scripts/run-worker.ts",
