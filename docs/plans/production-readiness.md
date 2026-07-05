@@ -1,125 +1,144 @@
-# Production Readiness Roadmap
+# Production Readiness Plan: From Working System to Enterprise Grade
 
-From working prototype to enterprise-grade. This is a *plan* — a snapshot of intent, not current state. It defines what "production-grade" means for this specific system, why each gap matters, and the order to close them.
+This is the deep dive behind the high-level improvement list: what "production grade" concretely requires of this system, pillar by pillar, with current state, target state, work items, and a definition of done for each. The framing question throughout is not "does it work?" — it demonstrably does — but **"what happens when it breaks, who notices, how fast, and what does it cost?"**
 
-The organizing principle: **an enterprise buyer's due-diligence questions are the specification.** A security-tooling procurement team asks, in roughly this order: Does it work correctly, and can you prove it? What happens when it breaks? Can you operate it? Is it secure? Can we trust the data handling? Each maturity level below answers one of those questions.
+Maturity model used here:
 
----
+```text
+Idea grade        it runs on my machine and produces correct output
+Production grade  it runs unattended; failures are detected, bounded, and recoverable;
+                  changes are gated by evidence
+Enterprise grade  other people can operate it, audit it, and bet an SLA on it
+```
 
-## Where the project is today
-
-Already present (uncommon for a prototype, worth stating so the gaps are seen in context):
-
-- Deterministic pipeline with a per-stage state machine; LLM bounded and audit-logged.
-- Self-evaluation in production: extraction recall ground truth, drift detection, latency SLO watchdog.
-- Human-in-the-loop review with append-only per-dimension verdicts.
-- ~113 tests with pure decision logic isolated from I/O; enforced review-before-merge workflow.
-- LangGraph orchestration; deterministic core kept as the system of record.
-
-What follows is what a paying enterprise customer would still block on.
+The system today is between idea and production: unusually strong on self-measurement (drift, latency SLO, human verdicts, audit logs) and change discipline (branch + review-doc workflow), weak on execution robustness, supply chain, and operations. This plan closes the gap in four phases.
 
 ---
 
-## Level 1 — Correctness you can prove (release-blocking)
+## Pillar 1 — The quality loop (trust)
 
-The claim "it works" must be a number that regresses visibly, not an assertion.
+**Why first**: every other pillar protects the system; this one proves the system deserves protection. An early-warning product whose accuracy is unknown is a liability generator.
 
-**1.1 Close the evaluation loop.** Human verdicts accumulate in Postgres but do not yet feed `data/labelled-eval-set.json`. Build `review:export` to convert reviewed verdicts into labelled eval items, so every review session permanently hardens the regression set. Without this, human effort evaporates and the eval set stays static.
+**Current**: labelled eval set (`npm run eval`); free per-article ground truth (`rss_recall`); drift + latency watchdogs; human review dashboard with per-dimension, append-only verdicts. The loop is **open**: verdicts accumulate but never reach the eval set; eval runs manually; thresholds (0.15/0.35 embedding bands, confidence weights) are unvalidated priors.
 
-**1.2 Eval-in-CI as a merge gate.** Run the labelled eval on every PR; fail the build if dedup precision, grouping precision, classification precision, or extraction recall drop below committed thresholds. This is what turns "we have tests" into "we cannot ship a regression." Prompt and threshold changes get the same gate as code.
+**Target**: human judgment compounds automatically, and no change merges if it regresses measured quality.
 
-**1.3 Golden end-to-end fixtures.** The deterministic local test source exists; extend it into a committed golden-path suite that runs the full StateGraph and asserts final event/alert shape, so orchestration changes are covered, not just unit logic.
+Work items:
 
-**Exit criterion:** a red CI check blocks any merge that regresses a quality metric, and the eval set grows from real reviews.
+1. `review:export` — transform `human_review_verdicts` (latest per article) into labelled eval cases; merge into `data/labelled-eval-set.json` with provenance (`source: human_review`, reviewer, date).
+2. Eval in CI: run the labelled set on every PR; fail on regression beyond a tolerance band; publish the metrics table to the PR.
+3. Threshold calibration: sweep embedding-band and confidence-rollup parameters against the labelled set; commit chosen values with the sweep evidence.
+4. Expected-label capture: extend verdicts from correct/incorrect to "what it should have been" (vendor role, alert tier, grouping relation) — corrections are richer training/eval signal than verdicts.
+
+**Done when**: a reviewed batch measurably grows the eval set; a PR that worsens grouping precision is blocked by CI, not by memory.
+
+## Pillar 2 — Execution model (scale and resilience)
+
+**Current**: batch sweeps over `processing_status` with per-article sequential awaits. Known holes, already documented in reviews: BullMQ jobs carry article IDs that stages ignore; no `FOR UPDATE SKIP LOCKED`, so two workers double-process; embedding failures strand articles in a status nothing polls (`EMBEDDING_PENDING`); no retry budget or dead-letter state; no bounded concurrency on network-bound stages.
+
+**Target**: event-driven per-article flow with the sweep demoted to a backfill/self-healing lane.
+
+Work items:
+
+1. Stage functions accept explicit `articleId`; workers process their payload and enqueue the successor stage (`nextQueueForJob` finally used).
+2. Claim queries: `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED) RETURNING *` — horizontal workers without double-processing.
+3. Retry discipline: `retry_count`/`next_retry_at` (columns exist, unused) with exponential backoff; terminal `FAILED_DEAD_LETTER` status; a sweep that reports dead-lettered articles instead of silently ignoring them.
+4. Bounded concurrency (p-limit ~5–8) for extraction and embedding calls; batch embedding API requests.
+5. Graceful shutdown: workers drain in-flight jobs on SIGTERM; the pool closes after, not during.
+6. State machine as code: one exported enum + legal-transition map, enforced in `updateProcessingStatus` — phantom statuses (the `'EXTRACTED'` bug class) become impossible.
+
+**Done when**: an article flows ingest→alert in seconds under push; killing a worker mid-job loses nothing; a poison article ends up dead-lettered and *visible*, not looping or stranded.
+
+## Pillar 3 — Supply chain and build discipline
+
+**Current**: 13 dependencies pinned to `"latest"` in package.json. This is the single most disqualifying production gap: builds are unreproducible, and any upstream publish can break deploys or inject code. The lockfile mitigates only until anyone runs a fresh install.
+
+Work items:
+
+1. Pin every dependency to exact versions; adopt `npm ci` everywhere.
+2. Renovate/Dependabot with grouped, eval-gated upgrade PRs (Pillar 1's CI makes upgrades safe to accept).
+3. `npm audit` gate in CI; SBOM generation (CycloneDX) for enterprise procurement conversations.
+4. Node version pinned via `engines` + `.nvmrc`; container base image digest-pinned.
+
+**Done when**: two clean checkouts a month apart build byte-identical dependency trees; an upgrade PR shows its eval delta before merge.
+
+## Pillar 4 — CI/CD and environments
+
+**Current**: check/test/eval run locally by convention; the review-doc workflow is enforced by discipline, not machinery; deploys are `tsx` on a laptop; migrations run by hand in the right order because the operator knows to.
+
+Work items:
+
+1. GitHub Actions: typecheck + unit tests + eval gate + audit on every PR; branch protection requiring green checks and blocking direct pushes to `main` (mechanizing the existing CLAUDE.md/AGENTS.md rule).
+2. Container image (multi-stage, non-root, digest-pinned base); `docker compose` profile that runs the full stack including workers.
+3. Migration discipline: forward-only with checksums, applied automatically on deploy *before* new code serves traffic; a rollback stance per migration (revert code, not schema, unless a down-script is provided).
+4. Environments: dev (local test source), staging (live feeds, alerts to a sink channel), prod. Config via environment with a zod-validated schema at boot — fail fast on missing/invalid config instead of `?? ''` defaults.
+
+**Done when**: merge to `main` produces a deployable artifact that has already passed the eval gate; a bad config refuses to boot rather than limping.
+
+## Pillar 5 — Security
+
+**Current**: good instincts in places (parameterized SQL throughout, zod on all LLM outputs and dashboard inputs, localhost-bound dashboard, no tool access for content-processing LLMs). Three structural gaps:
+
+1. **Prompt injection** — the pipeline feeds adversarial web content to LLMs. Realistic attack: an attacker's article carries instructions to classify their campaign as not-relevant, suppressing alerts about themselves. Mitigations: delimit content as data in prompts; cross-check LLM verdicts against deterministic signals (not-relevant verdict + CVE/vendor hits ⇒ flag for review, never silently trust); injection test cases in the eval set — measure resistance like any other quality dimension.
+2. **SSRF surface** — the fetcher follows arbitrary URLs from feeds; a malicious feed entry can point at internal addresses. Egress allowlist by registrable domain per feed; block private IP ranges; cap response sizes and redirect chains.
+3. **Surfaces and secrets** — dashboard needs auth before it leaves localhost (even basic-auth-behind-TLS beats nothing); secrets move from `.env` to a managed store in deployment; API keys rotated without deploys.
+
+**Done when**: the injection suite runs in CI with a tracked resistance score; the fetcher provably cannot reach RFC-1918 space; no secret lives in a file that could be committed.
+
+## Pillar 6 — Observability and incident response
+
+**Current**: structured logs (pino, with redaction), stage counters, two watchdogs that *log*. Nothing pages; no metrics endpoint; `last_processed_at` is one overwritten column, so per-stage time is unreconstructable; LLM spend is queryable from the audit log but never rolled up.
+
+Work items:
+
+1. Prometheus `/metrics`: stage throughput/failure counters, queue depths, per-stage latency histograms, LLM tokens+cost counters, watchdog states.
+2. Stage event log (append-only `article_stage_events`): the per-stage latency breakdown the SLO watchdog can't currently provide; also the debugging timeline for "why was this alert late?".
+3. Alerting on the watchdogs: drift, latency SLO breach, dead-letter accumulation, queue-depth growth → a channel a human actually watches. The system already knows when it's sick; it needs to be able to say so loudly.
+4. Daily cost rollup from `llm_audit_logs` (calls, tokens, $ per stage per day) with a budget alarm.
+5. Runbooks in `docs/operations/`: per alarm — meaning, dashboard, first three diagnostic steps, escalation. Enterprise means someone who didn't build it can operate it.
+
+**Done when**: a site redesign, an SLO breach, or a cost spike interrupts a human within minutes, and the runbook they open actually helps.
+
+## Pillar 7 — Alert delivery and lifecycle
+
+**Current**: alerts are rows in Postgres (`alert_channel = 'database'`). No consumer-facing delivery, acknowledgment, or escalation; the two-tier model (early_warning → upgrade → material update) exists in data but nothing renders it to a human in real time.
+
+Work items:
+
+1. Channel abstraction with at-least-once delivery + idempotency keys; Slack/webhook first, email later. Delivery failures retry with backoff and surface in metrics.
+2. Alert lifecycle: `delivered → acknowledged → resolved/false_positive`; acknowledgment data is *also quality signal* — an unacknowledged early warning that later upgrades is precision evidence; a dismissed one feeds the eval set (closing back into Pillar 1).
+3. Render the tier semantics: early-warning messages visibly labeled unconfirmed with "why you're seeing this" (matched vendor, signals, confidence); upgrades edit/thread the original rather than posting a duplicate.
+4. Per-channel routing rules (severity/vendor criticality → channel), suppression respecting the material-update bypass.
+
+**Done when**: an analyst experiences the news-desk model end to end — early ping, labeled uncertainty, in-place upgrade — and their dismissals make next week's alerts better.
+
+## Pillar 8 — Data lifecycle and continuity
+
+**Current**: `raw_html` grows unboundedly (100–300KB per article) and is third-party copyrighted content; no retention policy, no backup verification, no DR stance; append-only tables (audit, verdicts, alerts) grow forever.
+
+Work items:
+
+1. Retention: drop `raw_html` after N days (fixtures cover regression needs); partition or age out audit logs; alerts and verdicts retained long-term (they're the product record and the labels).
+2. Backups with *restore drills* — an untested backup is a hypothesis. Document RPO/RTO targets honestly (e.g., RPO 24h, RTO 4h is fine for this product — losing a day of articles means re-ingesting feeds).
+3. Republication policy encoded: alerts carry snippets + links, never full article text.
+4. Postgres single-instance is an accepted SPOF at this scale — say so in writing, with the managed-Postgres migration path named for when the acceptance expires.
+
+**Done when**: disk usage is flat-per-month at steady state, and the DR story ("restore to yesterday 3pm") is a tested procedure, not a hope.
 
 ---
 
-## Level 2 — Behaviour under failure (reliability)
+## Phasing — the order to close the gap
 
-Enterprises buy the failure modes, not the happy path.
+The maturity model (idea → production → enterprise) maps onto four phases; do not claim a phase until its pillars' "done when" criteria are demonstrable.
 
-**2.1 Event-driven execution.** Replace batch sweeps with per-article push-through: each stage enqueues the next (`nextQueueForJob` already exists), workers claim work with `FOR UPDATE SKIP LOCKED`, and jobs carry IDs instead of re-scanning by status. This collapses latency from "sum of sweep intervals" to seconds and makes horizontal scaling safe.
+**Phase 1 — Prove it (release-blocking).** Pillar 1 (close the quality loop, eval-in-CI) and Pillar 3 (pin dependencies) first. Rationale: without provable, non-regressing correctness every later investment optimizes an unknown quantity; and `"latest"` pins are a one-session fix and the single most disqualifying item a reviewer spots. Smallest diffs, largest credibility.
 
-**2.2 Retry, backoff, dead-letter.** Every stage needs a retry counter, exponential backoff, and a terminal dead-letter state that surfaces in the review dashboard. Today a failed embedding can strand an article in a status no stage reads — silent data loss. Failures must be visible and recoverable, never silent.
+**Phase 2 — Make it robust.** Pillar 2 (event-driven execution, retries, dead-letter) and Pillar 4 (CI/CD, environments, migration discipline). This is what turns "demo" into "system", and the execution rework also unlocks the latency mission.
 
-**2.3 Idempotency and exactly-once effects.** Re-running a stage after a crash must not double-write events, double-attach articles, or double-send alerts. Audit the mutating paths; the `alerts` and `event_articles` writes are the highest risk.
+**Phase 3 — Make it operable.** Pillar 6 (metrics, tracing, watchdog paging, runbooks) and Pillar 7 (real alert delivery + lifecycle). Matters once someone other than the author runs it and once alerts leave the database.
 
-**2.4 Graceful degradation per dependency.** Define explicit behaviour for: LLM provider outage (queue and drain — mostly true today, make it deliberate and tested), embedding API down, Postgres failover, Redis loss. Each should degrade a capability, not corrupt state.
-
-**Exit criterion:** kill any worker or dependency mid-run; the system resumes with no duplicate side effects and no stranded records.
-
----
-
-## Level 3 — Operability (can someone else run it?)
-
-If only the author can operate it, it is not production software.
-
-**3.1 Metrics endpoint.** Prometheus-style `/metrics`: per-stage throughput and latency, queue depths, LLM cost per stage (from the audit log), drift and SLO status as gauges. Today the watchdogs log; production pages.
-
-**3.2 Structured tracing.** Propagate a correlation ID from article ingest through to alert so one incident's full journey is queryable. Add per-stage timestamps (the latency metric is currently end-to-end only — you cannot yet see *where* time goes).
-
-**3.3 Alerting on the watchdogs.** Drift and SLO breaches should route to a human channel (PagerDuty/Slack), not sit in logs. The system already knows when it is unhealthy; production means it says so.
-
-**3.4 Runbooks + dashboards.** A Grafana board for the golden signals and a runbook per failure mode ("drift alarm fired → here is the triage path"). This is the artifact that lets an on-call engineer who didn't build it respond at 3am.
-
-**Exit criterion:** an engineer who has never seen the code can detect, triage, and recover from a production incident using only the dashboards and runbooks.
-
----
-
-## Level 4 — Security & trust (procurement will audit this)
-
-**4.1 Prompt-injection hardening.** The pipeline feeds untrusted web content to LLMs; the realistic attack is an adversary suppressing classification of their own campaign. Defences: content-processing LLMs keep zero tool access (true today — make it an enforced invariant), outputs stay schema-constrained, and LLM verdicts are cross-checked against deterministic signals (a "not relevant" verdict on an article with a CVE + vendor match is flagged, not trusted). This deserves its own engineering note.
-
-**4.2 Secrets management.** Move beyond `.env` to a secrets manager (Vault / cloud KMS); no credentials in images or logs; rotation policy.
-
-**4.3 AuthN/AuthZ.** The review dashboard binds to localhost with no auth. Any networked surface needs authentication, and the analyst copilot (when built) needs per-tool authorization with mutations gated behind human confirmation.
-
-**4.4 Supply-chain integrity.** `package.json` pins 13 dependencies to `"latest"` — a release-blocking reproducibility and security hole. Pin exact versions, commit the lockfile as the source of truth, add automated dependency-vulnerability scanning (Dependabot/Renovate + `npm audit` in CI) and SBOM generation.
-
-**Exit criterion:** passes a standard vendor security questionnaire; builds are byte-reproducible; no plaintext secrets anywhere.
-
----
-
-## Level 5 — Data lifecycle & compliance
-
-**5.1 Retention policy.** `raw_html` is bulky and copyrighted; define retention (e.g. purge raw HTML after extraction succeeds, keep clean_text + hash), audit-log rotation, and event archival. Unbounded growth is an eventual outage.
-
-**5.2 Republication boundaries.** Alerts must ship snippets + source links, never full article text — a copyright and licensing constraint, enforced in code, not convention.
-
-**5.3 Backup / restore / migration rollback.** A tested restore drill (not just backups existing) and a rollback strategy for every migration. Migrations are currently forward-only.
-
-**Exit criterion:** a documented, tested answer to "restore to yesterday 3pm" and "roll back the last schema change."
-
----
-
-## Level 6 — Delivery & product surface
-
-**6.1 Real notification channels.** Alerts currently land in a database table. Production means Slack/webhook/email/ticketing with delivery retries, acknowledgment tracking, and per-channel dedup so the same event does not spam five ways.
-
-**6.2 Model & prompt lifecycle.** Pinned model versions, a provider-fallback path behind the existing client abstraction, and eval-gated upgrades (run the new model/prompt against the labelled set before switching).
-
-**6.3 Source hierarchy & speed.** Tier-0/1 sources (Mastodon/PSIRT/CISA KEV) with `trust_level` wired into confidence, grouping-key aliases, adaptive per-feed polling with conditional GET. This is where the mission's speed advantage actually lives.
-
----
-
-## CI/CD & delivery (spans all levels)
-
-The mechanism that makes the above enforceable rather than aspirational:
-
-- GitHub Actions: `check` + `test` + `eval` on every PR; branch protection enforcing the review-doc workflow mechanically.
-- Containerized build with a migration-ordering guarantee (migrate before app start, fail closed on migration error).
-- Staged rollout with a health gate and automated rollback on SLO breach.
-
----
-
-## Suggested sequence and rationale
-
-1. **Level 1** first — without provable correctness, everything above optimizes an unknown quantity. It is also the smallest diff (export + CI wiring on top of an existing eval).
-2. **Dependency pinning (4.4)** immediately alongside — it is a one-session fix and a release-blocking red flag reviewers spot instantly.
-3. **Level 2** next — reliability is what separates "demo" from "system", and the event-driven rework (2.1) also unlocks the latency mission.
-4. **Level 3** once it is scaling — operability matters when someone other than the author runs it.
-5. **Levels 4–6** as the customer profile demands; 4.1 (prompt injection) is the one security item worth doing early because it is domain-specific and interview-distinctive.
+**Phase 4 — Make it enterprise-defensible.** Pillar 5 (security: prompt injection, SSRF, secrets, auth) and Pillar 8 (data lifecycle, DR). Timed to the customer profile; Pillar 5's prompt-injection work is worth pulling earlier because it is domain-specific and interview-distinctive.
 
 ## How to read this document
 
-Each level is a promotion gate: do not claim the next maturity level until the prior exit criterion is met and demonstrable. "Enterprise-grade" is not a feature list — it is the ability to answer every due-diligence question above with evidence, not intent.
+A *plan* is a snapshot of intent and will drift from reality as items ship (it lives under `plans/`, not retro-edited — the design docs track current state). Each pillar's "done when" is a promotion gate: enterprise-grade is not a feature list, it is the ability to answer every "what happens when it breaks?" question with evidence rather than intent.
