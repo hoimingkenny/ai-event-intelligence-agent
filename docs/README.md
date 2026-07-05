@@ -41,6 +41,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-02-event-grouping-ladder.md](code-reviews/2026-07-02-event-grouping-ladder.md) | Event-grouping ladder (key → embedding → LLM) + classification feedback |
 | [2026-07-02-local-test-source.md](code-reviews/2026-07-02-local-test-source.md) | Deterministic local test source + ad-removal nesting fix |
 | [2026-07-02-early-warning-alerting.md](code-reviews/2026-07-02-early-warning-alerting.md) | Two-tier alerting, material-update bypass, newest-first, latency SLO |
+| [2026-07-02-design-docs-refresh.md](code-reviews/2026-07-02-design-docs-refresh.md) | Design docs brought in line with implemented system |
 
 ## Conventions
 

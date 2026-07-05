@@ -6,9 +6,33 @@ PostgreSQL is the source of truth because the workflow is state-heavy and audit-
 
 pgvector keeps semantic retrieval close to that relational state. A dedicated vector database can be added later if vector search scale becomes the bottleneck.
 
-## HTTP Extraction Before Playwright
+## HTTP + Readability Only; Playwright Disabled
 
-HTTP extraction is cheaper and faster than browser automation. Playwright is available as a fallback for JavaScript-rendered or extraction-resistant pages, but it is intentionally not the default path.
+HTTP extraction with layered Readability cleaning is the only active path. The Playwright fallback is currently disabled (still injectable for tests) while extraction quality work focuses on the static path — the curated feeds are all server-rendered. JS-only sources will fail extraction until it is re-enabled.
+
+## Structure-Based Ad Removal Over Class-Name Blacklists
+
+Native ads are detected by what they must do (repeat an offsite campaign link across a small image/headline/CTA cluster), not by what they happen to look like (class names a redesign invalidates). The cost is guardrail complexity — span/char limits, same-site exemption — each covered by a dedicated false-removal test.
+
+## Two-Tier Alerting: Accept Noise to Never Miss Early Signals
+
+A fresh vendor-matched event alerts immediately as `early_warning`, labeled unconfirmed, even at low confidence — the strict gate applies only to the `confirmed` tier and upgrades. The accepted cost is alert volume; the rejected cost was silently suppressing exactly the signals a 2-hour impact window exists for. Unknown event age counts as fresh (fail toward labeled signal, not silence).
+
+## Newest-First Work Ordering
+
+Stage queues process the most recently published articles first. Under sustained backlog old articles can wait — deliberately: for early warning, stale news is the correct thing to sacrifice, and sweeps still drain everything eventually.
+
+## Fail-Open Comparator
+
+When the LLM event comparator errors, the article becomes a new event rather than merging into the candidate. Asymmetric recoverability: spurious splits can be merged later; silently fused incidents are data loss.
+
+## Measurement Before Automation
+
+Extraction quality metrics and drift detection were built before any self-healing (LLM re-learning of extraction rules). Without a metric, a newly learned rule cannot be validated; with one, re-learning can be event-triggered and verified instead of scheduled and hoped-for.
+
+## Single-Purpose LLM Calls Before Multi-Agent
+
+Every LLM call has one bounded job with a zod schema and audit row. Multi-agent structure is reserved for places where roles genuinely differ (enrichment fan-out, proposer/validator separation in self-healing, generator–critic on alerts) — never for restructuring the same output with more calls.
 
 ## Event-Level Embeddings
 
