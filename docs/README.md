@@ -10,6 +10,7 @@ Forward-looking documents: what we intend to build, phased roadmaps, scope decis
 |---|---|
 | [ai-event-intelligence-agent-plan.md](plans/ai-event-intelligence-agent-plan.md) | Overall project plan: staged agent workflow, goals, phases |
 | [rss-vector-pipeline-implementation-plan.md](plans/rss-vector-pipeline-implementation-plan.md) | RSS ingestion + vector dedup pipeline implementation plan |
+| [production-readiness.md](plans/production-readiness.md) | Prototype → enterprise-grade: 6 maturity levels with exit criteria |
 
 ## `design/` — system design reference
 
@@ -50,6 +51,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-05-human-review-dashboard.md](code-reviews/2026-07-05-human-review-dashboard.md) | Human review dashboard + quality-control loop (with second-review addendum) |
 | [2026-07-05-early-warning-note.md](code-reviews/2026-07-05-early-warning-note.md) | Engineering note: early-warning redesign record |
 | [2026-07-05-publish-interview-prep.md](code-reviews/2026-07-05-publish-interview-prep.md) | Interview-prep docs made public |
+| [2026-07-05-production-readiness-plan.md](code-reviews/2026-07-05-production-readiness-plan.md) | Production readiness roadmap (6 maturity levels) |
 
 ## `interview/` — interview preparation
 
