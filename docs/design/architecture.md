@@ -66,6 +66,12 @@ Alert latency:    publication → alert p50/p90 vs the 2h SLO.      npm run late
 
 Both run inside every pipeline sweep and as standalone watchdogs (exit 2 on breach, cron-able). Every LLM call is recorded in `llm_audit_logs` with prompt version, payloads, and validation status.
 
+## Human Quality Control
+
+The human review dashboard is the analyst-facing observability layer for AI and pipeline decisions. It exists to monitor results, catch wrong tags, and capture structured corrections across the article lifecycle: filtering, extraction, entity detection, LLM classification, event grouping, and alerting.
+
+Human verdicts do not directly mutate prompts, thresholds, or model behavior. They are stored as auditable review data and should feed the evaluation loop first. Improvements happen only after reviewed cases reveal a measurable failure pattern and a deliberate engineering change proves better against the evaluation set.
+
 ## Work Ordering
 
 Stage queues process newest-published first — breaking news must not queue behind backlog. Original-detection queries (`findEarlierByContentHash`, `findRecentByTitleHash`) intentionally keep oldest-first semantics.

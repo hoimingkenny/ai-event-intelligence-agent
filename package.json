@@ -22,6 +22,8 @@
     "pipeline:run": "tsx scripts/run-pipeline.ts",
     "drift:check": "tsx scripts/run-drift-check.ts",
     "latency:check": "tsx scripts/run-latency-check.ts",
+    "review:dashboard": "tsx scripts/serve-human-review-dashboard.ts",
+    "review:report": "tsx scripts/run-human-review-dashboard.ts",
     "test-source:serve": "tsx scripts/serve-test-source.ts",
     "fixtures:fetch": "tsx scripts/fetch-fixture.ts",
     "fixtures:review": "tsx scripts/review-extraction.ts",

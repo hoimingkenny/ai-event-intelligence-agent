@@ -16,6 +16,67 @@ Both watchdogs also run inside every pipeline sweep.
 
 Real article HTML saved via `npm run fixtures:fetch -- <url>`; `npm run fixtures:review` builds a side-by-side human review page. With a human reference (`.expected.txt`), tests assert word-level recall ≥ 0.8 and precision ≥ 0.6. A deterministic local test source (`npm run test-source:serve`) exercises the full pipeline — grouping-key attach, separate events, ad-cluster removal, cheap-filter rejection — without live data.
 
+## Human Review Dashboard (implemented)
+
+`npm run review:dashboard` starts a local dashboard at `http://127.0.0.1:4321` backed by the current Postgres pipeline state. It is the bridge between automated metrics and analyst trust: each recent article is shown with RSS summary, extracted text, detected entities, linked event, grouping relationship, confidence/severity/urgency, alert decision, and related LLM audit entries.
+
+The dashboard has two roles:
+
+1. **Monitoring surface** — expose pipeline and AI decisions so a human can notice wrong tags, missing entities, bad grouping, incorrect LLM classification, or questionable alerting.
+2. **Quality-control loop** — turn those human corrections into auditable review data that can later drive evaluation, threshold tuning, prompt changes, vendor-alias updates, and model comparisons.
+
+The design principle is:
+
+```text
+Every AI/pipeline decision must be explainable, reviewable, and correctable.
+```
+
+The dashboard is therefore not only an alert-review page. It should show the full article lifecycle, because quality failures can happen before an alert exists:
+
+- cheap filter ignored an article that should continue
+- extraction is pending, failed, or low quality
+- entity detection tagged the wrong vendor/product
+- LLM classification assigned the wrong relevance, role, severity, or urgency
+- event grouping attached the article to the wrong incident
+- alert policy fired, suppressed, or tiered the event incorrectly
+
+The dashboard lets a human save verdicts for:
+
+- cyber relevance
+- vendor/product impact
+- LLM classification output
+- event grouping
+- alert decision
+
+Verdicts are stored in `human_review_verdicts` so the judgement is auditable and can later be exported into `data/labelled-eval-set.json`.
+
+LLM output is only present for articles that reach the classification stage. Items still in `IGNORED`, `EXTRACTION_PENDING`, or earlier states are pipeline/status review cases, not LLM quality cases; use the dashboard's `LLM output` filter to review only cases with recorded model output.
+
+The dashboard highlights cases that need human attention:
+
+- extraction failures or low extraction quality
+- `uncertain_need_human_review` grouping relationships
+- low event confidence
+- unsuppressed `early_warning` alerts
+
+For a static snapshot, `npm run review:report` still generates `review/human-dashboard/index.html`.
+
+### Quality-Control Loop
+
+Human review should improve the system through measured engineering changes, not silent self-training:
+
+```text
+pipeline output
+  → human finds a wrong tag/decision
+  → structured verdict or correction is stored
+  → reviewed cases become evaluation evidence
+  → failure patterns are measured
+  → rules/prompts/thresholds/models are changed deliberately
+  → evaluation proves whether quality improved
+```
+
+This keeps the LLM out of the system-of-record role. Human judgement becomes evaluation data; engineers use that data to improve deterministic extraction, entity detection, LLM prompts, event grouping thresholds, alert policy, source trust, and model selection.
+
 ## Item-Level Metrics
 
 - Freshness: is the item from last 2 hours, last 6 hours, or today?

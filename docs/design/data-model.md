@@ -40,6 +40,10 @@ Event-level notification decisions. Alerts store channel, reason, severity, urge
 
 Traceability table for schema-validated LLM calls. Each audit record links a task to an article or event, model, prompt version, request payload, response payload, validation status, and error details.
 
+### `human_review_verdicts`
+
+Human-in-the-loop feedback table. Each row stores the current analyst verdict for one article: cyber relevance, vendor/product impact, LLM classification output, event grouping, alert decision, reviewer, notes, and reviewed timestamp. These verdicts close the loop between dashboard review and the labelled evaluation set.
+
 ### `evaluation_runs`
 
 Quality measurement table. Each run stores duplicate reduction, grouping precision, classification precision, false-positive rate, LLM call reduction, extraction success, source-to-alert latency, and the full metrics JSON.

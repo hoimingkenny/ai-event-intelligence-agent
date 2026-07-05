@@ -19,7 +19,7 @@ The current-state reference: how the system is shaped and why. These documents a
 |---|---|
 | [architecture.md](design/architecture.md) | Design principles; LLM-inside-deterministic-workflow model |
 | [data-model.md](design/data-model.md) | Core tables and the article-vs-event separation |
-| [evaluation.md](design/evaluation.md) | Evaluation methodology: item/event-level metrics |
+| [evaluation.md](design/evaluation.md) | Evaluation methodology: item/event-level metrics + human review dashboard |
 | [tradeoffs.md](design/tradeoffs.md) | Deliberate trade-offs and their rationale |
 | [limitations.md](design/limitations.md) | Known limits of the current approach |
 

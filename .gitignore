@@ -47,8 +47,8 @@ Thumbs.db
 qdrant_data/
 qdrant_storage/
 
-# Generated extraction review reports (npm run fixtures:review)
-review/
+# Generated review reports (npm run fixtures:review, npm run review:dashboard)
+/review/
 
 # Claude local settings
 .claude/settings.local.json
