@@ -30,6 +30,10 @@ When the LLM event comparator errors, the article becomes a new event rather tha
 
 Extraction quality metrics and drift detection were built before any self-healing (LLM re-learning of extraction rules). Without a metric, a newly learned rule cannot be validated; with one, re-learning can be event-triggered and verified instead of scheduled and hoped-for.
 
+## Agent Framework as Client, Never Owner
+
+LangGraph orchestrates the pipeline graph and will power the analyst copilot, but pipeline stages stay plain functions and Postgres stays the system of record. The framework owns sequencing and (for the copilot) the conversation/tool loop; it is a client of the pipeline's state, never its owner. Full decision record: `docs/engineering-notes/agent-framework-decision.md`.
+
 ## Single-Purpose LLM Calls Before Multi-Agent
 
 Every LLM call has one bounded job with a zod schema and audit row. Multi-agent structure is reserved for places where roles genuinely differ (enrichment fan-out, proposer/validator separation in self-healing, generator–critic on alerts) — never for restructuring the same output with more calls.

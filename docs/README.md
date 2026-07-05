@@ -30,6 +30,7 @@ Post-hoc writing about a specific challenge: what broke, how it was debugged, wh
 | Document | Scope |
 |---|---|
 | [extraction-quality-evaluation.md](engineering-notes/extraction-quality-evaluation.md) | Article extraction cleaning layers, debugging notes, quality metrics + drift detection |
+| [agent-framework-decision.md](engineering-notes/agent-framework-decision.md) | Where LangGraph earns its place (runner, copilot) and where it deliberately does not (pipeline stages) |
 
 ## `code-reviews/` — pre-merge reviews
 
@@ -43,6 +44,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-02-early-warning-alerting.md](code-reviews/2026-07-02-early-warning-alerting.md) | Two-tier alerting, material-update bypass, newest-first, latency SLO |
 | [2026-07-02-design-docs-refresh.md](code-reviews/2026-07-02-design-docs-refresh.md) | Design docs brought in line with implemented system |
 | [2026-07-02-langgraph-runner.md](code-reviews/2026-07-02-langgraph-runner.md) | Pipeline runner converted to LangGraph StateGraph |
+| [2026-07-02-agent-framework-decision-doc.md](code-reviews/2026-07-02-agent-framework-decision-doc.md) | Engineering note: agent framework decision record |
 
 ## Conventions
 
