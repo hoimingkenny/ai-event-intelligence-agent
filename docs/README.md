@@ -34,6 +34,7 @@ Post-hoc writing about a specific challenge: what broke, how it was debugged, wh
 | [agent-framework-decision.md](engineering-notes/agent-framework-decision.md) | Where LangGraph earns its place (runner, copilot) and where it deliberately does not (pipeline stages) |
 | [early-warning-redesign.md](engineering-notes/early-warning-redesign.md) | The alert gate that suppressed the product: two-tier alerting, newest-first, latency SLO |
 | [entity-confidence-and-noise-tolerance.md](engineering-notes/entity-confidence-and-noise-tolerance.md) | Tolerating imperfect extraction: confidence-scored entities + event-boundary gate |
+| [deployment-and-scheduling.md](engineering-notes/deployment-and-scheduling.md) | Running every 20 min: advisory-locked scheduling, Docker, compose ordering |
 
 ## `code-reviews/` — pre-merge reviews
 
@@ -55,6 +56,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-05-production-readiness-plan.md](code-reviews/2026-07-05-production-readiness-plan.md) | Production readiness roadmap (6 maturity levels) |
 | [2026-07-05-consolidate-production-plan.md](code-reviews/2026-07-05-consolidate-production-plan.md) | Merge duplicate production plans into one canonical doc |
 | [2026-07-05-entity-confidence.md](code-reviews/2026-07-05-entity-confidence.md) | Confidence-scored entities + corroboration gate |
+| [2026-07-05-scheduled-deployment.md](code-reviews/2026-07-05-scheduled-deployment.md) | Scheduled deployment: advisory-locked every-20-min pipeline |
 
 ## `interview/` — interview preparation
 

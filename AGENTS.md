@@ -23,8 +23,9 @@ docker compose up -d     # Postgres (pgvector) + Redis
 npm run db:migrate       # Apply SQL migrations (src/db/migrations/)
 npm run db:seed          # Seed feeds + monitored vendors
 
-npm run pipeline:run     # Full pipeline: ingest → filter → extract → entities →
-                         #   embed → dedup → events → classify → alerts
+npm run pipeline:run     # Full pipeline once (advisory-locked): ingest → filter →
+                         #   extract → entities → embed → dedup → events → classify → alerts
+npm run scheduler        # Internal loop: full pipeline every RSS_FETCH_INTERVAL_MINUTES
 npm run worker           # BullMQ worker mode (needs Redis)
 npm run drift:check      # Per-source extraction quality report (exit 2 on drift)
 npm run latency:check    # Publication→alert p50/p90 vs 2h SLO (exit 2 on violation)

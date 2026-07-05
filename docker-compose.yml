@@ -29,6 +29,56 @@ services:
       timeout: 5s
       retries: 5
 
+  # Runs migrations, then exits 0. App services wait for it to complete so code
+  # never serves against a half-migrated schema. Fails closed on migration error.
+  migrate:
+    build: .
+    image: vendor-threat-watch
+    command: ["npm", "run", "db:migrate"]
+    environment:
+      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # Internal scheduler (chosen pattern). Runs the full pipeline every
+  # RSS_FETCH_INTERVAL_MINUTES. Swap `command` to ["npm","run","pipeline:run"]
+  # and drive from host cron for the external-scheduler pattern instead.
+  scheduler:
+    build: .
+    image: vendor-threat-watch
+    command: ["npm", "run", "scheduler"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+      REDIS_HOST: redis
+      RSS_FETCH_INTERVAL_MINUTES: "20"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 60s # give an in-flight run time to finish on SIGTERM
+
+  # Optional: human review dashboard. Bind to localhost only.
+  dashboard:
+    build: .
+    image: vendor-threat-watch
+    command: ["npm", "run", "review:dashboard"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+    ports:
+      - "127.0.0.1:4321:4321"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   postgres18_data:
   redis_data:
