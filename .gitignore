@@ -53,5 +53,3 @@ qdrant_storage/
 # Claude local settings
 .claude/settings.local.json
 
-# Interview prep - local only, never push
-docs/interview/

@@ -49,6 +49,11 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-02-consolidate-agents-md.md](code-reviews/2026-07-02-consolidate-agents-md.md) | AGENTS.md canonical; CLAUDE.md becomes an @import |
 | [2026-07-05-human-review-dashboard.md](code-reviews/2026-07-05-human-review-dashboard.md) | Human review dashboard + quality-control loop (with second-review addendum) |
 | [2026-07-05-early-warning-note.md](code-reviews/2026-07-05-early-warning-note.md) | Engineering note: early-warning redesign record |
+| [2026-07-05-publish-interview-prep.md](code-reviews/2026-07-05-publish-interview-prep.md) | Interview-prep docs made public |
+
+## `interview/` — interview preparation
+
+Pitch, design-decision rationale, war stories, and Q&A prep derived from this project's history. Public by choice: the claims are verifiable against the code and the code-review trail.
 
 ## Conventions
 
