@@ -45,6 +45,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-02-design-docs-refresh.md](code-reviews/2026-07-02-design-docs-refresh.md) | Design docs brought in line with implemented system |
 | [2026-07-02-langgraph-runner.md](code-reviews/2026-07-02-langgraph-runner.md) | Pipeline runner converted to LangGraph StateGraph |
 | [2026-07-02-agent-framework-decision-doc.md](code-reviews/2026-07-02-agent-framework-decision-doc.md) | Engineering note: agent framework decision record |
+| [2026-07-02-consolidate-agents-md.md](code-reviews/2026-07-02-consolidate-agents-md.md) | AGENTS.md canonical; CLAUDE.md becomes an @import |
 
 ## Conventions
 
