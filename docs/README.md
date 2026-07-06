@@ -59,6 +59,7 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-05-scheduled-deployment.md](code-reviews/2026-07-05-scheduled-deployment.md) | Scheduled deployment: advisory-locked every-20-min pipeline |
 | [2026-07-05-readme-refresh.md](code-reviews/2026-07-05-readme-refresh.md) | Top-level README brought in line with the implemented system |
 | [2026-07-05-articles-portal.md](code-reviews/2026-07-05-articles-portal.md) | Read-only article monitoring portal (status/scores/quality + preview) |
+| [2026-07-05-portal-vendor-relevance.md](code-reviews/2026-07-05-portal-vendor-relevance.md) | Portal vendor relevance: closest monitored vendor + strength |
 
 ## `interview/` — interview preparation
 

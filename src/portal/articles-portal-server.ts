@@ -121,7 +121,9 @@ function numberParam(url: URL, key: string): number | undefined {
 
 function sortParam(url: URL): ArticlesQuery['sort'] {
   const s = url.searchParams.get('sort');
-  return s === 'quality_asc' || s === 'recall_asc' || s === 'recent' ? s : undefined;
+  return s === 'quality_asc' || s === 'recall_asc' || s === 'vendor_desc' || s === 'recent'
+    ? s
+    : undefined;
 }
 
 function sendJson(res: ServerResponse, data: unknown, status = 200): void {

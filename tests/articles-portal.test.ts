@@ -21,7 +21,7 @@ describe('loadArticlesOverview', () => {
   it('returns list items, summary, and filter option lists', async () => {
     const db = scriptedDb([
       {
-        match: 'FROM articles\n      \n      ORDER BY', // list query (no filters → empty where)
+        match: 'OFFSET', // list query (only the paginated list uses OFFSET)
         rows: [
           {
             id: '1',
@@ -37,6 +37,8 @@ describe('loadArticlesOverview', () => {
             published_at: new Date('2026-07-05T00:00:00Z'),
             fetched_at: new Date('2026-07-05T00:05:00Z'),
             extracted_at: new Date('2026-07-05T00:06:00Z'),
+            top_vendor: 'CyberArk',
+            vendor_relevance: '0.91',
           },
         ],
       },
@@ -50,7 +52,7 @@ describe('loadArticlesOverview', () => {
     const overview = await loadArticlesOverview(db, {});
 
     expect(overview.items).toHaveLength(1);
-    expect(overview.items[0]).toMatchObject({ id: '1', contentQualityScore: 0.82, rssRecall: 0.9, cleanTextLength: 1200 });
+    expect(overview.items[0]).toMatchObject({ id: '1', contentQualityScore: 0.82, rssRecall: 0.9, cleanTextLength: 1200, topVendor: 'CyberArk', vendorRelevance: 0.91 });
     expect(overview.summary).toMatchObject({ total: 1, medianQuality: 0.82, extractionFailureRate: 0 });
     expect(overview.sources).toEqual(['Test']);
     expect(overview.statuses).toEqual(['CLASSIFIED']);
@@ -58,7 +60,7 @@ describe('loadArticlesOverview', () => {
 
   it('computes extraction failure rate from FAIL statuses', async () => {
     const db = scriptedDb([
-      { match: 'ORDER BY', rows: [] },
+      { match: 'OFFSET', rows: [] },
       { match: 'SELECT count(*) AS count', rows: [{ count: '0' }] },
       {
         match: 'processing_status, count(*)',
@@ -83,7 +85,7 @@ describe('loadArticleDetail', () => {
   it('assembles article + entities + events + alerts, coercing numerics', async () => {
     const db = scriptedDb([
       {
-        match: 'FROM articles\n      WHERE id = $1',
+        match: 'WHERE a.id = $1',
         rows: [
           {
             id: '5',
@@ -103,6 +105,8 @@ describe('loadArticleDetail', () => {
             clean_text: 'body',
             extraction_error: null,
             llm_classification: { cyberRelevant: true },
+            top_vendor: 'SailPoint',
+            vendor_relevance: '0.9',
           },
         ],
       },
@@ -112,6 +116,7 @@ describe('loadArticleDetail', () => {
     ]);
 
     const detail = await loadArticleDetail(db, '5');
+    expect(detail).toMatchObject({ topVendor: 'SailPoint', vendorRelevance: 0.9 });
     expect(detail?.entities[0]).toMatchObject({ entityValue: 'SailPoint', confidence: 0.9 });
     expect(detail?.events[0]).toMatchObject({ eventId: '10', confidence: 0.8 });
     expect(detail?.alerts[0]).toMatchObject({ alertTier: 'confirmed', suppressed: false });
@@ -119,7 +124,7 @@ describe('loadArticleDetail', () => {
   });
 
   it('returns null for a missing article', async () => {
-    const db = scriptedDb([{ match: 'FROM articles\n      WHERE id = $1', rows: [] }]);
+    const db = scriptedDb([{ match: 'WHERE a.id = $1', rows: [] }]);
     expect(await loadArticleDetail(db, '999')).toBeNull();
   });
 });
@@ -134,5 +139,7 @@ describe('escapeHtml + portal shell', () => {
     expect(html).toContain('/api/articles');
     expect(html).toContain('sandbox=""'); // extracted preview is sandboxed
     expect(html).toContain('Article Portal');
+    expect(html).toContain('Vendor (closest)'); // vendor relevance column
+    expect(html).toContain('vendor_desc'); // sort by vendor relevance
   });
 });

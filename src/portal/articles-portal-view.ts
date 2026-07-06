@@ -58,6 +58,7 @@ export function renderPortalApp(): string {
   <select id="source"><option value="">All sources</option></select>
   <select id="sort">
     <option value="recent">Newest first</option>
+    <option value="vendor_desc">Most vendor-relevant first</option>
     <option value="quality_asc">Lowest quality first</option>
     <option value="recall_asc">Lowest recall first</option>
   </select>
@@ -68,7 +69,7 @@ export function renderPortalApp(): string {
   <div class="list">
     <table>
       <thead><tr>
-        <th>Title</th><th>Source</th><th>Status</th><th>Extraction</th>
+        <th>Title</th><th>Source</th><th>Vendor (closest)</th><th>Status</th><th>Extraction</th>
         <th>Quality</th><th>RSS recall</th><th>Chars</th><th>Published</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -90,6 +91,12 @@ function bar(v) {
   return '<span class="bar"><i style="width:' + Math.round(v*100) + '%;background:' + scoreColor(v) + '"></i></span> ' + pct(v);
 }
 
+// Closest monitored vendor + how strongly the article relates to it.
+function vendorCell(vendor, relevance) {
+  if (!vendor) return '<span class="muted">none</span>';
+  return '<strong>' + esc(vendor) + '</strong> ' + bar(relevance);
+}
+
 async function loadList() {
   const p = new URLSearchParams();
   if ($('q').value) p.set('q', $('q').value);
@@ -109,6 +116,7 @@ async function loadList() {
     tr.innerHTML =
       '<td class="title">' + esc(a.title || '(untitled)') + '</td>' +
       '<td class="muted">' + esc(a.sourceName || '—') + '</td>' +
+      '<td>' + vendorCell(a.topVendor, a.vendorRelevance) + '</td>' +
       '<td><span class="pill">' + esc(a.processingStatus) + '</span></td>' +
       '<td class="muted">' + esc(a.extractionStatus) + '</td>' +
       '<td>' + bar(a.contentQualityScore) + '</td>' +
@@ -159,6 +167,7 @@ async function openDetail(id) {
     '<h2>' + esc(a.title || '(untitled)') + '</h2>' +
     (a.canonicalUrl ? '<a href="' + esc(a.canonicalUrl) + '" target="_blank" rel="noopener">' + esc(a.canonicalUrl) + '</a>' : '') +
     '<div class="kv">' +
+      kv('Vendor (closest)', vendorCell(a.topVendor, a.vendorRelevance)) +
       kv('Status', a.processingStatus) + kv('Extraction', a.extractionStatus + (a.extractionMethod ? ' (' + a.extractionMethod + ')' : '')) +
       kv('Quality', bar(a.contentQualityScore)) + kv('RSS recall', bar(a.rssRecall)) +
       kv('Clean chars', a.cleanTextLength) + kv('Source', a.sourceName || '—') +

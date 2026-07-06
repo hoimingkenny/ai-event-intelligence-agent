@@ -19,6 +19,12 @@ export interface ArticleListItem {
   publishedAt: Date | null;
   fetchedAt: Date;
   extractedAt: Date | null;
+  // Vendor relevance: how strongly the article relates to a monitored vendor,
+  // and which one is the closest match. Derived live from the highest-
+  // confidence monitored-vendor entity (confidence already blends placement +
+  // corroboration). Null when no monitored vendor was detected.
+  topVendor: string | null;
+  vendorRelevance: number | null;
 }
 
 export interface ArticlesSummary {
@@ -46,7 +52,7 @@ export interface ArticlesQuery {
   search?: string | null;
   limit?: number;
   offset?: number;
-  sort?: 'recent' | 'quality_asc' | 'recall_asc';
+  sort?: 'recent' | 'quality_asc' | 'recall_asc' | 'vendor_desc';
 }
 
 const MAX_LIMIT = 200;
@@ -58,20 +64,21 @@ export async function loadArticlesOverview(
   const limit = clamp(query.limit ?? 50, 1, MAX_LIMIT);
   const offset = Math.max(0, query.offset ?? 0);
 
-  // Build a parameterized WHERE from optional filters.
+  // Build a parameterized WHERE from optional filters. Columns are aliased `a.`
+  // to match the `articles a` alias used in both list and count queries.
   const conditions: string[] = [];
   const params: unknown[] = [];
   if (query.status) {
     params.push(query.status);
-    conditions.push(`processing_status = $${params.length}`);
+    conditions.push(`a.processing_status = $${params.length}`);
   }
   if (query.source) {
     params.push(query.source);
-    conditions.push(`source_name = $${params.length}`);
+    conditions.push(`a.source_name = $${params.length}`);
   }
   if (query.search) {
     params.push(`%${query.search}%`);
-    conditions.push(`(title ILIKE $${params.length} OR canonical_url ILIKE $${params.length})`);
+    conditions.push(`(a.title ILIKE $${params.length} OR a.canonical_url ILIKE $${params.length})`);
   }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -80,16 +87,29 @@ export async function loadArticlesOverview(
       ? 'content_quality_score ASC NULLS FIRST, fetched_at DESC'
       : query.sort === 'recall_asc'
         ? 'rss_recall ASC NULLS FIRST, fetched_at DESC'
-        : 'published_at DESC NULLS LAST, fetched_at DESC, id DESC';
+        : query.sort === 'vendor_desc'
+          ? 'vendor_relevance DESC NULLS LAST, fetched_at DESC'
+          : 'published_at DESC NULLS LAST, fetched_at DESC, id DESC';
 
+  // LATERAL join surfaces the single strongest monitored-vendor match per
+  // article (the "closest" vendor + its confidence) from the entities already
+  // produced by the pipeline — no extra column or migration, always current.
   const listParams = [...params, limit, offset];
   const listResult = await db.query<ArticleRow>(
     `
-      SELECT id, title, source_name, canonical_url, processing_status, extraction_status,
-        extraction_method, content_quality_score, rss_recall,
-        coalesce(length(clean_text), 0) AS clean_text_length,
-        published_at, fetched_at, extracted_at
-      FROM articles
+      SELECT a.id, a.title, a.source_name, a.canonical_url, a.processing_status, a.extraction_status,
+        a.extraction_method, a.content_quality_score, a.rss_recall,
+        coalesce(length(a.clean_text), 0) AS clean_text_length,
+        a.published_at, a.fetched_at, a.extracted_at,
+        v.top_vendor, v.vendor_relevance
+      FROM articles a
+      LEFT JOIN LATERAL (
+        SELECT entity_value AS top_vendor, confidence AS vendor_relevance
+        FROM article_entities
+        WHERE article_id = a.id AND entity_type = 'vendor'
+        ORDER BY confidence DESC NULLS LAST, entity_value
+        LIMIT 1
+      ) v ON true
       ${where}
       ORDER BY ${orderBy}
       LIMIT $${listParams.length - 1} OFFSET $${listParams.length}
@@ -98,7 +118,7 @@ export async function loadArticlesOverview(
   );
 
   const filteredResult = await db.query<{ count: string }>(
-    `SELECT count(*) AS count FROM articles ${where}`,
+    `SELECT count(*) AS count FROM articles a ${where}`,
     params
   );
 
@@ -133,13 +153,21 @@ export interface ArticleDetail extends ArticleListItem {
 export async function loadArticleDetail(db: Queryable, articleId: string): Promise<ArticleDetail | null> {
   const result = await db.query<ArticleRow & DetailRow>(
     `
-      SELECT id, title, source_name, canonical_url, processing_status, extraction_status,
-        extraction_method, content_quality_score, rss_recall,
-        coalesce(length(clean_text), 0) AS clean_text_length,
-        published_at, fetched_at, extracted_at,
-        rss_summary, clean_text, extraction_error, llm_classification
-      FROM articles
-      WHERE id = $1
+      SELECT a.id, a.title, a.source_name, a.canonical_url, a.processing_status, a.extraction_status,
+        a.extraction_method, a.content_quality_score, a.rss_recall,
+        coalesce(length(a.clean_text), 0) AS clean_text_length,
+        a.published_at, a.fetched_at, a.extracted_at,
+        a.rss_summary, a.clean_text, a.extraction_error, a.llm_classification,
+        v.top_vendor, v.vendor_relevance
+      FROM articles a
+      LEFT JOIN LATERAL (
+        SELECT entity_value AS top_vendor, confidence AS vendor_relevance
+        FROM article_entities
+        WHERE article_id = a.id AND entity_type = 'vendor'
+        ORDER BY confidence DESC NULLS LAST, entity_value
+        LIMIT 1
+      ) v ON true
+      WHERE a.id = $1
     `,
     [articleId]
   );
@@ -221,6 +249,8 @@ interface ArticleRow {
   published_at: Date | null;
   fetched_at: Date;
   extracted_at: Date | null;
+  top_vendor: string | null;
+  vendor_relevance: string | null;
 }
 
 interface DetailRow {
@@ -245,6 +275,8 @@ function mapListItem(row: ArticleRow): ArticleListItem {
     publishedAt: row.published_at,
     fetchedAt: row.fetched_at,
     extractedAt: row.extracted_at,
+    topVendor: row.top_vendor,
+    vendorRelevance: row.vendor_relevance === null ? null : Number(row.vendor_relevance),
   };
 }
 
