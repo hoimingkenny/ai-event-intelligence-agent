@@ -7,6 +7,7 @@ import {
   loadArticlesOverview,
   type ArticlesQuery,
 } from './articles-portal.js';
+import { loadEventDetail, loadEventsOverview, type EventsQuery } from './events-portal.js';
 import { renderPortalApp } from './articles-portal-view.js';
 
 /**
@@ -83,6 +84,26 @@ async function route(db: Queryable, req: IncomingMessage, res: ServerResponse): 
     return sendJson(res, detail);
   }
 
+  if (path === '/api/events') {
+    const query: EventsQuery = {
+      minSources: numberParam(url, 'minSources'),
+      severity: url.searchParams.get('severity'),
+      search: url.searchParams.get('q'),
+      limit: numberParam(url, 'limit'),
+      offset: numberParam(url, 'offset'),
+      sort: eventSortParam(url),
+    };
+    sendJson(res, await loadEventsOverview(db, query));
+    return;
+  }
+
+  const eventDetailMatch = path.match(/^\/api\/events\/(\d+)$/);
+  if (eventDetailMatch) {
+    const detail = await loadEventDetail(db, eventDetailMatch[1]);
+    if (!detail) return sendJson(res, { error: 'not found' }, 404);
+    return sendJson(res, detail);
+  }
+
   // Extracted-text reader preview, rendered as a safe standalone HTML doc.
   const previewMatch = path.match(/^\/api\/articles\/(\d+)\/preview$/);
   if (previewMatch) {
@@ -124,6 +145,11 @@ function sortParam(url: URL): ArticlesQuery['sort'] {
   return s === 'quality_asc' || s === 'recall_asc' || s === 'vendor_desc' || s === 'recent'
     ? s
     : undefined;
+}
+
+function eventSortParam(url: URL): EventsQuery['sort'] {
+  const s = url.searchParams.get('sort');
+  return s === 'sources_desc' || s === 'recent' || s === 'severity' ? s : undefined;
 }
 
 function sendJson(res: ServerResponse, data: unknown, status = 200): void {

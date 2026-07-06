@@ -109,12 +109,15 @@ npm run drift:check           # per-source extraction quality (exit 2 on drift)
 npm run latency:check         # publication→alert p50/p90 vs 2h SLO (exit 2 on violation)
 ```
 
-### Article monitoring portal
+### Monitoring portal (articles + events)
 
-A read-only web portal to browse every article with its status, scores, and extraction quality — filter/sort/search, then click a row to inspect entities, events, alerts, and **preview the extracted article text**:
+A read-only web portal with two views:
+
+- **Articles** — every article with its status, scores, extraction quality, and closest monitored vendor; click a row to inspect entities/events/alerts and **preview the extracted text**.
+- **Events** — deduplicated incidents, multi-source first; click one to see its **sources as a timeline** (first report → follow-ups), each linking to the original and the extracted preview.
 
 ```bash
-npm run portal                # http://127.0.0.1:4322
+npm run portal                # http://127.0.0.1:4322 (Articles | Events tabs)
 ```
 
 ### Human review dashboard

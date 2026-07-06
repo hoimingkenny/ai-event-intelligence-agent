@@ -42,6 +42,16 @@ export function renderPortalApp(): string {
   .tag { display:inline-block; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:2px 8px; margin:2px 4px 2px 0; font-size:12px; }
   .tabs { display:flex; gap:8px; margin:14px 0 8px; }
   .tabs button.active { border-color:var(--accent); color:var(--accent); }
+  .nav { display:flex; gap:6px; }
+  .nav button { padding:6px 14px; }
+  .nav button.active { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .sev { text-transform:capitalize; }
+  .sev.critical { color:#f85149; } .sev.high { color:#db6d28; } .sev.medium { color:#d29922; } .sev.low { color:#8b93a3; }
+  .badge { background:#233; border:1px solid var(--accent); color:var(--accent); border-radius:20px; padding:1px 8px; font-size:11px; }
+  .timeline { list-style:none; padding:0; margin:8px 0; }
+  .timeline li { border-left:2px solid var(--line); padding:6px 0 6px 14px; margin-left:6px; position:relative; }
+  .timeline li::before { content:''; position:absolute; left:-5px; top:11px; width:8px; height:8px; border-radius:50%; background:var(--accent); }
+  .timeline li.first::before { background:#3fb950; } .timeline li.update::before { background:#d29922; }
   iframe { width:100%; height:420px; border:1px solid var(--line); border-radius:8px; background:#fff; }
   pre { white-space:pre-wrap; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; max-height:420px; overflow:auto; }
   .empty { color:var(--muted); padding:40px; text-align:center; }
@@ -49,9 +59,16 @@ export function renderPortalApp(): string {
 </head>
 <body>
 <header>
-  <h1>Article Portal</h1>
+  <h1>Threat Watch Portal</h1>
+  <div class="nav">
+    <button id="navArticles" class="active">Articles</button>
+    <button id="navEvents">Events</button>
+  </div>
   <div class="metrics" id="metrics"></div>
 </header>
+
+<!-- ===== Articles page ===== -->
+<div id="articlesPage">
 <div class="controls">
   <input id="q" placeholder="Search title or URL…" />
   <select id="status"><option value="">All statuses</option></select>
@@ -77,6 +94,37 @@ export function renderPortalApp(): string {
     <div class="empty" id="listEmpty" style="display:none">No articles match.</div>
   </div>
   <div class="detail" id="detail"></div>
+</div>
+</div>
+
+<!-- ===== Events page ===== -->
+<div id="eventsPage" style="display:none">
+<div class="controls">
+  <input id="eq" placeholder="Search event title…" />
+  <select id="esev"><option value="">All severities</option>
+    <option value="critical">critical</option><option value="high">high</option>
+    <option value="medium">medium</option><option value="low">low</option></select>
+  <label class="muted"><input type="checkbox" id="emulti" /> Multi-source only</label>
+  <select id="esort">
+    <option value="sources_desc">Most sources first</option>
+    <option value="recent">Most recent</option>
+    <option value="severity">Severity</option>
+  </select>
+  <button id="erefresh">Refresh</button>
+  <span class="muted" id="ecount"></span>
+</div>
+<div class="layout">
+  <div class="list">
+    <table>
+      <thead><tr>
+        <th>Event</th><th>Severity</th><th>Confidence</th><th>Sources</th><th>Vendors</th><th>CVEs</th><th>Last seen</th>
+      </tr></thead>
+      <tbody id="erows"></tbody>
+    </table>
+    <div class="empty" id="eventsEmpty" style="display:none">No events match.</div>
+  </div>
+  <div class="detail" id="edetail"></div>
+</div>
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -128,15 +176,17 @@ async function loadList() {
   }
 }
 
+function renderMetricsList(pairs) {
+  $('metrics').innerHTML = pairs.map(([k,v]) =>
+    '<div class="metric"><div class="v">' + esc(v) + '</div><div class="k">' + esc(k) + '</div></div>').join('');
+}
 function renderMetrics(s) {
-  const m = [
+  renderMetricsList([
     ['Articles', s.total],
     ['Median quality', pct(s.medianQuality)],
     ['Median recall', pct(s.medianRssRecall)],
     ['Extraction fails', pct(s.extractionFailureRate)],
-  ];
-  $('metrics').innerHTML = m.map(([k,v]) =>
-    '<div class="metric"><div class="v">' + esc(v) + '</div><div class="k">' + esc(k) + '</div></div>').join('');
+  ]);
 }
 
 function fillOnce(sel, values, allLabel) {
@@ -155,7 +205,7 @@ async function openDetail(id) {
         ' <span class="muted">' + pct(e.confidence) + '</span></span>').join('')
     : '<span class="muted">none</span>';
   const events = a.events.length
-    ? a.events.map(e => '<span class="tag">#' + esc(e.eventId) + ' ' + esc(e.relationship || '') +
+    ? a.events.map(e => '<span class="tag evlink" data-ev="' + esc(e.eventId) + '" style="cursor:pointer">#' + esc(e.eventId) + ' ' + esc(e.relationship || '') +
         ' <span class="muted">' + esc(e.severity || '') + ' ' + pct(e.confidence) + '</span></span>').join('')
     : '<span class="muted">not grouped</span>';
   const alerts = a.alerts.length
@@ -197,17 +247,111 @@ async function openDetail(id) {
   $('tabRss').onclick = () => showPane('tabRss');
   $('tabClassification').onclick = () => showPane('tabClassification');
   showPane('tabExtracted');
-  document.querySelectorAll('#rows tr').forEach(tr => { if (tr.querySelector('td')) {} });
+  // Event chips jump to the Events page and open that event.
+  d.querySelectorAll('.evlink').forEach(el => el.onclick = () => { showPage('events'); openEvent(el.dataset.ev); });
   loadList();
 }
 
 function kv(k, v) { return '<div class="muted">' + esc(k) + '</div><div>' + v + '</div>'; }
+
+// ===== Events =====
+let activeEventId = null;
+
+async function loadEvents() {
+  const p = new URLSearchParams();
+  if ($('eq').value) p.set('q', $('eq').value);
+  if ($('esev').value) p.set('severity', $('esev').value);
+  if ($('emulti').checked) p.set('minSources', '2');
+  p.set('sort', $('esort').value);
+  const data = await fetch('/api/events?' + p).then(r => r.json());
+  if (currentPage === 'events') renderEventMetrics(data.summary);
+  $('ecount').textContent = data.filtered + ' of ' + data.summary.total + ' events';
+  const rows = $('erows'); rows.innerHTML = '';
+  $('eventsEmpty').style.display = data.items.length ? 'none' : 'block';
+  for (const e of data.items) {
+    const tr = document.createElement('tr');
+    if (e.id === activeEventId) tr.className = 'active';
+    const multi = e.sourceCount > 1 ? ' <span class="badge">' + e.sourceCount + ' sources</span>' : '';
+    tr.innerHTML =
+      '<td class="title">' + esc(e.eventTitle || '(untitled)') + '</td>' +
+      '<td><span class="sev ' + esc(e.severity || '') + '">' + esc(e.severity || '—') + '</span></td>' +
+      '<td>' + bar(e.confidence) + '</td>' +
+      '<td>' + e.sourceCount + multi + '</td>' +
+      '<td class="muted">' + esc((e.affectedVendors || []).join(', ') || '—') + '</td>' +
+      '<td class="muted">' + esc((e.cves || []).join(', ') || '—') + '</td>' +
+      '<td class="muted">' + dt(e.lastSeenAt) + '</td>';
+    tr.onclick = () => openEvent(e.id);
+    rows.appendChild(tr);
+  }
+}
+
+function renderEventMetrics(s) {
+  renderMetricsList([
+    ['Events', s.total],
+    ['Multi-source', s.multiSource],
+    ['Critical', (s.bySeverity && s.bySeverity.critical) || 0],
+    ['High', (s.bySeverity && s.bySeverity.high) || 0],
+  ]);
+}
+
+async function openEvent(id) {
+  activeEventId = id;
+  const e = await fetch('/api/events/' + id).then(r => r.json());
+  const d = $('edetail'); d.classList.add('open');
+  const vendors = (e.affectedVendors || []).map(v => '<span class="tag">' + esc(v) + '</span>').join('') || '<span class="muted">—</span>';
+  const cves = (e.cves || []).map(c => '<span class="tag">' + esc(c) + '</span>').join('') || '<span class="muted">—</span>';
+
+  // Sources as a timeline: first report → follow-ups (server orders by published time).
+  const sources = e.sources.length ? e.sources.map((s, i) => {
+    const cls = i === 0 ? 'first' : (s.isMaterialUpdate ? 'update' : '');
+    const link = s.canonicalUrl ? '<a href="' + esc(s.canonicalUrl) + '" target="_blank" rel="noopener">' + esc(s.title || s.canonicalUrl) + '</a>' : esc(s.title || '(untitled)');
+    const flags = (s.isPrimarySource ? ' <span class="badge">primary</span>' : '') +
+                  (i === 0 ? ' <span class="muted">first report</span>' : '') +
+                  (s.isMaterialUpdate ? ' <span class="sev medium">material update</span>' : '');
+    return '<li class="' + cls + '"><div>' + dt(s.publishedAt) + ' · <strong>' + esc(s.sourceName || '—') + '</strong>' + flags + '</div>' +
+           '<div>' + link + ' <a class="muted" href="/api/articles/' + esc(s.articleId) + '/preview" target="_blank">[extracted]</a></div></li>';
+  }).join('') : '<li class="muted">No sources.</li>';
+
+  d.innerHTML =
+    '<h2>' + esc(e.eventTitle || '(untitled)') + '</h2>' +
+    '<div class="kv">' +
+      kv('Severity', '<span class="sev ' + esc(e.severity || '') + '">' + esc(e.severity || '—') + '</span>') +
+      kv('Urgency', e.urgency || '—') + kv('Confidence', bar(e.confidence)) +
+      kv('Sources', e.sourceCount) + kv('Status', e.eventStatus) +
+      kv('Grouping key', '<code>' + esc(e.groupingKey || '—') + '</code>') +
+      kv('First seen', dt(e.firstSeenAt)) + kv('Last seen', dt(e.lastSeenAt)) +
+    '</div>' +
+    '<div><strong>Vendors</strong><br>' + vendors + '</div>' +
+    '<div style="margin-top:10px"><strong>CVEs</strong><br>' + cves + '</div>' +
+    (e.eventSummary ? '<div style="margin-top:12px"><strong>Summary</strong><p class="muted">' + esc(e.eventSummary) + '</p></div>' : '') +
+    '<div style="margin-top:12px"><strong>Sources of this event (' + e.sources.length + ')</strong>' +
+      '<ul class="timeline">' + sources + '</ul></div>';
+  loadEvents();
+}
+
+// ===== Page navigation =====
+let currentPage = 'articles';
+function showPage(page) {
+  currentPage = page;
+  $('articlesPage').style.display = page === 'articles' ? 'block' : 'none';
+  $('eventsPage').style.display = page === 'events' ? 'block' : 'none';
+  $('navArticles').classList.toggle('active', page === 'articles');
+  $('navEvents').classList.toggle('active', page === 'events');
+  if (page === 'articles') loadList(); else loadEvents();
+}
 
 $('refresh').onclick = loadList;
 $('sort').onchange = loadList;
 $('status').onchange = loadList;
 $('source').onchange = loadList;
 let t; $('q').oninput = () => { clearTimeout(t); t = setTimeout(loadList, 250); };
+$('navArticles').onclick = () => showPage('articles');
+$('navEvents').onclick = () => showPage('events');
+$('erefresh').onclick = loadEvents;
+$('esort').onchange = loadEvents;
+$('esev').onchange = loadEvents;
+$('emulti').onchange = loadEvents;
+let et; $('eq').oninput = () => { clearTimeout(et); et = setTimeout(loadEvents, 250); };
 loadList();
 </script>
 </body>

@@ -1,0 +1,104 @@
+import { describe, expect, it } from 'vitest';
+import type { Queryable } from '../src/db/repositories/types.js';
+import { loadEventsOverview, loadEventDetail } from '../src/portal/events-portal.js';
+
+function scriptedDb(handlers: Array<{ match: string; rows: unknown[] }>): Queryable {
+  return {
+    async query<T>(sql: string) {
+      const handler = handlers.find((h) => sql.includes(h.match));
+      return { rows: (handler?.rows ?? []) as T[], rowCount: handler?.rows.length ?? 0 };
+    },
+  } as Queryable;
+}
+
+describe('loadEventsOverview', () => {
+  it('lists events with source counts and a multi-source summary', async () => {
+    const db = scriptedDb([
+      {
+        match: 'OFFSET',
+        rows: [
+          {
+            id: '10',
+            event_title: 'CyberArk exploited',
+            severity: 'high',
+            urgency: 'P1',
+            confidence: '0.82',
+            source_count: 3,
+            affected_vendors: ['CyberArk'],
+            cves: ['CVE-2026-21001'],
+            first_seen_at: new Date('2026-07-01T08:00:00Z'),
+            last_seen_at: new Date('2026-07-01T14:30:00Z'),
+          },
+        ],
+      },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '1' }] },
+      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '5', multi_source: '2' }] },
+      { match: 'GROUP BY severity', rows: [{ severity: 'high', count: '3' }, { severity: 'low', count: '2' }] },
+    ]);
+
+    const overview = await loadEventsOverview(db, {});
+    expect(overview.items[0]).toMatchObject({ id: '10', sourceCount: 3, confidence: 0.82, affectedVendors: ['CyberArk'] });
+    expect(overview.summary).toMatchObject({ total: 5, multiSource: 2 });
+    expect(overview.summary.bySeverity).toEqual({ high: 3, low: 2 });
+  });
+
+  it('applies the multi-source filter', async () => {
+    const db = scriptedDb([
+      { match: 'OFFSET', rows: [] },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '0' }] },
+      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '0', multi_source: '0' }] },
+      { match: 'GROUP BY severity', rows: [] },
+    ]);
+    // Just assert it runs and shapes correctly with the filter set.
+    const overview = await loadEventsOverview(db, { minSources: 2, sort: 'sources_desc' });
+    expect(overview.filtered).toBe(0);
+  });
+});
+
+describe('loadEventDetail', () => {
+  it('returns the event with its sources ordered as a timeline', async () => {
+    const db = scriptedDb([
+      {
+        match: 'WHERE id = $1',
+        rows: [
+          {
+            id: '10',
+            event_title: 'CyberArk exploited',
+            event_summary: 'A zero-day is being exploited.',
+            event_status: 'open',
+            severity: 'high',
+            urgency: 'P1',
+            confidence: '0.82',
+            source_count: 2,
+            affected_vendors: ['CyberArk'],
+            affected_products: ['PAM'],
+            cves: ['CVE-2026-21001'],
+            attack_types: ['exploitation'],
+            grouping_key: 'cve:cve-2026-21001',
+            first_seen_at: new Date('2026-07-01T08:00:00Z'),
+            last_seen_at: new Date('2026-07-01T14:30:00Z'),
+          },
+        ],
+      },
+      {
+        match: 'FROM event_articles ea',
+        rows: [
+          { article_id: '1', source_name: 'Krebs', title: 'First report', canonical_url: 'https://k/1', published_at: new Date('2026-07-01T08:00:00Z'), fetched_at: new Date('2026-07-01T08:05:00Z'), is_primary_source: true, is_material_update: false, relationship: 'same_event' },
+          { article_id: '2', source_name: 'BleepingComputer', title: 'Follow-up', canonical_url: 'https://b/2', published_at: new Date('2026-07-01T14:30:00Z'), fetched_at: new Date('2026-07-01T14:35:00Z'), is_primary_source: false, is_material_update: true, relationship: 'same_event_material_update' },
+        ],
+      },
+    ]);
+
+    const detail = await loadEventDetail(db, '10');
+    expect(detail?.sources).toHaveLength(2);
+    expect(detail?.sources[0]).toMatchObject({ sourceName: 'Krebs', isPrimarySource: true });
+    expect(detail?.sources[1]).toMatchObject({ sourceName: 'BleepingComputer', isMaterialUpdate: true });
+    expect(detail?.groupingKey).toBe('cve:cve-2026-21001');
+    expect(detail?.attackTypes).toEqual(['exploitation']);
+  });
+
+  it('returns null for a missing event', async () => {
+    const db = scriptedDb([{ match: 'WHERE id = $1', rows: [] }]);
+    expect(await loadEventDetail(db, '999')).toBeNull();
+  });
+});
