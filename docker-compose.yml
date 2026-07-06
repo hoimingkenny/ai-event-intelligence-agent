@@ -62,6 +62,24 @@ services:
     restart: unless-stopped
     stop_grace_period: 60s # give an in-flight run time to finish on SIGTERM
 
+  # Optional: article monitoring portal (read-only). Bind to localhost only.
+  portal:
+    build: .
+    image: vendor-threat-watch
+    command: ["npm", "run", "portal"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+      PORTAL_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4322:4322"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   # Optional: human review dashboard. Bind to localhost only.
   dashboard:
     build: .

@@ -5,6 +5,11 @@ interface MiniMaxEmbeddingResponse {
   base_resp?: { status_code: number; status_msg: string };
 }
 
+interface OpenRouterEmbeddingResponse {
+  data?: Array<{ embedding: number[] }>;
+  error?: { message?: string };
+}
+
 let cachedDimensions: number | null = null;
 
 /**
@@ -23,6 +28,20 @@ export type EmbeddingType = 'db' | 'query' | 'passage' | 'document';
 
 export async function embed(texts: string[], type: EmbeddingType = 'db'): Promise<number[][]> {
   if (texts.length === 0) return [];
+
+  const vectors =
+    env.embeddingProvider === 'openrouter'
+      ? await embedWithOpenRouter(texts)
+      : await embedWithMiniMax(texts, type);
+
+  if (cachedDimensions === null && vectors[0]) {
+    cachedDimensions = vectors[0].length;
+  }
+
+  return vectors;
+}
+
+async function embedWithMiniMax(texts: string[], type: EmbeddingType): Promise<number[][]> {
 
   const resp = await fetch(`${env.minimaxBaseUrl}/embeddings`, {
     method: 'POST',
@@ -43,11 +62,31 @@ export async function embed(texts: string[], type: EmbeddingType = 'db'): Promis
     throw new Error(`Embedding request failed: ${msg}`);
   }
 
-  if (cachedDimensions === null && data.vectors[0]) {
-    cachedDimensions = data.vectors[0].length;
+  return data.vectors;
+}
+
+async function embedWithOpenRouter(texts: string[]): Promise<number[][]> {
+  const resp = await fetch(`${env.openRouterBaseUrl}/embeddings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${env.openRouterApiKey}`,
+      'HTTP-Referer': 'https://vendor-threat-watch.local',
+      'X-Title': 'Vendor Threat Watch',
+    },
+    body: JSON.stringify({
+      model: env.openRouterEmbeddingModel,
+      input: texts,
+    }),
+  });
+
+  const data = (await resp.json()) as OpenRouterEmbeddingResponse;
+  if (!resp.ok || !data.data) {
+    const msg = data.error?.message ?? `HTTP ${resp.status}`;
+    throw new Error(`Embedding request failed: ${msg}`);
   }
 
-  return data.vectors;
+  return data.data.map((item) => item.embedding);
 }
 
 export async function embedOne(text: string, type: EmbeddingType = 'db'): Promise<number[]> {

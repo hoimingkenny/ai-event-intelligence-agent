@@ -1,12 +1,17 @@
-import { embedOne } from '../config/embeddings.js';
+import { embed, embedOne } from '../config/embeddings.js';
 
 export interface EmbeddingClient {
   embedDocument(text: string): Promise<number[]>;
+  embedDocuments(texts: string[]): Promise<number[][]>;
 }
 
 export class MiniMaxEmbeddingClient implements EmbeddingClient {
   async embedDocument(text: string): Promise<number[]> {
     return embedOne(text, 'db');
+  }
+
+  async embedDocuments(texts: string[]): Promise<number[][]> {
+    return embed(texts, 'db');
   }
 }
 

@@ -132,6 +132,26 @@ export class ArticleRepository {
     return result.rows.map(mapArticle);
   }
 
+  async listByProcessingStatuses(statuses: string[], limit = 50): Promise<ArticleRecord[]> {
+    if (statuses.length === 0) return [];
+
+    const result = await this.db.query<ArticleRow>(
+      `
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
+        FROM articles
+        WHERE processing_status = ANY($1::text[])
+        -- Newest first: breaking news must not queue behind backlog.
+        ORDER BY published_at DESC NULLS LAST, fetched_at DESC, id DESC
+        LIMIT $2
+      `,
+      [statuses, limit]
+    );
+
+    return result.rows.map(mapArticle);
+  }
+
   async findEarlierByContentHash(contentHash: string, excludeArticleId: string): Promise<ArticleRecord | null> {
     const result = await this.db.query<ArticleRow>(
       `
