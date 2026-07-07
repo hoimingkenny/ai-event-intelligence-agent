@@ -83,8 +83,8 @@ export function decideCheapFilter(article: CheapFilterInput): FilterDecision {
   let score = 0;
 
   if (cves.length > 0) addScore('cve_found', 50);
-  if (vendors.products.length > 0) addScore('monitored_product_found', 45);
-  if (vendors.vendors.length > 0) addScore('monitored_vendor_found', 35);
+  if (vendors.products.length > 0) addScore('monitored_product_found', 65);
+  if (vendors.vendors.length > 0) addScore('monitored_vendor_found', 50);
   if (keywords.critical.length > 0) addScore('critical_cyber_keyword_found', 35);
   if (keywords.medium.length > 0) addScore('medium_cyber_keyword_found', 20);
   if (keywords.low.length > 0) addScore('low_cyber_keyword_found', 5);

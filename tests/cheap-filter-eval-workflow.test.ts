@@ -13,6 +13,7 @@ import { loadCheapFilterDataset } from '../eval/utils/datasetLoader.js';
 import { loadCandidates, writeCandidates } from '../eval/utils/candidateStore.js';
 import { evaluateCheapFilterDataset } from '../eval/utils/metrics.js';
 import { startEvalReviewServer } from '../eval/server/eval-review-server.js';
+import { loadManualArticles } from '../eval/utils/manualArticles.js';
 import type { CheapFilterCandidate } from '../eval/types/cheap-filter-eval.types.js';
 
 describe('cheap-filter eval derivation', () => {
@@ -222,12 +223,14 @@ describe('eval review server live decisions (stubbed db)', () => {
     cheap_filter_blocking_reasons: [],
     cheap_filter_matched_signals: { cves: [] },
   };
+  const seenSql: string[] = [];
   const stubDb = {
     query: async (sql: string) => {
+      seenSql.push(sql);
       if (sql.includes('GROUP BY')) {
         return { rows: [{ cheap_filter_decision: 'KEEP', count: '1' }] };
       }
-      return { rows: [articleRow] };
+      return { rows: [{ ...articleRow, is_manual: false }] };
     },
   } as never;
 
@@ -290,6 +293,23 @@ describe('eval review server live decisions (stubbed db)', () => {
     }
   });
 
+  it('applies the origin filter to decision queries', async () => {
+    const { server, base } = await setupWithDb();
+    try {
+      seenSql.length = 0;
+      const data = await (await fetch(`${base}/api/decisions?origin=manual`)).json();
+      expect(data.enabled).toBe(true);
+      expect(data.articles[0].isManual).toBe(false);
+      expect(seenSql.some((sql) => sql.includes("f.source_type = 'manual'") && sql.includes('LIMIT'))).toBe(true);
+
+      seenSql.length = 0;
+      await (await fetch(`${base}/api/decisions?origin=live`)).json();
+      expect(seenSql.some((sql) => sql.includes('NOT EXISTS') && sql.includes('LIMIT'))).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+
   it('reports the live tab as disabled without a database', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'cheap-filter-live-'));
     const server = await startEvalReviewServer({
@@ -304,6 +324,31 @@ describe('eval review server live decisions (stubbed db)', () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe('manual articles loader', () => {
+  it('loads minimal records with defaults and rejects duplicates', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'manual-articles-'));
+    const path = join(dir, 'articles.jsonl');
+    await writeFile(
+      path,
+      `${JSON.stringify({ sourceName: 'CISA', url: 'https://manual.test/a', title: 'Test advisory' })}\n`
+    );
+    const articles = await loadManualArticles(path);
+    expect(articles[0]).toMatchObject({ rssSummary: null, rssCategories: [], publishedAt: null });
+
+    await writeFile(
+      path,
+      `${JSON.stringify({ sourceName: 'CISA', url: 'https://manual.test/a', title: 'One' })}\n` +
+        `${JSON.stringify({ sourceName: 'CISA', url: 'https://manual.test/a', title: 'Two' })}\n`
+    );
+    await expect(loadManualArticles(path)).rejects.toThrow(/duplicate.*line 2/i);
+  });
+
+  it('validates the checked-in starter file', async () => {
+    const articles = await loadManualArticles(join(process.cwd(), 'eval/datasets/manual-articles.jsonl'));
+    expect(articles.length).toBeGreaterThanOrEqual(4);
   });
 });
 

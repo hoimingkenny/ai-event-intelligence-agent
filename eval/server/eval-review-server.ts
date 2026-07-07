@@ -35,10 +35,28 @@ const ArticleLabelSubmissionSchema = z.object({
   humanReason: z.string().trim().min(3, 'humanReason must explain the judgement (min 3 characters).'),
 });
 
+export type DecisionOrigin = 'all' | 'live' | 'manual';
+
+function parseOrigin(value: string | null): DecisionOrigin {
+  return value === 'live' || value === 'manual' ? value : 'all';
+}
+
+/** SQL fragment selecting articles by origin; manual = attached to a source_type='manual' feed. */
+function originCondition(origin: DecisionOrigin): string {
+  if (origin === 'manual') {
+    return `AND EXISTS (SELECT 1 FROM feeds f WHERE f.id = articles.feed_id AND f.source_type = 'manual')`;
+  }
+  if (origin === 'live') {
+    return `AND NOT EXISTS (SELECT 1 FROM feeds f WHERE f.id = articles.feed_id AND f.source_type = 'manual')`;
+  }
+  return '';
+}
+
 export interface FilterDecisionArticle {
   articleId: string;
   sourceName: string;
   sourceTier: SourceTier;
+  isManual: boolean;
   url: string;
   title: string;
   rssSummary: string | null;
@@ -54,6 +72,7 @@ export interface FilterDecisionArticle {
 
 interface FilterDecisionRow {
   id: string;
+  is_manual: boolean | null;
   source_name: string | null;
   canonical_url: string | null;
   title: string | null;
@@ -71,19 +90,22 @@ interface FilterDecisionRow {
 async function listFilterDecisions(
   db: Queryable,
   decision: string | null,
+  origin: DecisionOrigin,
   limit: number
 ): Promise<FilterDecisionArticle[]> {
   const filter = decision && decision !== 'ALL' ? 'AND cheap_filter_decision = $2' : '';
   const params: unknown[] = decision && decision !== 'ALL' ? [limit, decision] : [limit];
   const result = await db.query<FilterDecisionRow>(
     `
-      SELECT id, source_name, canonical_url, title, rss_summary, rss_categories,
+      SELECT articles.id, source_name, canonical_url, title, rss_summary, rss_categories,
              published_at, processing_status, cheap_filter_decision, cheap_filter_score,
-             cheap_filter_reasons, cheap_filter_blocking_reasons, cheap_filter_matched_signals
+             cheap_filter_reasons, cheap_filter_blocking_reasons, cheap_filter_matched_signals,
+             EXISTS (SELECT 1 FROM feeds f WHERE f.id = articles.feed_id AND f.source_type = 'manual') AS is_manual
       FROM articles
       WHERE cheap_filter_decision IS NOT NULL
         AND canonical_url IS NOT NULL AND title IS NOT NULL
         ${filter}
+        ${originCondition(origin)}
       ORDER BY COALESCE(published_at, created_at) DESC
       LIMIT $1
     `,
@@ -97,6 +119,7 @@ function mapDecisionRow(row: FilterDecisionRow): FilterDecisionArticle {
     articleId: row.id,
     sourceName: row.source_name ?? 'unknown',
     sourceTier: inferSourceTier(row.source_name),
+    isManual: Boolean(row.is_manual),
     url: row.canonical_url as string,
     title: row.title as string,
     rssSummary: row.rss_summary,
@@ -111,12 +134,13 @@ function mapDecisionRow(row: FilterDecisionRow): FilterDecisionArticle {
   };
 }
 
-async function summarizeFilterDecisions(db: Queryable): Promise<Record<string, number>> {
+async function summarizeFilterDecisions(db: Queryable, origin: DecisionOrigin): Promise<Record<string, number>> {
   const result = await db.query<{ cheap_filter_decision: string; count: string }>(
     `
       SELECT cheap_filter_decision, COUNT(*)::text AS count
       FROM articles
       WHERE cheap_filter_decision IS NOT NULL
+      ${originCondition(origin)}
       GROUP BY cheap_filter_decision
     `
   );
@@ -235,11 +259,12 @@ async function routeRequest(
       return;
     }
     const decision = url.searchParams.get('decision');
+    const origin = parseOrigin(url.searchParams.get('origin'));
     const limit = clampLimit(Number(url.searchParams.get('limit') ?? 50));
     const [articles, samples, summary] = await Promise.all([
-      listFilterDecisions(options.db, decision, limit),
+      listFilterDecisions(options.db, decision, origin, limit),
       loadDatasetOrEmpty(options.datasetPath),
-      summarizeFilterDecisions(options.db),
+      summarizeFilterDecisions(options.db, origin),
     ]);
     const labeledUrls = new Set(samples.map((sample) => sample.url));
     sendJson(res, {

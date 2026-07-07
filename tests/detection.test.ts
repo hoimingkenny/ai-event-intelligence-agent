@@ -116,6 +116,18 @@ describe('cheap detection', () => {
     expect(decision.blockingReasons).toContain('cheap_filter_negative_business_context');
   });
 
+  it('weights monitored vendor mentions as a strong cheap-filter signal', () => {
+    const decision = decideCheapFilter({
+      title: 'CyberArk publishes customer guidance',
+      rssSummary: 'Customers should review privileged access controls.',
+      sourceName: 'Unknown Source',
+    });
+
+    expect(decision.decision).toBe('MAYBE_KEEP');
+    expect(decision.score).toBeGreaterThanOrEqual(55);
+    expect(decision.reasons).toContain('monitored_vendor_found');
+  });
+
   it('uses RSS security categories as weak extraction signal', () => {
     const decision = decideCheapFilter({
       title: 'Enterprise platform update released',

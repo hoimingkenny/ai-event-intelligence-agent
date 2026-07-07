@@ -81,6 +81,11 @@ export function renderEvalReviewApp(): string {
     <aside class="sidebar">
       <div id="live-summary" class="summary"></div>
       <div style="padding:10px 12px;border-bottom:1px solid var(--line)">
+        <select id="live-origin">
+          <option value="all" selected>Both origins</option>
+          <option value="live">Live RSS</option>
+          <option value="manual">My articles</option>
+        </select>
         <select id="live-filter">
           <option value="ALL">All decisions</option>
           <option value="KEEP">KEEP</option>
@@ -131,6 +136,7 @@ export function renderEvalReviewApp(): string {
     document.getElementById('tab-live').addEventListener('click', () => switchTab('live'));
     document.getElementById('tab-report').addEventListener('click', () => switchTab('report'));
     document.getElementById('refresh').addEventListener('click', loadAll);
+    document.getElementById('live-origin').addEventListener('change', loadLive);
     document.getElementById('live-filter').addEventListener('change', loadLive);
     document.getElementById('live-limit').addEventListener('change', loadLive);
     loadAll();
@@ -153,8 +159,9 @@ export function renderEvalReviewApp(): string {
 
     async function loadLive() {
       const decision = document.getElementById('live-filter').value;
+      const origin = document.getElementById('live-origin').value;
       const limit = document.getElementById('live-limit').value;
-      const response = await fetch('/api/decisions?decision=' + encodeURIComponent(decision) + '&limit=' + encodeURIComponent(limit));
+      const response = await fetch('/api/decisions?decision=' + encodeURIComponent(decision) + '&origin=' + encodeURIComponent(origin) + '&limit=' + encodeURIComponent(limit));
       state.live = await response.json();
       if (state.live.enabled && !state.live.articles.some((a) => a.articleId === state.selectedArticleId)) {
         state.selectedArticleId = state.live.articles[0]?.articleId ?? null;
@@ -187,6 +194,7 @@ export function renderEvalReviewApp(): string {
           '<div class="item-title">' + escapeHtml(a.title) + '</div>' +
           '<div class="muted">' + escapeHtml(a.sourceName) + ' · ' + formatDate(a.publishedAt) + '</div>' +
           '<div class="badges">' + decisionBadge(a.decision) + badge('score ' + (a.score ?? 'n/a')) +
+            (a.isManual ? badge('my article', 'warn') : '') +
             (a.alreadyLabeled ? badge('in dataset', 'good') : '') + '</div>' +
         '</button>';
       }).join('');
