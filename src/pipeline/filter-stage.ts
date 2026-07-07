@@ -236,7 +236,7 @@ export async function runCheapFilterStage(
   };
 }
 
-function inferSourceTier(sourceName?: string | null): SourceTier {
+export function inferSourceTier(sourceName?: string | null): SourceTier {
   const source = sourceName?.toLowerCase() ?? '';
   if (source.includes('cisa') || source.includes('cert')) return 'government_cert';
   if (source.includes('psirt') || source.includes('msrc') || source.includes('security advisories')) {

@@ -38,6 +38,11 @@ npm run fixtures:review           # Side-by-side extraction review report (revie
 npm run check            # Type-check TypeScript
 npm test                 # Run test suite (vitest)
 npm run eval             # Run labelled evaluation set
+
+npm run eval:cheap-filter   # Cheap-filter eval against labelled dataset (reports in eval/reports/)
+npm run eval:candidates     # Harvest labeling candidates from pipeline DB into eval/datasets/
+npm run eval:review         # Labeling + report review UI for the cheap-filter dataset (:4323)
+npm run eval:validate       # Validate cheap-filter dataset JSONL and print label counts
 ```
 
 Individual stage commands also exist (`ingest:rss`, `filter:articles`, `extract:articles`, `entities:articles`, `embed:articles`, `dedup:articles`, `events:articles`, `classify:articles`, `alerts:events`).

@@ -16,6 +16,21 @@ Both watchdogs also run inside every pipeline sweep.
 
 Real article HTML saved via `npm run fixtures:fetch -- <url>`; `npm run fixtures:review` builds a side-by-side human review page. With a human reference (`.expected.txt`), tests assert word-level recall ≥ 0.8 and precision ≥ 0.6. A deterministic local test source (`npm run test-source:serve`) exercises the full pipeline — grouping-key attach, separate events, ad-cluster removal, cheap-filter rejection — without live data.
 
+## Cheap-Filter Evaluation (implemented)
+
+`npm run eval:cheap-filter` evaluates only the cheap-filter stage against `eval/datasets/cheap-filter-eval.jsonl` and writes reports to `eval/reports/cheap-filter-report.json` and `eval/reports/cheap-filter-report.md`.
+
+This evaluator treats the cheap filter as a recall-protection layer, not a final relevance classifier:
+
+- `KEEP` and `MAYBE_KEEP` count as passing the cheap filter.
+- `DROP` means the article was filtered out before extraction.
+- `CRITICAL_RELEVANT` articles must receive `KEEP`; `MAYBE_KEEP` is a priority failure.
+- `RELEVANT` articles must receive `KEEP` or `MAYBE_KEEP`; `DROP` is a false negative.
+
+The report shows critical recall, relevant recall, false-negative rate, critical miss rate, pass-through rate, KEEP/MAYBE_KEEP rates, irrelevant pass rate, reason-code coverage, a confusion matrix, false negatives, critical priority failures, failure buckets, and tuning recommendations.
+
+The starter dataset is intentionally small and schema-valid. It should grow from human-reviewed dashboard cases, especially vague RSS articles where the important signal appears only after extraction.
+
 ## Human Review Dashboard (implemented)
 
 `npm run review:dashboard` starts a local dashboard at `http://127.0.0.1:4321` backed by the current Postgres pipeline state. It is the bridge between automated metrics and analyst trust: each recent article is shown with RSS summary, extracted text, detected entities, linked event, grouping relationship, confidence/severity/urgency, alert decision, and related LLM audit entries.
