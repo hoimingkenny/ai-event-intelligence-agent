@@ -83,6 +83,17 @@ export function renderEvalReviewApp(): string {
       <section class="panel">
         <h2>Monitored vendor inventory</h2>
         <p class="muted">The filter, report, and live tabs use changes immediately. Edit rows inline, or append new products by pasting JSON below.</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
+          <input id="inventory-search" type="search" placeholder="Search vendor or product..." style="flex:1;max-width:320px;border:1px solid var(--line);border-radius:6px;padding:7px 10px">
+          <select id="inventory-crit">
+            <option value="ALL" selected>All criticalities</option>
+            <option value="critical">critical</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+          </select>
+          <span id="inventory-count" class="muted"></span>
+        </div>
         <div id="inventory-table"></div>
         <div class="actions" style="margin-top:8px">
           <span></span>
@@ -199,6 +210,8 @@ Return ONLY the JSON array, no commentary.</pre>
     document.getElementById('inventory-save').addEventListener('click', saveInventory);
     document.getElementById('inventory-format').addEventListener('click', formatInventory);
     document.getElementById('inventory-add-save').addEventListener('click', addInventoryFromJson);
+    document.getElementById('inventory-search').addEventListener('input', () => { state.inventoryEditing = null; renderInventoryTable(); });
+    document.getElementById('inventory-crit').addEventListener('change', () => { state.inventoryEditing = null; renderInventoryTable(); });
     document.getElementById('inventory-reset').addEventListener('click', loadInventory);
     document.getElementById('refresh').addEventListener('click', loadAll);
     document.getElementById('live-origin').addEventListener('change', loadLive);
@@ -233,15 +246,44 @@ Return ONLY the JSON array, no commentary.</pre>
       return badge(criticality, criticality === 'critical' ? 'bad' : criticality === 'high' ? 'warn' : 'good');
     }
 
+    const CRITICALITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+
+    function visibleInventoryRows() {
+      const query = (document.getElementById('inventory-search').value || '').trim().toLowerCase();
+      const crit = document.getElementById('inventory-crit').value;
+      return (state.inventory || [])
+        .map((item, originalIndex) => ({ item, originalIndex }))
+        .filter(({ item }) => crit === 'ALL' || item.criticality === crit)
+        .filter(({ item }) =>
+          !query ||
+          item.vendor.toLowerCase().includes(query) ||
+          item.product.toLowerCase().includes(query))
+        .sort((a, b) =>
+          (CRITICALITY_RANK[a.item.criticality] ?? 9) - (CRITICALITY_RANK[b.item.criticality] ?? 9) ||
+          a.item.vendor.localeCompare(b.item.vendor) ||
+          a.item.product.localeCompare(b.item.product));
+    }
+
     function renderInventoryTable() {
       const container = document.getElementById('inventory-table');
-      const vendors = state.inventory || [];
-      if (vendors.length === 0) {
+      const total = (state.inventory || []).length;
+      if (total === 0) {
         container.innerHTML = '<p class="empty">Inventory is empty. Add products below.</p>';
+        document.getElementById('inventory-count').textContent = '';
+        return;
+      }
+      const rows = visibleInventoryRows();
+      document.getElementById('inventory-count').textContent = rows.length === total
+        ? total + ' products'
+        : rows.length + ' of ' + total + ' products';
+      if (rows.length === 0) {
+        container.innerHTML = '<p class="empty">No products match the search/filter.</p>';
         return;
       }
       container.innerHTML = '<table><tr><th>Vendor</th><th>Product</th><th>Aliases</th><th>Criticality</th><th>In prod</th><th style="width:120px">Actions</th></tr>' +
-        vendors.map((v, i) => state.inventoryEditing === i ? editorRow(v, i) : displayRow(v, i)).join('') +
+        rows.map(({ item, originalIndex }) =>
+          state.inventoryEditing === originalIndex ? editorRow(item, originalIndex) : displayRow(item, originalIndex)
+        ).join('') +
       '</table>';
       for (const button of container.querySelectorAll('[data-action]')) {
         const index = Number(button.dataset.index);
