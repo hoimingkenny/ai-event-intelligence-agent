@@ -72,10 +72,31 @@ export function renderEvalReviewApp(): string {
     <h1>Cheap Filter Eval Review</h1>
     <div class="tabs">
       <button id="tab-label" class="active">Label candidates</button>
+      <button id="tab-live">Live decisions</button>
       <button id="tab-report">Report</button>
       <button id="refresh">Refresh</button>
     </div>
   </header>
+  <div id="live-view" class="layout" style="display:none">
+    <aside class="sidebar">
+      <div id="live-summary" class="summary"></div>
+      <div style="padding:10px 12px;border-bottom:1px solid var(--line)">
+        <select id="live-filter">
+          <option value="ALL">All decisions</option>
+          <option value="KEEP">KEEP</option>
+          <option value="MAYBE_KEEP" selected>MAYBE_KEEP</option>
+          <option value="DROP">DROP</option>
+        </select>
+        <select id="live-limit">
+          <option value="50" selected>50 latest</option>
+          <option value="100">100 latest</option>
+          <option value="200">200 latest</option>
+        </select>
+      </div>
+      <div id="live-list" class="item-list"><p class="empty">Loading live decisions...</p></div>
+    </aside>
+    <main id="live-detail" class="content"><p class="empty">Select an article.</p></main>
+  </div>
   <div id="label-view" class="layout">
     <aside class="sidebar">
       <div id="label-summary" class="summary"></div>
@@ -96,6 +117,7 @@ export function renderEvalReviewApp(): string {
       candidates: [], pendingCount: 0, labeledCount: 0, selectedCandidateId: null,
       pickedLabel: null,
       report: null, selectedResultId: null, resultFilter: 'failures',
+      live: null, selectedArticleId: null, livePickedLabel: null,
     };
     const LABELS = [
       { value: 'CRITICAL_RELEVANT', text: 'Critical', cls: 'lbl-critical', hint: 'Must be KEPT (active exploitation, KEV, monitored product hit)' },
@@ -106,20 +128,128 @@ export function renderEvalReviewApp(): string {
     const SEVERITY_RANK = { severe: 0, high: 1, medium: 2, low: 3 };
 
     document.getElementById('tab-label').addEventListener('click', () => switchTab('label'));
+    document.getElementById('tab-live').addEventListener('click', () => switchTab('live'));
     document.getElementById('tab-report').addEventListener('click', () => switchTab('report'));
     document.getElementById('refresh').addEventListener('click', loadAll);
+    document.getElementById('live-filter').addEventListener('change', loadLive);
+    document.getElementById('live-limit').addEventListener('change', loadLive);
     loadAll();
 
     function switchTab(tab) {
       state.tab = tab;
       document.getElementById('tab-label').classList.toggle('active', tab === 'label');
+      document.getElementById('tab-live').classList.toggle('active', tab === 'live');
       document.getElementById('tab-report').classList.toggle('active', tab === 'report');
       document.getElementById('label-view').style.display = tab === 'label' ? '' : 'none';
+      document.getElementById('live-view').style.display = tab === 'live' ? '' : 'none';
       document.getElementById('report-view').style.display = tab === 'report' ? '' : 'none';
     }
 
     async function loadAll() {
-      await Promise.all([loadCandidates(), loadReport()]);
+      await Promise.all([loadCandidates(), loadReport(), loadLive()]);
+    }
+
+    // ---------- Live decisions tab ----------
+
+    async function loadLive() {
+      const decision = document.getElementById('live-filter').value;
+      const limit = document.getElementById('live-limit').value;
+      const response = await fetch('/api/decisions?decision=' + encodeURIComponent(decision) + '&limit=' + encodeURIComponent(limit));
+      state.live = await response.json();
+      if (state.live.enabled && !state.live.articles.some((a) => a.articleId === state.selectedArticleId)) {
+        state.selectedArticleId = state.live.articles[0]?.articleId ?? null;
+      }
+      state.livePickedLabel = null;
+      renderLiveView();
+    }
+
+    function renderLiveView() {
+      const live = state.live;
+      const list = document.getElementById('live-list');
+      if (!live) return;
+      if (!live.enabled) {
+        document.getElementById('live-summary').innerHTML = '';
+        list.innerHTML = '<p class="empty">' + escapeHtml(live.message) + '</p>';
+        document.getElementById('live-detail').innerHTML = '<p class="empty">Database not connected.</p>';
+        return;
+      }
+      document.getElementById('live-summary').innerHTML =
+        metric('KEEP', live.summary.KEEP) + metric('MAYBE_KEEP', live.summary.MAYBE_KEEP) +
+        metric('DROP', live.summary.DROP) + metric('Shown', live.articles.length);
+      if (live.articles.length === 0) {
+        list.innerHTML = '<p class="empty">No articles with this decision. Run npm run filter:articles first.</p>';
+        document.getElementById('live-detail').innerHTML = '<p class="empty">Nothing to show.</p>';
+        return;
+      }
+      list.innerHTML = live.articles.map((a) => {
+        const active = a.articleId === state.selectedArticleId ? ' active' : '';
+        return '<button class="item-button' + active + '" data-id="' + escapeAttr(a.articleId) + '">' +
+          '<div class="item-title">' + escapeHtml(a.title) + '</div>' +
+          '<div class="muted">' + escapeHtml(a.sourceName) + ' · ' + formatDate(a.publishedAt) + '</div>' +
+          '<div class="badges">' + decisionBadge(a.decision) + badge('score ' + (a.score ?? 'n/a')) +
+            (a.alreadyLabeled ? badge('in dataset', 'good') : '') + '</div>' +
+        '</button>';
+      }).join('');
+      for (const button of list.querySelectorAll('.item-button')) {
+        button.addEventListener('click', () => { state.selectedArticleId = button.dataset.id; state.livePickedLabel = null; renderLiveView(); });
+      }
+      renderLiveDetail(live.articles.find((a) => a.articleId === state.selectedArticleId));
+    }
+
+    function renderLiveDetail(article) {
+      const detail = document.getElementById('live-detail');
+      if (!article) { detail.innerHTML = '<p class="empty">Nothing selected.</p>'; return; }
+      const labelPanel = article.alreadyLabeled
+        ? panel('Your judgement', '<p class="muted">Already in the eval dataset. See the Report tab for how the filter scores it.</p>')
+        : panel('Add to eval dataset',
+            '<div class="label-buttons">' + LABELS.map((l) =>
+              '<button type="button" class="' + l.cls + (state.livePickedLabel === l.value ? ' selected' : '') + '" data-label="' + l.value + '" title="' + escapeAttr(l.hint) + '">' + l.text + '</button>'
+            ).join('') + '</div>' +
+            '<div class="muted" id="live-label-hint">Label this real article to grow the eval dataset.</div>' +
+            '<h3>Why? (saved as humanReason)</h3>' +
+            '<textarea id="live-reason" placeholder="e.g. Routine advisory for monitored product"></textarea>' +
+            '<div class="actions"><button class="primary" id="live-save">Save to dataset</button><span id="live-status" class="muted"></span></div>');
+      detail.innerHTML =
+        panel('Article', kvText('Source', article.sourceName + ' (' + article.sourceTier + ')') +
+          kvText('Published', formatDate(article.publishedAt)) +
+          kvText('Pipeline status', article.processingStatus) +
+          kvText('Categories', article.rssCategories.join(', ') || 'none') +
+          kvHtml('URL', '<a href="' + escapeAttr(article.url) + '" target="_blank" rel="noreferrer">open article</a>') +
+          '<h3>Title</h3><pre>' + escapeHtml(article.title) + '</pre>' +
+          '<h3>RSS summary</h3><pre>' + escapeHtml(article.rssSummary || '(empty)') + '</pre>') +
+        panel('Filter output', kvHtml('Decision', decisionBadge(article.decision) + ' score ' + (article.score ?? 'n/a')) +
+          '<h3>Reasons</h3><pre>' + escapeHtml((article.reasons || []).join('\\n') || '(none)') + '</pre>' +
+          '<h3>Blocking reasons</h3><pre>' + escapeHtml((article.blockingReasons || []).join('\\n') || '(none)') + '</pre>' +
+          '<h3>Matched signals</h3><pre>' + escapeHtml(JSON.stringify(article.matchedSignals, null, 2)) + '</pre>') +
+        labelPanel;
+      for (const button of detail.querySelectorAll('.label-buttons button')) {
+        button.addEventListener('click', () => {
+          state.livePickedLabel = button.dataset.label;
+          for (const other of detail.querySelectorAll('.label-buttons button')) other.classList.toggle('selected', other === button);
+          document.getElementById('live-label-hint').textContent = LABELS.find((l) => l.value === state.livePickedLabel)?.hint ?? '';
+        });
+      }
+      const save = document.getElementById('live-save');
+      if (save) save.addEventListener('click', () => saveLiveLabel(article));
+    }
+
+    async function saveLiveLabel(article) {
+      const status = document.getElementById('live-status');
+      const reason = document.getElementById('live-reason').value.trim();
+      if (!state.livePickedLabel) { status.textContent = 'Pick a label first.'; return; }
+      if (reason.length < 3) { status.textContent = 'Add a short reason (min 3 chars).'; return; }
+      status.textContent = 'Saving...';
+      const response = await fetch('/api/labels/from-article', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ articleId: article.articleId, humanLabel: state.livePickedLabel, humanReason: reason }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        status.textContent = error.error?.message || 'Failed to save.';
+        return;
+      }
+      await Promise.all([loadLive(), loadReport(), loadCandidates()]);
     }
 
     async function loadCandidates() {

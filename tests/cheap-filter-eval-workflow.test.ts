@@ -206,6 +206,107 @@ describe('eval review server', () => {
   });
 });
 
+describe('eval review server live decisions (stubbed db)', () => {
+  const articleRow = {
+    id: 'a-1',
+    source_name: 'CISA',
+    canonical_url: 'https://example.test/live-1',
+    title: 'CISA advisory on exploited Exchange vulnerability',
+    rss_summary: 'Known exploited vulnerability guidance.',
+    rss_categories: ['Advisories'],
+    published_at: new Date('2026-07-06T10:00:00Z'),
+    processing_status: 'EXTRACTION_PENDING',
+    cheap_filter_decision: 'KEEP',
+    cheap_filter_score: 95,
+    cheap_filter_reasons: ['critical_cyber_keyword_found'],
+    cheap_filter_blocking_reasons: [],
+    cheap_filter_matched_signals: { cves: [] },
+  };
+  const stubDb = {
+    query: async (sql: string) => {
+      if (sql.includes('GROUP BY')) {
+        return { rows: [{ cheap_filter_decision: 'KEEP', count: '1' }] };
+      }
+      return { rows: [articleRow] };
+    },
+  } as never;
+
+  async function setupWithDb() {
+    const dir = await mkdtemp(join(tmpdir(), 'cheap-filter-live-'));
+    const datasetPath = join(dir, 'dataset.jsonl');
+    const candidatesPath = join(dir, 'candidates.jsonl');
+    const server = await startEvalReviewServer({ datasetPath, candidatesPath, db: stubDb, port: 0 });
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    return { server, base, datasetPath };
+  }
+
+  it('lists live filter decisions with summary and label status', async () => {
+    const { server, base } = await setupWithDb();
+    try {
+      const data = await (await fetch(`${base}/api/decisions?decision=KEEP`)).json();
+      expect(data.enabled).toBe(true);
+      expect(data.summary.KEEP).toBe(1);
+      expect(data.articles[0]).toMatchObject({
+        articleId: 'a-1',
+        sourceTier: 'government_cert',
+        decision: 'KEEP',
+        score: 95,
+        alreadyLabeled: false,
+      });
+    } finally {
+      server.close();
+    }
+  });
+
+  it('labels a live article into the dataset and blocks relabeling', async () => {
+    const { server, base, datasetPath } = await setupWithDb();
+    try {
+      const post = await fetch(`${base}/api/labels/from-article`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          articleId: 'a-1',
+          humanLabel: 'CRITICAL_RELEVANT',
+          humanReason: 'KEV-adjacent advisory for monitored Exchange.',
+        }),
+      });
+      expect(post.status).toBe(201);
+
+      const samples = await loadCheapFilterDataset(datasetPath);
+      expect(samples[0].url).toBe('https://example.test/live-1');
+      expect(samples[0].expectedMinimumDecision).toBe('KEEP');
+
+      const data = await (await fetch(`${base}/api/decisions`)).json();
+      expect(data.articles[0].alreadyLabeled).toBe(true);
+
+      const again = await fetch(`${base}/api/labels/from-article`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ articleId: 'a-1', humanLabel: 'RELEVANT', humanReason: 'dup' }),
+      });
+      expect(again.status).toBe(409);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('reports the live tab as disabled without a database', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cheap-filter-live-'));
+    const server = await startEvalReviewServer({
+      datasetPath: join(dir, 'dataset.jsonl'),
+      candidatesPath: join(dir, 'candidates.jsonl'),
+      port: 0,
+    });
+    try {
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const data = await (await fetch(`${base}/api/decisions`)).json();
+      expect(data.enabled).toBe(false);
+    } finally {
+      server.close();
+    }
+  });
+});
+
 describe('candidate store', () => {
   it('round-trips candidates and returns [] for a missing file', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'cheap-filter-candidates-'));

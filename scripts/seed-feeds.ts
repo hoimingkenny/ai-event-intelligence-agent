@@ -13,7 +13,7 @@ async function main(): Promise<void> {
         feedUrl: feed.url,
         sourceType: 'rss',
         trustLevel: feed.source === 'CISA' ? 'high' : 'medium',
-        isActive: true,
+        isActive: feed.isActive ?? true,
       });
     }
 
