@@ -8,10 +8,15 @@ import { loadCandidates } from '../utils/candidateStore.js';
 import { evaluateCheapFilterDataset, DEFAULT_CHEAP_FILTER_THRESHOLDS } from '../utils/metrics.js';
 import { HUMAN_LABELS } from '../types/cheap-filter-eval.types.js';
 import { inferSourceTier, type SourceTier } from '../../src/pipeline/filter-stage.js';
+import {
+  MONITORED_VENDORS_PATH,
+  monitoredVendors,
+  saveMonitoredVendors,
+} from '../../src/storage/vendorInventory.js';
 import type { Queryable } from '../../src/db/repositories/types.js';
 import { renderEvalReviewApp } from './eval-review-page.js';
 
-const MAX_JSON_BODY_BYTES = 64 * 1024;
+const MAX_JSON_BODY_BYTES = 512 * 1024;
 const MAX_DECISION_LIMIT = 200;
 
 export interface EvalReviewServerOptions {
@@ -283,6 +288,36 @@ async function routeRequest(
     const input = ArticleLabelSubmissionSchema.parse(await readJson(req));
     const sample = await appendLabelFromArticle(options, options.db, input);
     sendJson(res, { sample }, 201);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/inventory') {
+    sendJson(res, { vendors: monitoredVendors, path: MONITORED_VENDORS_PATH });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/inventory') {
+    const body = await readJson(req);
+    const input = Array.isArray(body) ? body : (body as { vendors?: unknown }).vendors;
+    if (!Array.isArray(input)) {
+      sendJson(res, { error: { code: 'VALIDATION_ERROR', message: 'Expected a JSON array of vendor products (or { "vendors": [...] }).' } }, 422);
+      return;
+    }
+    const before = new Set(monitoredVendors.map((item) => item.id));
+    let saved;
+    try {
+      saved = saveMonitoredVendors(input);
+    } catch (error) {
+      if (error instanceof ZodError) throw error;
+      sendJson(res, { error: { code: 'VALIDATION_ERROR', message: (error as Error).message } }, 422);
+      return;
+    }
+    const after = new Set(saved.map((item) => item.id));
+    sendJson(res, {
+      vendors: saved,
+      added: saved.filter((item) => !before.has(item.id)).map((item) => item.id),
+      removed: [...before].filter((id) => !after.has(id)),
+    });
     return;
   }
 

@@ -14,6 +14,12 @@ import { loadCandidates, writeCandidates } from '../eval/utils/candidateStore.js
 import { evaluateCheapFilterDataset } from '../eval/utils/metrics.js';
 import { startEvalReviewServer } from '../eval/server/eval-review-server.js';
 import { loadManualArticles } from '../eval/utils/manualArticles.js';
+import {
+  deriveVendorProductId,
+  loadMonitoredVendors,
+  parseVendorInventory,
+  saveMonitoredVendors,
+} from '../src/storage/vendorInventory.js';
 import type { CheapFilterCandidate } from '../eval/types/cheap-filter-eval.types.js';
 
 describe('cheap-filter eval derivation', () => {
@@ -349,6 +355,61 @@ describe('manual articles loader', () => {
   it('validates the checked-in starter file', async () => {
     const articles = await loadManualArticles(join(process.cwd(), 'eval/datasets/manual-articles.jsonl'));
     expect(articles.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('validates the checked-in DROP-only manual file', async () => {
+    const articles = await loadManualArticles(join(process.cwd(), 'eval/datasets/manual-drop-articles.jsonl'));
+    expect(articles.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe('vendor inventory store', () => {
+  it('normalizes pasted entries: derives ids, dedupes aliases, rejects duplicates', () => {
+    const parsed = parseVendorInventory([
+      { vendor: 'Okta', product: 'Workforce Identity Cloud', aliases: ['Okta WIC', 'Okta WIC'], criticality: 'high' },
+    ]);
+    expect(parsed[0].id).toBe('vp_okta_workforce_identity_cloud');
+    expect(parsed[0].aliases).toEqual(['Okta WIC']);
+    expect(parsed[0].inProduction).toBe(true);
+
+    expect(() =>
+      parseVendorInventory([
+        { vendor: 'Okta', product: 'WIC', aliases: [], criticality: 'high' },
+        { vendor: 'Okta', product: 'WIC', aliases: [], criticality: 'low' },
+      ])
+    ).toThrow(/duplicate/i);
+    expect(() => parseVendorInventory([])).toThrow();
+    expect(deriveVendorProductId('CyberArk', 'Privileged Access Security')).toBe('vp_cyberark_privileged_access_security');
+  });
+
+  it('saves and reloads a custom inventory path round-trip', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'vendor-inventory-'));
+    const path = join(dir, 'vendors.json');
+    saveMonitoredVendors(
+      [{ vendor: 'Okta', product: 'Workforce Identity Cloud', aliases: ['Okta WIC'], criticality: 'high', inProduction: false }],
+      path
+    );
+    const loaded = loadMonitoredVendors(path);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]).toMatchObject({ vendor: 'Okta', inProduction: false, id: 'vp_okta_workforce_identity_cloud' });
+  });
+
+  it('serves the current inventory over the api', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cheap-filter-inv-'));
+    const server = await startEvalReviewServer({
+      datasetPath: join(dir, 'dataset.jsonl'),
+      candidatesPath: join(dir, 'candidates.jsonl'),
+      port: 0,
+    });
+    try {
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const data = await (await fetch(`${base}/api/inventory`)).json();
+      expect(Array.isArray(data.vendors)).toBe(true);
+      expect(data.vendors.length).toBeGreaterThanOrEqual(1);
+      expect(data.vendors[0]).toHaveProperty('aliases');
+    } finally {
+      server.close();
+    }
   });
 });
 
