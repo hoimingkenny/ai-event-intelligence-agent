@@ -218,7 +218,7 @@ export async function writeHumanReviewDashboard(
   return { dashboard, outputPath };
 }
 
-export async function loadHumanReviewDashboard(db: Queryable, limit = 50): Promise<HumanReviewDashboard> {
+export async function loadHumanReviewDashboard(db: Queryable, limit = 50, selectedArticleId?: string): Promise<HumanReviewDashboard> {
   const articleResult = await db.query<ArticleRow>(
     `
       SELECT id, title, canonical_url, source_name, published_at, fetched_at, processing_status,
@@ -232,6 +232,21 @@ export async function loadHumanReviewDashboard(db: Queryable, limit = 50): Promi
   );
 
   const articles = articleResult.rows.map(mapArticle);
+  if (selectedArticleId && !articles.some((article) => article.id === selectedArticleId)) {
+    const selectedResult = await db.query<ArticleRow>(
+      `
+        SELECT id, title, canonical_url, source_name, published_at, fetched_at, processing_status,
+          extraction_status, extraction_method, extraction_error, content_quality_score, rss_recall,
+          rss_summary, clean_text, llm_classification
+        FROM articles
+        WHERE id = $1
+      `,
+      [selectedArticleId]
+    );
+    if (selectedResult.rows[0]) {
+      articles.unshift(mapArticle(selectedResult.rows[0]));
+    }
+  }
   const articleIds = articles.map((article) => article.id);
   if (articleIds.length === 0) {
     const dashboard = { generatedAt: new Date(), cases: [], summary: summarizeCases([]) };

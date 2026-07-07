@@ -12,7 +12,7 @@ import {
 import { loadCheapFilterDataset } from '../eval/utils/datasetLoader.js';
 import { loadCandidates, writeCandidates } from '../eval/utils/candidateStore.js';
 import { evaluateCheapFilterDataset } from '../eval/utils/metrics.js';
-import { startEvalReviewServer } from '../eval/server/eval-review-server.js';
+import { startEvalReviewServer } from '../src/review/eval/eval-routes.js';
 import { loadManualArticles } from '../eval/utils/manualArticles.js';
 import {
   deriveVendorProductId,

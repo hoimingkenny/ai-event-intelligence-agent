@@ -3,18 +3,18 @@ import { appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { URL } from 'node:url';
 import { z, ZodError } from 'zod';
-import { loadCheapFilterDataset, normalizeDatasetRecord } from '../utils/datasetLoader.js';
-import { loadCandidates } from '../utils/candidateStore.js';
-import { evaluateCheapFilterDataset, DEFAULT_CHEAP_FILTER_THRESHOLDS } from '../utils/metrics.js';
-import { HUMAN_LABELS } from '../types/cheap-filter-eval.types.js';
-import { inferSourceTier, type SourceTier } from '../../src/pipeline/filter-stage.js';
+import { loadCheapFilterDataset, normalizeDatasetRecord } from '../../../eval/utils/datasetLoader.js';
+import { loadCandidates } from '../../../eval/utils/candidateStore.js';
+import { evaluateCheapFilterDataset, DEFAULT_CHEAP_FILTER_THRESHOLDS } from '../../../eval/utils/metrics.js';
+import { HUMAN_LABELS } from '../../../eval/types/cheap-filter-eval.types.js';
+import { inferSourceTier, type SourceTier } from '../../pipeline/filter-stage.js';
 import {
   MONITORED_VENDORS_PATH,
   monitoredVendors,
   saveMonitoredVendors,
-} from '../../src/storage/vendorInventory.js';
-import type { Queryable } from '../../src/db/repositories/types.js';
-import { renderEvalReviewApp } from './eval-review-page.js';
+} from '../../storage/vendorInventory.js';
+import type { Queryable } from '../../db/repositories/types.js';
+import { renderEvalReviewApp } from './eval-page.js';
 
 const MAX_JSON_BODY_BYTES = 512 * 1024;
 const MAX_DECISION_LIMIT = 200;
@@ -119,6 +119,21 @@ async function listFilterDecisions(
   return result.rows.map(mapDecisionRow);
 }
 
+async function listFilterDecisionsIncludingArticle(
+  db: Queryable,
+  decision: string | null,
+  origin: DecisionOrigin,
+  limit: number,
+  articleId: string
+): Promise<FilterDecisionArticle[]> {
+  const rows = await listFilterDecisions(db, decision, origin, limit);
+  if (rows.some((article) => article.articleId === articleId)) return rows;
+
+  const selected = await listFilterDecisionById(db, articleId);
+  if (!selected) return rows;
+  return [selected, ...rows].slice(0, limit);
+}
+
 function mapDecisionRow(row: FilterDecisionRow): FilterDecisionArticle {
   return {
     articleId: row.id,
@@ -191,7 +206,8 @@ async function listFilterDecisionById(db: Queryable, articleId: string): Promise
     `
       SELECT id, source_name, canonical_url, title, rss_summary, rss_categories,
              published_at, processing_status, cheap_filter_decision, cheap_filter_score,
-             cheap_filter_reasons, cheap_filter_blocking_reasons, cheap_filter_matched_signals
+             cheap_filter_reasons, cheap_filter_blocking_reasons, cheap_filter_matched_signals,
+             EXISTS (SELECT 1 FROM feeds f WHERE f.id = articles.feed_id AND f.source_type = 'manual') AS is_manual
       FROM articles
       WHERE id = $1 AND cheap_filter_decision IS NOT NULL
         AND canonical_url IS NOT NULL AND title IS NOT NULL
@@ -226,39 +242,41 @@ export async function startEvalReviewServer(options: EvalReviewServerOptions): P
 export function createEvalReviewServer(options: EvalReviewServerOptions): http.Server {
   return http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, options);
+      await routeEvalRequest(req, res, options, { apiPrefix: '/api' });
     } catch (error) {
-      sendError(res, error);
+      sendEvalError(res, error);
     }
   });
 }
 
-async function routeRequest(
+export async function routeEvalRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  options: EvalReviewServerOptions
+  options: EvalReviewServerOptions,
+  routeOptions: { apiPrefix?: string } = {}
 ): Promise<void> {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+  const apiPrefix = routeOptions.apiPrefix ?? '/api';
 
   if (req.method === 'GET' && url.pathname === '/') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(renderEvalReviewApp());
+    res.end(renderEvalReviewApp({ apiPrefix }));
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/candidates') {
+  if (req.method === 'GET' && url.pathname === `${apiPrefix}/candidates`) {
     sendJson(res, await loadLabelingState(options));
     return;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/labels') {
+  if (req.method === 'POST' && url.pathname === `${apiPrefix}/labels`) {
     const input = LabelSubmissionSchema.parse(await readJson(req));
     const sample = await appendLabel(options, input);
     sendJson(res, { sample }, 201);
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/decisions') {
+  if (req.method === 'GET' && url.pathname === `${apiPrefix}/decisions`) {
     if (!options.db) {
       sendJson(res, { enabled: false, message: 'No database connection. Start with DATABASE_URL configured to browse live filter decisions.' });
       return;
@@ -266,8 +284,9 @@ async function routeRequest(
     const decision = url.searchParams.get('decision');
     const origin = parseOrigin(url.searchParams.get('origin'));
     const limit = clampLimit(Number(url.searchParams.get('limit') ?? 50));
+    const articleId = url.searchParams.get('articleId');
     const [articles, samples, summary] = await Promise.all([
-      listFilterDecisions(options.db, decision, origin, limit),
+      articleId ? listFilterDecisionsIncludingArticle(options.db, decision, origin, limit, articleId) : listFilterDecisions(options.db, decision, origin, limit),
       loadDatasetOrEmpty(options.datasetPath),
       summarizeFilterDecisions(options.db, origin),
     ]);
@@ -280,7 +299,7 @@ async function routeRequest(
     return;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/labels/from-article') {
+  if (req.method === 'POST' && url.pathname === `${apiPrefix}/labels/from-article`) {
     if (!options.db) {
       sendJson(res, { error: { code: 'NO_DATABASE', message: 'No database connection.' } }, 400);
       return;
@@ -291,12 +310,12 @@ async function routeRequest(
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/inventory') {
+  if (req.method === 'GET' && url.pathname === `${apiPrefix}/inventory`) {
     sendJson(res, { vendors: monitoredVendors, path: MONITORED_VENDORS_PATH });
     return;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/inventory') {
+  if (req.method === 'POST' && url.pathname === `${apiPrefix}/inventory`) {
     const body = await readJson(req);
     const input = Array.isArray(body) ? body : (body as { vendors?: unknown }).vendors;
     if (!Array.isArray(input)) {
@@ -321,7 +340,7 @@ async function routeRequest(
     return;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/report') {
+  if (req.method === 'GET' && url.pathname === `${apiPrefix}/report`) {
     const samples = await loadDatasetOrEmpty(options.datasetPath);
     const report = evaluateCheapFilterDataset(samples, {
       datasetPath: options.datasetPath,
@@ -414,7 +433,7 @@ function sendJson(res: ServerResponse, data: unknown, status = 200): void {
   res.end(JSON.stringify(data));
 }
 
-function sendError(res: ServerResponse, error: unknown): void {
+export function sendEvalError(res: ServerResponse, error: unknown): void {
   if (error instanceof PayloadTooLargeError) {
     sendJson(res, { error: { code: 'PAYLOAD_TOO_LARGE', message: error.message } }, 413);
     return;
