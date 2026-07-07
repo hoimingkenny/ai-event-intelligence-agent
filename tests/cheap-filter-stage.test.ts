@@ -13,7 +13,9 @@ class CheapFilterDb implements Queryable {
         rows: [
           articleRow('1', 'Fortinet warns of actively exploited FortiOS vulnerability', 'Bleeping Computer'),
           articleRow('2', 'Critical flaw discovered in enterprise identity platform', 'Bleeping Computer'),
-          articleRow('3', 'Cloudflare announces new feature release', 'General Business News'),
+          // Deliberately mentions no monitored vendor so the DROP path stays
+          // stable regardless of config/monitored-vendors.json edits.
+          articleRow('3', 'Contoso announces new feature release', 'General Business News'),
         ] as T[],
         rowCount: 3,
       };

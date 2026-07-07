@@ -1,9 +1,38 @@
 [
   {
+    "id": "vp_sailpoint_platform",
+    "vendor": "SailPoint",
+    "product": "SailPoint platform",
+    "aliases": [
+      "SailPoint",
+      "SailPoint Identity Security",
+      "SailPoint IdentityIQ",
+      "IdentityIQ"
+    ],
+    "criticality": "high",
+    "inProduction": true
+  },
+  {
     "id": "vp_cyberark_pas",
     "vendor": "CyberArk",
     "product": "Privileged Access Security",
-    "aliases": ["CyberArk PAS", "CyberArk PAM", "CyberArk Privileged Access Manager"],
+    "aliases": [
+      "CyberArk PAS",
+      "CyberArk PAM",
+      "CyberArk Privileged Access Manager",
+      "CyberArk Password Vault"
+    ],
+    "criticality": "critical",
+    "inProduction": true
+  },
+  {
+    "id": "vp_cyberark_conjur",
+    "vendor": "CyberArk",
+    "product": "Conjur",
+    "aliases": [
+      "CyberArk Conjur",
+      "Conjur"
+    ],
     "criticality": "critical",
     "inProduction": true
   },
@@ -11,16 +40,125 @@
     "id": "vp_zscaler_zia",
     "vendor": "Zscaler",
     "product": "Zscaler Internet Access",
-    "aliases": ["ZIA", "Zscaler Internet Access"],
+    "aliases": [
+      "ZIA",
+      "Zscaler Internet Access"
+    ],
     "criticality": "high",
     "inProduction": true
+  },
+  {
+    "id": "vp_cloudflare_platform",
+    "vendor": "Cloudflare",
+    "product": "Cloudflare platform",
+    "aliases": [
+      "Cloudflare",
+      "Cloudflare API",
+      "Cloudflare API tokens",
+      "Cloudflare WAF",
+      "Cloudflare Zero Trust",
+      "Cloudflare Workers"
+    ],
+    "criticality": "medium",
+    "inProduction": false
   },
   {
     "id": "vp_microsoft_windows_server",
     "vendor": "Microsoft",
     "product": "Windows Server",
-    "aliases": ["Microsoft Windows Server", "Windows Server", "Microsoft Exchange", "Microsoft Entra", "Azure AD"],
+    "aliases": [
+      "Microsoft Windows Server",
+      "Windows Server"
+    ],
     "criticality": "high",
     "inProduction": true
+  },
+  {
+    "id": "vp_microsoft_sharepoint_server",
+    "vendor": "Microsoft",
+    "product": "SharePoint Server",
+    "aliases": [
+      "SharePoint",
+      "Microsoft SharePoint",
+      "Microsoft SharePoint Server",
+      "SharePoint Server"
+    ],
+    "criticality": "high",
+    "inProduction": true
+  },
+  {
+    "id": "vp_microsoft_exchange_server",
+    "vendor": "Microsoft",
+    "product": "Exchange Server",
+    "aliases": [
+      "Microsoft Exchange",
+      "Exchange Server",
+      "Microsoft Exchange Server",
+      "Exchange Server 2016",
+      "Exchange Server 2019",
+      "Exchange Server Subscription Edition"
+    ],
+    "criticality": "high",
+    "inProduction": true
+  },
+  {
+    "id": "vp_microsoft_entra",
+    "vendor": "Microsoft",
+    "product": "Microsoft Entra",
+    "aliases": [
+      "Microsoft Entra",
+      "Azure AD",
+      "Microsoft Entra ID",
+      "Entra ID"
+    ],
+    "criticality": "high",
+    "inProduction": true
+  },
+  {
+    "id": "vp_microsoft_malware_protection_engine",
+    "vendor": "Microsoft",
+    "product": "Malware Protection Engine",
+    "aliases": [
+      "Microsoft Malware Protection Engine",
+      "Malware Protection Engine",
+      "Microsoft Defender Malware Protection Engine"
+    ],
+    "criticality": "high",
+    "inProduction": true
+  },
+  {
+    "id": "vp_salesforce_platform",
+    "vendor": "Salesforce",
+    "product": "Salesforce platform",
+    "aliases": [
+      "Salesforce",
+      "Salesforce instance",
+      "Salesforce data"
+    ],
+    "criticality": "medium",
+    "inProduction": false
+  },
+  {
+    "id": "vp_salesloft_drift",
+    "vendor": "Salesloft",
+    "product": "Drift",
+    "aliases": [
+      "Salesloft Drift",
+      "Drift",
+      "Salesloft"
+    ],
+    "criticality": "medium",
+    "inProduction": false
+  },
+  {
+    "id": "vp_hashicorp_vault",
+    "vendor": "HashiCorp",
+    "product": "Vault",
+    "aliases": [
+      "HashiCorp Vault",
+      "Vault"
+    ],
+    "criticality": "medium",
+    "inProduction": false
   }
 ]
