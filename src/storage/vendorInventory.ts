@@ -32,5 +32,13 @@ export const monitoredVendors: VendorProduct[] = [
     aliases: ['Cloudflare WAF', 'Cloudflare Zero Trust', 'Cloudflare Access'],
     criticality: 'medium',
     inProduction: false,
+  },
+  {
+    id: 'vp_microsoft_windows_server',
+    vendor: 'Microsoft',
+    product: 'Windows Server',
+    aliases: ['Microsoft Windows Server', 'Windows Server', 'Microsoft Exchange', 'Microsoft Entra', 'Azure AD'],
+    criticality: 'high',
+    inProduction: true,
   }
 ];

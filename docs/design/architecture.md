@@ -20,6 +20,8 @@ ingest (RSS) → cheap filter → extraction → entities → article embeddings
 
 Cost ordering is a design rule: the cheapest possible check runs first at every step, and the LLM only sees what deterministic tiers could not resolve.
 
+The cheap filter is governed by the [Cyber Threat Keyword Classification Standard](cyber-keyword-classification-standard.md): RSS metadata is scored by operational actionability, with critical/medium/low/negative keyword categories used to decide whether an article is worth fetching and extracting.
+
 ## The Ladder Pattern
 
 Both dedup and event grouping use the same shape — deterministic where possible, LLM where necessary:

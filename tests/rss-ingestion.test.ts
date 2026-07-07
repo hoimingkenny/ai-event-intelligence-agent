@@ -24,6 +24,7 @@ describe('normalizeFeedItem', () => {
         title: '  Critical Patch Released  ',
         link: 'https://Example.test/post/?utm_source=rss&b=2&a=1#top',
         contentSnippet: '  Patch details   released. ',
+        categories: [' Vulnerabilities ', 'Security', 'Security'],
         isoDate: '2026-06-27T12:00:00.000Z',
       }
     );
@@ -33,6 +34,7 @@ describe('normalizeFeedItem', () => {
     expect(normalized?.urlHash).toHaveLength(64);
     expect(normalized?.titleHash).toHaveLength(64);
     expect(normalized?.rssSummary).toBe('Patch details released.');
+    expect(normalized?.rssCategories).toEqual(['Vulnerabilities', 'Security']);
     expect(normalized?.publishedAt?.toISOString()).toBe('2026-06-27T12:00:00.000Z');
   });
 
@@ -92,6 +94,7 @@ describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
         title: 'First article',
         link: `https://example.test/${runId}/article-1?utm_source=rss`,
         contentSnippet: 'First article summary.',
+        categories: ['Vulnerabilities'],
         isoDate: '2026-06-27T12:00:00.000Z',
       },
       {
@@ -132,5 +135,11 @@ describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
       [`https://example.test/${runId}/%`]
     );
     expect(Number(count.rows[0].count)).toBe(2);
+
+    const categories = await pool.query<{ rss_categories: string[] }>(
+      'SELECT rss_categories FROM articles WHERE canonical_url = $1',
+      [`https://example.test/${runId}/article-1`]
+    );
+    expect(categories.rows[0].rss_categories).toEqual(['Vulnerabilities']);
   });
 });

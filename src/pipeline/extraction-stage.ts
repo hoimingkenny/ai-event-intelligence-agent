@@ -17,7 +17,7 @@ export async function runExtractionStage(
   options: { limit?: number; extractor?: ArticleExtractor } = {}
 ): Promise<ExtractionStageResult> {
   const articles = new ArticleRepository(db);
-  const candidates = await articles.listByProcessingStatus('EXTRACTION_PENDING', options.limit ?? 20);
+  const candidates = await articles.listExtractionCandidates(options.limit ?? 20);
   const extractor = options.extractor ?? new ExtractionRouter();
   let succeeded = 0;
   let failed = 0;

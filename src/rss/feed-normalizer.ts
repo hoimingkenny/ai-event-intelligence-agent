@@ -11,6 +11,7 @@ export interface NormalizedFeedItem {
   urlHash: string;
   titleHash: string;
   rssSummary: string | null;
+  rssCategories: string[];
   publishedAt: Date | null;
 }
 
@@ -25,6 +26,7 @@ export function normalizeFeedItem(
   const canonicalUrl = normalizeUrl(rawUrl);
   const normalizedTitle = normalizeTitle(rawTitle);
   const rssSummary = normalizeSummary(item.contentSnippet || item.content || null);
+  const rssCategories = normalizeCategories(item.categories ?? []);
 
   return {
     feedId: feed.id,
@@ -34,6 +36,7 @@ export function normalizeFeedItem(
     urlHash: hashNormalizedValue(canonicalUrl),
     titleHash: hashNormalizedValue(normalizedTitle),
     rssSummary,
+    rssCategories,
     publishedAt: parseFeedDate(item.isoDate || item.pubDate),
   };
 }
@@ -48,4 +51,14 @@ function normalizeSummary(summary: string | null): string | null {
   if (!summary) return null;
   const trimmed = summary.replace(/\s+/g, ' ').trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeCategories(categories: string[]): string[] {
+  return Array.from(
+    new Set(
+      categories
+        .map((category) => category.replace(/\s+/g, ' ').trim())
+        .filter((category) => category.length > 0)
+    )
+  );
 }

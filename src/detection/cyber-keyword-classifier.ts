@@ -1,0 +1,200 @@
+export type CyberKeywordCategory = 'critical' | 'medium' | 'low' | 'negative';
+
+export interface CategorizedKeywordMatches {
+  critical: string[];
+  medium: string[];
+  low: string[];
+  negative: string[];
+}
+
+const KEYWORDS: Record<CyberKeywordCategory, string[]> = {
+  critical: [
+    'actively exploited',
+    'active exploitation',
+    'exploited in the wild',
+    'exploitation in the wild',
+    'exploitation observed',
+    'under active attack',
+    'mass exploitation',
+    'known exploited vulnerability',
+    'known exploited vulnerabilities',
+    'known exploited catalog',
+    'known exploited vulnerabilities catalog',
+    'cisa kev',
+    'kev catalog',
+    'zero-day',
+    '0-day',
+    'zero day',
+    'emergency patch',
+    'emergency update',
+    'out-of-band patch',
+    'remote code execution',
+    'pre-auth rce',
+    'unauthenticated rce',
+    'rce',
+    'authentication bypass',
+    'auth bypass',
+    'authorization bypass',
+    'privilege escalation',
+    'ransomware',
+    'data breach',
+    'data leak',
+    'compromise',
+    'compromised',
+    'backdoor',
+    'supply chain attack',
+    'weaponized exploit',
+    'weaponised exploit',
+    'account takeover',
+  ],
+  medium: [
+    'vulnerability',
+    'security vulnerability',
+    'critical vulnerability',
+    'critical flaw',
+    'flaw',
+    'security bug',
+    'weakness',
+    'patch tuesday',
+    'patch',
+    'security patch',
+    'security update',
+    'advisory',
+    'security advisory',
+    'disclosure',
+    'exploit code',
+    'proof of concept',
+    'proof-of-concept',
+    'poc',
+    'public exploit',
+    'public poc',
+    'malware',
+    'trojan',
+    'infostealer',
+    'botnet',
+    'threat actor',
+    'apt',
+    'ioc',
+    'indicator of compromise',
+    'phishing',
+    'credential theft',
+    'sql injection',
+    'sqli',
+    'xss',
+    'ssrf',
+    'path traversal',
+    'information disclosure',
+    'denial of service',
+    'dos',
+    'ddos',
+    'misconfiguration',
+    'credential exposure',
+    'api key leak',
+    'secret leak',
+  ],
+  low: [
+    'security',
+    'cybersecurity',
+    'cyber',
+    'risk',
+    'privacy',
+    'trust',
+    'secure',
+    'protection',
+    'hardening',
+    'update',
+    'fix',
+    'research',
+    'analysis',
+    'report',
+    'warning',
+    'alert',
+    'investigation',
+    'attack',
+    'attacker',
+    'hacker',
+    'identity',
+    'access',
+    'authentication',
+    'authorization',
+    'authorisation',
+    'login',
+    'password',
+    'account',
+    'admin',
+    'administrator',
+    'api',
+    'cloud',
+    'network',
+    'endpoint',
+    'certificate',
+    'encryption',
+    'sso',
+    'mfa',
+  ],
+  negative: [
+    'product review',
+    'stock price',
+    'share price',
+    'earnings call',
+    'quarterly results',
+    'annual results',
+    'financial results',
+    'market outlook',
+    'investor presentation',
+    'hiring',
+    'job opening',
+    'career',
+    'conference agenda',
+    'webinar',
+    'sponsored',
+    'award',
+    'partnership announcement',
+    'marketing campaign',
+    'product launch',
+    'new feature',
+    'feature release',
+    'customer story',
+    'case study',
+    'press release',
+    'thought leadership',
+    'executive appointment',
+    'leadership change',
+    'funding round',
+    'acquisition',
+    'merger',
+    'breach of contract',
+    'breach of agreement',
+    'breach of policy',
+    'market opportunity',
+    'market growth',
+  ],
+};
+
+export function detectCategorizedCyberKeywords(text: string): CategorizedKeywordMatches {
+  return {
+    critical: matchKeywords(text, KEYWORDS.critical),
+    medium: matchKeywords(text, KEYWORDS.medium),
+    low: matchKeywords(text, KEYWORDS.low),
+    negative: matchKeywords(text, KEYWORDS.negative),
+  };
+}
+
+export function matchKeywords(text: string, keywords: string[]): string[] {
+  const normalized = normalizeForMatching(text);
+  return keywords.filter((keyword) => containsPhrase(normalized, normalizeForMatching(keyword)));
+}
+
+function normalizeForMatching(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[‐‑‒–—―]/g, '-')
+    .replace(/[-_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function containsPhrase(normalizedText: string, normalizedPhrase: string): boolean {
+  const escaped = normalizedPhrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(normalizedText);
+}
