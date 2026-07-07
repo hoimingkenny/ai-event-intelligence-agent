@@ -22,6 +22,7 @@ The current-state reference: how the system is shaped and why. These documents a
 | [data-model.md](design/data-model.md) | Core tables and the article-vs-event separation |
 | [evaluation.md](design/evaluation.md) | Evaluation methodology: item/event-level metrics + human review dashboard |
 | [cyber-keyword-classification-standard.md](design/cyber-keyword-classification-standard.md) | Standard for cheap-filter cyber keyword categories, scoring, and false-positive control |
+| [cheap-filter-rule-engine.md](design/cheap-filter-rule-engine.md) | Implemented cheap-filter rule engine: signal extractors, score table, decision tree, and deviations from the standard |
 | [tradeoffs.md](design/tradeoffs.md) | Deliberate trade-offs and their rationale |
 | [limitations.md](design/limitations.md) | Known limits of the current approach |
 

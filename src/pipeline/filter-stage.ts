@@ -144,6 +144,7 @@ export function decideCheapFilter(article: CheapFilterInput): FilterDecision {
     score -= 20;
     blockingReasons.add('cheap_filter_old_or_stale_article');
   }
+  score = normalizeScore(score);
 
   let decision: CheapFilterDecision;
   if (cves.length > 0 || keywords.critical.length > 0 || (vendors.products.length > 0 && hasCyberContext)) {
@@ -297,4 +298,8 @@ function hasLowCombination(lowKeywords: string[]): boolean {
     (low.has('password') && low.has('leak')) ||
     (low.has('login') && low.has('bypass'))
   );
+}
+
+function normalizeScore(score: number): number {
+  return Math.max(0, Math.min(100, score));
 }

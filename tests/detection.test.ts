@@ -62,6 +62,25 @@ describe('cheap detection', () => {
     expect(decision.matchedSignals.cves).toEqual(['CVE-2026-12345']);
   });
 
+  it('normalizes cheap-filter scores to a 0-100 range', () => {
+    const maxSignalDecision = decideCheapFilter({
+      title: 'Microsoft SharePoint CVE-2026-12345 zero-day actively exploited in RCE attacks',
+      rssSummary: 'CISA added the known exploited vulnerability after emergency patches for Microsoft SharePoint Server.',
+      rssCategories: ['Security Advisory', 'Vulnerability', 'Zero-Day'],
+      sourceName: 'CISA',
+      publishedAt: new Date(),
+    });
+    const noisyDecision = decideCheapFilter({
+      title: 'Cloudflare announces product launch and market opportunity',
+      rssSummary: 'The feature release highlights customer stories and market growth.',
+      sourceName: 'General Business News',
+    });
+
+    expect(maxSignalDecision.score).toBe(100);
+    expect(noisyDecision.score).toBeGreaterThanOrEqual(0);
+    expect(noisyDecision.score).toBeLessThanOrEqual(100);
+  });
+
   it('keeps critical exploitation phrases', () => {
     const decision = decideCheapFilter({
       title: 'Fortinet warns customers of actively exploited FortiOS flaw',

@@ -8,6 +8,8 @@ describe('human review server UI', () => {
     expect(html).toContain('Vendor Threat Watch Review');
     expect(html).toContain('/api/review-cases');
     expect(html).toContain('/api/reviews');
+    expect(html).toContain('/api/llm-evaluations');
+    expect(html).toContain('LLM evaluation');
     expect(html).toContain('Save verdict');
     expect(html).toContain('Is the vendor/product impact correct?');
   });

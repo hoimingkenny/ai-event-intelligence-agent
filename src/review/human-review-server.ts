@@ -8,6 +8,7 @@ import {
   loadHumanReviewDashboard,
   saveHumanReviewVerdict,
 } from './human-review-dashboard.js';
+import { loadLlmEvaluationDashboard } from './llm-evaluation-dashboard.js';
 
 const MAX_REVIEW_CASE_LIMIT = 200;
 const MAX_JSON_BODY_BYTES = 64 * 1024;
@@ -63,6 +64,16 @@ async function routeRequest(
   if (req.method === 'GET' && url.pathname === '/api/review-cases') {
     const limit = clampLimit(Number(url.searchParams.get('limit') ?? options.defaultLimit ?? 50));
     const dashboard = await loadHumanReviewDashboard(db, limit);
+    sendJson(res, dashboard);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/llm-evaluations') {
+    const limit = clampLimit(Number(url.searchParams.get('limit') ?? 20));
+    const dashboard = await loadLlmEvaluationDashboard(db, {
+      limit,
+      runId: url.searchParams.get('runId') ?? undefined,
+    });
     sendJson(res, dashboard);
     return;
   }
@@ -177,6 +188,9 @@ export function renderReviewApp(): string {
     button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
     button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
     button.primary:hover { background: var(--accent-dark); }
+    .tabs { display: inline-flex; gap: 6px; margin-right: 8px; }
+    .tab { min-width: 118px; }
+    .tab.active { background: #e9f6f4; border-color: #95cfc7; color: var(--accent-dark); font-weight: 650; }
     .layout { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 60px); }
     .sidebar { border-right: 1px solid var(--line); background: var(--surface); min-width: 0; }
     .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
@@ -207,6 +221,12 @@ export function renderReviewApp(): string {
     textarea { width: 100%; min-height: 90px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
     .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .empty { color: var(--muted); padding: 20px; }
+    .table { width: 100%; border-collapse: collapse; }
+    .table th, .table td { border-bottom: 1px solid var(--line); padding: 7px 6px; text-align: left; vertical-align: top; }
+    .table th { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .run-button { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 11px 12px; background: var(--surface); }
+    .run-button.active { background: #e9f6f4; box-shadow: inset 3px 0 0 var(--accent); }
+    .suggestions { display: grid; gap: 6px; margin-top: 8px; }
     a { color: var(--accent); }
     @media (max-width: 980px) {
       .layout, .grid { grid-template-columns: 1fr; }
@@ -218,6 +238,10 @@ export function renderReviewApp(): string {
   <header>
     <h1>Vendor Threat Watch Review</h1>
     <div>
+      <span class="tabs" role="tablist" aria-label="Dashboard view">
+        <button id="tab-human" class="tab active" type="button">Human review</button>
+        <button id="tab-llm" class="tab" type="button">LLM evaluation</button>
+      </span>
       <button id="refresh">Refresh</button>
     </div>
   </header>
@@ -242,7 +266,7 @@ export function renderReviewApp(): string {
     <main id="detail" class="content"><p class="empty">Select a case to review.</p></main>
   </div>
   <script>
-    const state = { dashboard: null, selectedId: null };
+    const state = { view: 'human', dashboard: null, llmDashboard: null, selectedId: null, selectedRunId: null };
     const verdictValues = ['not_reviewed', 'correct', 'incorrect', 'unclear'];
     const verdictLabels = {
       not_reviewed: 'Not reviewed',
@@ -251,10 +275,24 @@ export function renderReviewApp(): string {
       unclear: 'Unclear',
     };
 
-    document.getElementById('refresh').addEventListener('click', loadCases);
+    document.getElementById('refresh').addEventListener('click', () => state.view === 'llm' ? loadLlmEvaluations() : loadCases());
+    document.getElementById('tab-human').addEventListener('click', () => switchView('human'));
+    document.getElementById('tab-llm').addEventListener('click', () => switchView('llm'));
     document.getElementById('filter').addEventListener('change', render);
-    document.getElementById('limit').addEventListener('change', loadCases);
+    document.getElementById('limit').addEventListener('change', () => state.view === 'llm' ? loadLlmEvaluations() : loadCases());
     loadCases();
+
+    async function switchView(view) {
+      state.view = view;
+      document.getElementById('tab-human').classList.toggle('active', view === 'human');
+      document.getElementById('tab-llm').classList.toggle('active', view === 'llm');
+      document.getElementById('filter').disabled = view === 'llm';
+      if (view === 'llm') {
+        await loadLlmEvaluations();
+      } else {
+        render();
+      }
+    }
 
     async function loadCases() {
       const limit = document.getElementById('limit').value;
@@ -263,6 +301,16 @@ export function renderReviewApp(): string {
       const first = filteredCases()[0];
       state.selectedId = first?.article.id ?? null;
       render();
+    }
+
+    async function loadLlmEvaluations(runId = null) {
+      const limit = document.getElementById('limit').value;
+      const params = new URLSearchParams({ limit });
+      if (runId) params.set('runId', runId);
+      const response = await fetch('/api/llm-evaluations?' + params.toString());
+      state.llmDashboard = await response.json();
+      state.selectedRunId = state.llmDashboard?.selectedRun?.id ?? state.llmDashboard?.runs?.[0]?.id ?? null;
+      renderLlmEvaluationDashboard();
     }
 
     function filteredCases() {
@@ -275,10 +323,21 @@ export function renderReviewApp(): string {
     }
 
     function render() {
+      if (state.view === 'llm') {
+        renderLlmEvaluationDashboard();
+        return;
+      }
       if (!state.dashboard) return;
       renderSummary(state.dashboard.summary);
       renderList(filteredCases());
       renderDetail(filteredCases().find((item) => item.article.id === state.selectedId) ?? filteredCases()[0] ?? null);
+    }
+
+    function renderLlmEvaluationDashboard() {
+      const dashboard = state.llmDashboard;
+      renderLlmSummary(dashboard);
+      renderRunList(dashboard?.runs ?? []);
+      renderRunDetail(dashboard?.selectedRun ?? null, dashboard);
     }
 
     function renderSummary(summary) {
@@ -288,6 +347,18 @@ export function renderReviewApp(): string {
         metric('LLM outputs', summary.llmOutputs),
         metric('Early warnings', summary.earlyWarnings),
         metric('Confirmed', summary.confirmedAlerts),
+      ].join('');
+    }
+
+    function renderLlmSummary(dashboard) {
+      const run = dashboard?.selectedRun;
+      const metrics = run?.metrics;
+      document.getElementById('summary').innerHTML = [
+        metric('Runs', dashboard?.runs?.length ?? 0),
+        metric('Evaluated', metrics?.totalEvaluated ?? 0),
+        metric('False negatives', metrics?.falseNegativeRisks ?? 0),
+        metric('False positives', metrics?.falsePositiveRisks ?? 0),
+        metric('Actionable', metrics?.actionableForImpactReview ?? 0),
       ].join('');
     }
 
@@ -313,6 +384,35 @@ export function renderReviewApp(): string {
       }
     }
 
+    function renderRunList(runs) {
+      const list = document.getElementById('case-list');
+      if (!state.llmDashboard?.available) {
+        list.innerHTML = '<p class="empty">' + escapeHtml(state.llmDashboard?.message || 'LLM evaluation is unavailable.') + '</p>';
+        return;
+      }
+      if (runs.length === 0) {
+        list.innerHTML = '<p class="empty">' + escapeHtml(state.llmDashboard?.message || 'No LLM evaluation runs found.') + '</p>';
+        return;
+      }
+      list.innerHTML = runs.map((run) => {
+        const active = run.id === state.selectedRunId ? ' active' : '';
+        return '<button class="run-button' + active + '" data-id="' + escapeAttr(run.id) + '">' +
+          '<div class="case-title">' + escapeHtml(run.modelName) + '</div>' +
+          '<div class="muted">' + escapeHtml(formatDate(run.startedAt)) + '</div>' +
+          '<div class="badges">' +
+            badge(String(run.totalEvaluationsSaved) + ' judged', run.totalEvaluationsFailed > 0 ? 'warn' : 'good') +
+            (run.totalEvaluationsFailed > 0 ? badge(String(run.totalEvaluationsFailed) + ' failed', 'bad') : '') +
+          '</div>' +
+        '</button>';
+      }).join('');
+      for (const button of list.querySelectorAll('.run-button')) {
+        button.addEventListener('click', async () => {
+          state.selectedRunId = button.dataset.id;
+          await loadLlmEvaluations(state.selectedRunId);
+        });
+      }
+    }
+
     function renderDetail(item) {
       const detail = document.getElementById('detail');
       if (!item) {
@@ -332,6 +432,28 @@ export function renderReviewApp(): string {
         '</aside>' +
       '</div>';
       document.getElementById('review-form').addEventListener('submit', (eventSubmit) => submitReview(eventSubmit, item, event));
+    }
+
+    function renderRunDetail(run, dashboard) {
+      const detail = document.getElementById('detail');
+      if (!dashboard?.available) {
+        detail.innerHTML = '<p class="empty">' + escapeHtml(dashboard?.message || 'LLM evaluation is unavailable.') + '</p>';
+        return;
+      }
+      if (!run) {
+        detail.innerHTML = '<p class="empty">' + escapeHtml(dashboard?.message || 'Run the LLM judge, then refresh this tab.') + '</p>';
+        return;
+      }
+      detail.innerHTML = '<div class="grid">' +
+        '<section class="stack">' +
+          panel('Run Summary', llmRunSummaryHtml(run)) +
+          panel('Priority Findings', llmPriorityHtml(run)) +
+        '</section>' +
+        '<aside class="stack">' +
+          panel('Scoring Issues', countTable(run.issueCounts, 'Issue')) +
+          panel('Relevance Types', countTable(run.relevanceCounts, 'Type')) +
+        '</aside>' +
+      '</div>';
     }
 
     async function submitReview(eventSubmit, item, event) {
@@ -401,6 +523,68 @@ export function renderReviewApp(): string {
         ? '<pre>' + escapeHtml(JSON.stringify(item.article.llmClassification, null, 2)) + '</pre>'
         : '<p class="muted">No LLM classification recorded. This case is currently ' + escapeHtml(item.article.processingStatus) + ', so it may not have reached the classification stage.</p>';
       return '<h3>Entities</h3>' + entities + '<h3>LLM Classification</h3>' + llmClassification + '<h3>Events</h3>' + events + '<h3>Alerts</h3>' + alerts + '<h3>LLM Audit</h3>' + audits;
+    }
+
+    function llmRunSummaryHtml(run) {
+      const metrics = run.metrics;
+      return kvText('Run ID', run.id) +
+        kvText('Model', run.modelName) +
+        kvText('Prompt', run.promptVersion) +
+        kvText('Started', formatDate(run.startedAt)) +
+        kvText('Finished', formatDate(run.finishedAt)) +
+        kvText('Sampled', String(run.totalArticlesSampled)) +
+        kvText('Saved / failed', String(run.totalEvaluationsSaved) + ' / ' + String(run.totalEvaluationsFailed)) +
+        '<h3>Labels</h3>' +
+        '<div class="summary">' +
+          metric('Critical', metrics.criticalRelevant) +
+          metric('Relevant', metrics.relevant) +
+          metric('Borderline', metrics.borderline) +
+          metric('Irrelevant', metrics.irrelevant) +
+        '</div>' +
+        '<h3>Quality signals</h3>' +
+        '<div class="summary">' +
+          metric('False negatives', metrics.falseNegativeRisks) +
+          metric('False positives', metrics.falsePositiveRisks) +
+          metric('Over-scored irrelevant', metrics.overScoredIrrelevant) +
+          metric('Under-scored critical', metrics.underScoredCritical) +
+        '</div>';
+    }
+
+    function llmPriorityHtml(run) {
+      const rows = run.evaluations || [];
+      if (rows.length === 0) return '<p class="muted">No saved evaluations in this run.</p>';
+      return '<table class="table"><thead><tr><th>Article</th><th>Cheap filter</th><th>LLM judge</th><th>Why it matters</th></tr></thead><tbody>' +
+        rows.slice(0, 40).map((item) => '<tr>' +
+          '<td>' +
+            (item.articleUrl ? '<a href="' + escapeAttr(item.articleUrl) + '" target="_blank" rel="noreferrer">' + escapeHtml(item.articleTitle || 'Article ' + item.articleId) + '</a>' : escapeHtml(item.articleTitle || 'Article ' + item.articleId)) +
+            '<div class="muted">' + escapeHtml(item.sourceName || 'unknown source') + ' · ' + formatDate(item.publishedAt) + '</div>' +
+          '</td>' +
+          '<td>' + badge(item.cheapFilterDecision, item.cheapFilterDecision === 'DROP' ? 'bad' : item.cheapFilterDecision === 'MAYBE_KEEP' ? 'warn' : 'good') + '<div class="muted">score ' + escapeHtml(String(item.cheapFilterScore)) + '</div></td>' +
+          '<td>' + badge(item.llmLabel, item.llmLabel === 'IRRELEVANT' ? 'bad' : item.llmLabel === 'BORDERLINE' ? 'warn' : 'good') + '<div class="muted">' + escapeHtml(item.scoreAssessment) + (item.recommendedScoreBand ? ' · ' + escapeHtml(item.recommendedScoreBand) : '') + '</div></td>' +
+          '<td>' +
+            '<div>' + escapeHtml(item.scoringIssue) + '</div>' +
+            '<div class="muted">' + escapeHtml(item.explanation) + '</div>' +
+            suggestionsHtml(item) +
+          '</td>' +
+        '</tr>').join('') +
+      '</tbody></table>';
+    }
+
+    function suggestionsHtml(item) {
+      const suggestions = [
+        ...item.suggestedRuleChanges.map((value) => 'Rule: ' + value),
+        ...item.suggestedKeywordsToAdd.map((value) => 'Keyword: ' + value),
+        ...item.suggestedVendorProductAliasesToAdd.map((value) => 'Alias: ' + value),
+      ];
+      if (suggestions.length === 0) return '';
+      return '<div class="suggestions">' + suggestions.slice(0, 4).map((value) => badge(value, 'warn')).join('') + '</div>';
+    }
+
+    function countTable(rows, label) {
+      if (!rows || rows.length === 0) return '<p class="muted">No data.</p>';
+      return '<table class="table"><thead><tr><th>' + escapeHtml(label) + '</th><th>Count</th></tr></thead><tbody>' +
+        rows.map((row) => '<tr><td>' + escapeHtml(row.key) + '</td><td>' + escapeHtml(String(row.count)) + '</td></tr>').join('') +
+      '</tbody></table>';
     }
 
     function reviewFormHtml(item, event) {

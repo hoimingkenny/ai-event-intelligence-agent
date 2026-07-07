@@ -59,7 +59,7 @@
       "Cloudflare Zero Trust",
       "Cloudflare Workers"
     ],
-    "criticality": "medium",
+    "criticality": "high",
     "inProduction": false
   },
   {
@@ -135,7 +135,7 @@
       "Salesforce instance",
       "Salesforce data"
     ],
-    "criticality": "medium",
+    "criticality": "low",
     "inProduction": false
   },
   {
@@ -147,7 +147,7 @@
       "Drift",
       "Salesloft"
     ],
-    "criticality": "medium",
+    "criticality": "low",
     "inProduction": false
   },
   {
@@ -158,7 +158,7 @@
       "HashiCorp Vault",
       "Vault"
     ],
-    "criticality": "medium",
+    "criticality": "low",
     "inProduction": false
   }
 ]

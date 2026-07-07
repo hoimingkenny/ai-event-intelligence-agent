@@ -144,8 +144,8 @@ Combine keyword score with other signals:
 
 ```text
 CVE found:                 +50
-Monitored product found:   +45
-Monitored vendor found:    +35
+Monitored product found:   +65
+Monitored vendor found:    +50
 Official vendor source:    +25
 Government/CERT source:    +25
 Security media source:     +10
@@ -154,6 +154,9 @@ Security RSS category:     +10
 Article published <24h:    +10
 Old article/stale repost:  -20
 ```
+
+The final cheap-filter score is normalized to a 0–100 range before it is
+stored, displayed, or compared with thresholds.
 
 Suggested decision thresholds:
 

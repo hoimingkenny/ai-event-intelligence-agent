@@ -37,6 +37,7 @@
     "articles:manual:drop": "tsx eval/scripts/import-manual-articles.ts --file=eval/datasets/manual-drop-articles.jsonl",
     "eval:review": "tsx scripts/serve-eval-review.ts",
     "eval:validate": "tsx eval/scripts/validate-dataset.ts",
+    "eval:cheap-filter:judge": "tsx scripts/eval-cheap-filter-llm.ts",
     "playwright:install": "playwright install chromium",
     "check": "tsc --noEmit",
     "test": "vitest run",
