@@ -38,15 +38,15 @@ describe('cheap detection', () => {
 
   it('advances articles with vendor and vulnerability signal', () => {
     const decision = decideCheapFilter({
-      title: 'SailPoint IdentityIQ vulnerability patched',
-      rssSummary: 'The advisory describes privilege escalation in IdentityIQ.',
+      title: 'Zscaler Internet Access vulnerability patched',
+      rssSummary: 'The advisory describes privilege escalation in ZIA.',
       sourceName: 'Bleeping Computer',
     });
 
     expect(decision.decision).toBe('KEEP');
     expect(decision.shouldExtract).toBe(true);
-    expect(decision.vendors).toContain('SailPoint');
-    expect(decision.products).toContain('IdentityIQ');
+    expect(decision.vendors).toContain('Zscaler');
+    expect(decision.products).toContain('Zscaler Internet Access');
   });
 
   it('keeps articles with CVEs in RSS metadata', () => {
@@ -105,7 +105,7 @@ describe('cheap detection', () => {
 
   it('does not blindly promote monitored vendor business articles', () => {
     const decision = decideCheapFilter({
-      title: 'Cloudflare announces new feature release for enterprise customers',
+      title: 'Microsoft announces new feature release for enterprise customers',
       rssSummary: 'The product launch includes new dashboard tools.',
       sourceName: 'General Business News',
     });

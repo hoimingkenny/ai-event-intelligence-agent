@@ -8,6 +8,8 @@ Vendor Threat Watch is an AI-assisted cyber early-warning and vendor-impact tria
 
 **LLM is not the system of record** — it performs specialist reasoning inside a deterministic workflow. Postgres is the source of truth; every stage is independently retryable and auditable.
 
+**Current scope: proof of concept.** The monitored inventory (`src/storage/vendorInventory.ts`) is deliberately narrowed to 3 vendor products — CyberArk PAS (quiet, critical), Zscaler ZIA (mid-volume), Microsoft Windows Server/Exchange/Entra (high-volume, noisy) — with source-tier-diverse feeds in `src/config/rssFeeds.ts` (CISA, MSRC, CyberArk blog, security media). The cheap-filter eval dataset targets the same 3 products. Expand the inventory only after the evaluation gate is trustworthy at this scope.
+
 ## Development Workflow (mandatory)
 
 1. **Never commit directly to `main`/`master`.** All changes go on a feature branch (`feat/…`, `fix/…`, `chore/…`, `docs/…`).

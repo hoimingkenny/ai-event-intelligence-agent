@@ -1,14 +1,13 @@
 import type { VendorProduct } from '../types/domain.js';
 
+/**
+ * Proof-of-concept scope: 3 vendor products only.
+ * Chosen to cover one quiet critical vendor (CyberArk), one mid-volume vendor
+ * (Zscaler), and one high-volume noisy vendor (Microsoft), so both the
+ * positive and negative filter paths are exercised with sources that are easy
+ * to find. Expand the inventory after the POC evaluation gate is trustworthy.
+ */
 export const monitoredVendors: VendorProduct[] = [
-  {
-    id: 'vp_sailpoint_iiq',
-    vendor: 'SailPoint',
-    product: 'IdentityIQ',
-    aliases: ['SailPoint IIQ', 'IdentityIQ', 'IIQ'],
-    criticality: 'high',
-    inProduction: true,
-  },
   {
     id: 'vp_cyberark_pas',
     vendor: 'CyberArk',
@@ -26,19 +25,11 @@ export const monitoredVendors: VendorProduct[] = [
     inProduction: true,
   },
   {
-    id: 'vp_cloudflare',
-    vendor: 'Cloudflare',
-    product: 'Cloudflare platform',
-    aliases: ['Cloudflare WAF', 'Cloudflare Zero Trust', 'Cloudflare Access'],
-    criticality: 'medium',
-    inProduction: false,
-  },
-  {
     id: 'vp_microsoft_windows_server',
     vendor: 'Microsoft',
     product: 'Windows Server',
     aliases: ['Microsoft Windows Server', 'Windows Server', 'Microsoft Exchange', 'Microsoft Entra', 'Azure AD'],
     criticality: 'high',
     inProduction: true,
-  }
+  },
 ];
