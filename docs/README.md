@@ -11,6 +11,7 @@ Forward-looking documents: what we intend to build, phased roadmaps, scope decis
 | [ai-event-intelligence-agent-plan.md](plans/ai-event-intelligence-agent-plan.md) | Overall project plan: staged agent workflow, goals, phases |
 | [rss-vector-pipeline-implementation-plan.md](plans/rss-vector-pipeline-implementation-plan.md) | RSS ingestion + vector dedup pipeline implementation plan |
 | [production-readiness.md](plans/production-readiness.md) | Prototype → enterprise-grade: 8 pillars (current/target/done-when) + 4 phases |
+| [merge-review-and-eval.md](plans/merge-review-and-eval.md) | Merge `npm run review:dashboard` and `npm run eval:review` into a single server + page |
 
 ## `design/` — system design reference
 
@@ -21,6 +22,9 @@ The current-state reference: how the system is shaped and why. These documents a
 | [architecture.md](design/architecture.md) | Design principles; LLM-inside-deterministic-workflow model |
 | [data-model.md](design/data-model.md) | Core tables and the article-vs-event separation |
 | [evaluation.md](design/evaluation.md) | Evaluation methodology: item/event-level metrics + human review dashboard |
+| [cyber-keyword-classification-standard.md](design/cyber-keyword-classification-standard.md) | Standard for cheap-filter cyber keyword categories, scoring, and false-positive control |
+| [cheap-filter-rule-engine.md](design/cheap-filter-rule-engine.md) | Implemented cheap-filter rule engine: signal extractors, score table, decision tree, and deviations from the standard |
+| [ui-and-dashboards.md](design/ui-and-dashboards.md) | Dashboard surfaces: articles portal plus merged review/eval dashboard routes, data flow, shared patterns, deployment considerations |
 | [tradeoffs.md](design/tradeoffs.md) | Deliberate trade-offs and their rationale |
 | [limitations.md](design/limitations.md) | Known limits of the current approach |
 

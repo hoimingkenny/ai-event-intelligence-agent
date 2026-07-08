@@ -1,3 +1,7 @@
+# App-owned tables live in the app schema; public remains available for
+# extensions such as pgvector.
+x-app-database-url: &app_database_url postgres://cyber:cyber@postgres:5432/vendor_threat_watch?options=-c%20search_path%3Dapp%2Cpublic
+
 services:
   postgres:
     image: pgvector/pgvector:pg18
@@ -10,6 +14,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres18_data:/var/lib/postgresql
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cyber -d vendor_threat_watch"]
       interval: 10s
@@ -36,7 +41,7 @@ services:
     image: vendor-threat-watch
     command: ["npm", "run", "db:migrate"]
     environment:
-      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+      DATABASE_URL: *app_database_url
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,7 +56,7 @@ services:
     command: ["npm", "run", "scheduler"]
     env_file: .env
     environment:
-      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+      DATABASE_URL: *app_database_url
       REDIS_HOST: redis
       RSS_FETCH_INTERVAL_MINUTES: "20"
     depends_on:
@@ -69,7 +74,7 @@ services:
     command: ["npm", "run", "portal"]
     env_file: .env
     environment:
-      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+      DATABASE_URL: *app_database_url
       PORTAL_HOST: 0.0.0.0
     ports:
       - "127.0.0.1:4322:4322"
@@ -87,7 +92,7 @@ services:
     command: ["npm", "run", "review:dashboard"]
     env_file: .env
     environment:
-      DATABASE_URL: postgres://cyber:cyber@postgres:5432/vendor_threat_watch
+      DATABASE_URL: *app_database_url
     ports:
       - "127.0.0.1:4321:4321"
     depends_on:

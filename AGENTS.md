@@ -8,6 +8,8 @@ Vendor Threat Watch is an AI-assisted cyber early-warning and vendor-impact tria
 
 **LLM is not the system of record** — it performs specialist reasoning inside a deterministic workflow. Postgres is the source of truth; every stage is independently retryable and auditable.
 
+**Current scope: proof of concept.** The monitored inventory (`src/storage/vendorInventory.ts`) is deliberately narrowed to 3 vendor products — CyberArk PAS (quiet, critical), Zscaler ZIA (mid-volume), Microsoft Windows Server/Exchange/Entra (high-volume, noisy) — with source-tier-diverse feeds in `src/config/rssFeeds.ts` (CISA, MSRC, CyberArk blog, security media). The cheap-filter eval dataset targets the same 3 products. Expand the inventory only after the evaluation gate is trustworthy at this scope.
+
 ## Development Workflow (mandatory)
 
 1. **Never commit directly to `main`/`master`.** All changes go on a feature branch (`feat/…`, `fix/…`, `chore/…`, `docs/…`).
@@ -38,6 +40,12 @@ npm run fixtures:review           # Side-by-side extraction review report (revie
 npm run check            # Type-check TypeScript
 npm test                 # Run test suite (vitest)
 npm run eval             # Run labelled evaluation set
+
+npm run eval:cheap-filter   # Cheap-filter eval against labelled dataset (reports in eval/reports/)
+npm run eval:candidates     # Harvest labeling candidates from pipeline DB into eval/datasets/
+npm run articles:manual     # Import hand-authored test articles (eval/datasets/manual-articles.jsonl) into the DB + filter them
+npm run eval:review         # Labeling + report review UI for the cheap-filter dataset (:4323)
+npm run eval:validate       # Validate cheap-filter dataset JSONL and print label counts
 ```
 
 Individual stage commands also exist (`ingest:rss`, `filter:articles`, `extract:articles`, `entities:articles`, `embed:articles`, `dedup:articles`, `events:articles`, `classify:articles`, `alerts:events`).

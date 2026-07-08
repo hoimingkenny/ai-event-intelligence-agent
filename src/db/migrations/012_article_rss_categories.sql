@@ -1,0 +1,2 @@
+ALTER TABLE articles
+  ADD COLUMN IF NOT EXISTS rss_categories TEXT[] NOT NULL DEFAULT '{}';

@@ -6,6 +6,7 @@ export interface FetchedFeedItem {
   guid?: string;
   content?: string;
   contentSnippet?: string;
+  categories?: string[];
   isoDate?: string;
   pubDate?: string;
 }
@@ -25,6 +26,7 @@ export class ParserRssFetcher implements RssFetcher {
       guid: item.guid,
       content: item.content,
       contentSnippet: item.contentSnippet,
+      categories: item.categories,
       isoDate: item.isoDate,
       pubDate: item.pubDate,
     }));

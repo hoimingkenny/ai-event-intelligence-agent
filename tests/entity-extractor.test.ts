@@ -17,14 +17,14 @@ describe('extractIocs', () => {
 describe('extractArticleEntities', () => {
   it('extracts vendor, product, CVE, IOC, and attack indicator entities', () => {
     const entities = extractArticleEntities('article-1', {
-      title: 'SailPoint IdentityIQ CVE-2026-12345 vulnerability exploited from 203.0.113.4.',
+      title: 'Zscaler Internet Access CVE-2026-12345 vulnerability exploited from 203.0.113.4.',
     });
 
     expect(entities).toContainEqual(
-      expect.objectContaining({ entityType: 'vendor', entityValue: 'SailPoint' })
+      expect.objectContaining({ entityType: 'vendor', entityValue: 'Zscaler' })
     );
     expect(entities).toContainEqual(
-      expect.objectContaining({ entityType: 'product', entityValue: 'IdentityIQ' })
+      expect.objectContaining({ entityType: 'product', entityValue: 'Zscaler Internet Access' })
     );
     expect(entities).toContainEqual(
       expect.objectContaining({ entityType: 'cve', entityValue: 'CVE-2026-12345' })

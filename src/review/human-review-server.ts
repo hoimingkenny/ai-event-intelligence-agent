@@ -1,4 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import { join } from 'node:path';
 import { URL } from 'node:url';
 import { ZodError } from 'zod';
 import type { Queryable } from '../db/repositories/types.js';
@@ -8,6 +9,14 @@ import {
   loadHumanReviewDashboard,
   saveHumanReviewVerdict,
 } from './human-review-dashboard.js';
+import { loadLlmEvaluationDashboard } from './llm-evaluation-dashboard.js';
+import {
+  defaultEvalPaneState,
+  evalPaneBodyScript,
+  evalPaneStyles,
+  renderEvalPane,
+} from './eval/eval-page.js';
+import { routeEvalRequest, sendEvalError, type EvalReviewServerOptions } from './eval/eval-routes.js';
 
 const MAX_REVIEW_CASE_LIMIT = 200;
 const MAX_JSON_BODY_BYTES = 64 * 1024;
@@ -16,6 +25,9 @@ export interface HumanReviewServerOptions {
   host?: string;
   port?: number;
   defaultLimit?: number;
+  evalDatasetPath?: string;
+  evalCandidatesPath?: string;
+  evalDb?: Queryable | null;
 }
 
 export async function startHumanReviewServer(
@@ -60,9 +72,37 @@ async function routeRequest(
     return;
   }
 
+  if (url.pathname.startsWith('/api/eval/')) {
+    try {
+      await routeEvalRequest(req, res, getEvalOptions(db, options), { apiPrefix: '/api/eval' });
+    } catch (error) {
+      sendEvalError(res, error);
+    }
+    return;
+  }
+
+  if (isLegacyEvalApiPath(url.pathname)) {
+    try {
+      await routeEvalRequest(req, res, getEvalOptions(db, options), { apiPrefix: '/api' });
+    } catch (error) {
+      sendEvalError(res, error);
+    }
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/review-cases') {
     const limit = clampLimit(Number(url.searchParams.get('limit') ?? options.defaultLimit ?? 50));
-    const dashboard = await loadHumanReviewDashboard(db, limit);
+    const dashboard = await loadHumanReviewDashboard(db, limit, url.searchParams.get('articleId') ?? undefined);
+    sendJson(res, dashboard);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/llm-evaluations') {
+    const limit = clampLimit(Number(url.searchParams.get('limit') ?? 20));
+    const dashboard = await loadLlmEvaluationDashboard(db, {
+      limit,
+      runId: url.searchParams.get('runId') ?? undefined,
+    });
     sendJson(res, dashboard);
     return;
   }
@@ -76,6 +116,25 @@ async function routeRequest(
   }
 
   sendJson(res, { error: { code: 'NOT_FOUND', message: 'Route not found' } }, 404);
+}
+
+function isLegacyEvalApiPath(pathname: string): boolean {
+  return (
+    pathname === '/api/candidates' ||
+    pathname === '/api/labels' ||
+    pathname === '/api/decisions' ||
+    pathname === '/api/labels/from-article' ||
+    pathname === '/api/inventory' ||
+    pathname === '/api/report'
+  );
+}
+
+function getEvalOptions(db: Queryable, options: HumanReviewServerOptions): EvalReviewServerOptions {
+  return {
+    datasetPath: options.evalDatasetPath ?? join(process.cwd(), 'eval/datasets/cheap-filter-eval.jsonl'),
+    candidatesPath: options.evalCandidatesPath ?? join(process.cwd(), 'eval/datasets/cheap-filter-candidates.jsonl'),
+    db: options.evalDb === undefined ? db : options.evalDb,
+  };
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -146,6 +205,20 @@ class PayloadTooLargeError extends Error {
   }
 }
 
+/**
+ * Render the merged dashboard. One HTML document, one shared `state` object,
+ * two panes (`#review-pane` and `#eval-pane`) toggled by the top-level tabs.
+ *
+ * The eval pane's HTML, CSS, and JS come from src/review/eval/eval-page.ts so
+ * the standalone eval server (used by tests + as a future debug surface)
+ * shares the same renderers.
+ *
+ * Cross-pane article selection: when the human pane picks an article it writes
+ * `state.eval.selectedArticleId`; when the eval pane's Live tab picks an
+ * article, initEvalPane calls `onLiveArticleSelected(id)` to propagate the
+ * selection back into `state.human.selectedId` and (if visible) refresh the
+ * human list.
+ */
 export function renderReviewApp(): string {
   return `<!doctype html>
 <html lang="en">
@@ -168,6 +241,7 @@ export function renderReviewApp(): string {
       --good: #146c43;
     }
     * { box-sizing: border-box; }
+    html, body { width: 100%; min-width: 100%; }
     body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
     h1 { margin: 0; font-size: 18px; letter-spacing: 0; }
@@ -177,10 +251,13 @@ export function renderReviewApp(): string {
     button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; cursor: pointer; }
     button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
     button.primary:hover { background: var(--accent-dark); }
+    .tabs { display: inline-flex; gap: 6px; margin-right: 8px; }
+    .tab { min-width: 118px; }
+    .tab.active { background: #e9f6f4; border-color: #95cfc7; color: var(--accent-dark); font-weight: 650; }
     .layout { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 60px); }
     .sidebar { border-right: 1px solid var(--line); background: var(--surface); min-width: 0; }
     .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
-    .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+    .summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
     .metric { border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: #fbfcfd; }
     .metric strong { display: block; font-size: 20px; line-height: 1.1; }
     .case-list { max-height: calc(100vh - 230px); overflow: auto; }
@@ -207,42 +284,62 @@ export function renderReviewApp(): string {
     textarea { width: 100%; min-height: 90px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
     .actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .empty { color: var(--muted); padding: 20px; }
+    .table { width: 100%; border-collapse: collapse; }
+    .table th, .table td { border-bottom: 1px solid var(--line); padding: 7px 6px; text-align: left; vertical-align: top; }
+    .table th { color: var(--muted); font-size: 12px; font-weight: 650; }
     a { color: var(--accent); }
     @media (max-width: 980px) {
       .layout, .grid { grid-template-columns: 1fr; }
       .case-list { max-height: 360px; }
     }
+    ${evalPaneStyles()}
   </style>
 </head>
 <body>
   <header>
     <h1>Vendor Threat Watch Review</h1>
     <div>
-      <button id="refresh">Refresh</button>
+      <span class="tabs" role="tablist" aria-label="Dashboard view">
+        <button id="tab-human" class="tab active" type="button">Human review</button>
+        <button id="tab-eval" class="tab" type="button">Cheap-filter eval</button>
+      </span>
+      <button id="refresh" type="button">Refresh</button>
     </div>
   </header>
-  <div class="layout">
-    <aside class="sidebar">
-      <div class="filters">
-        <select id="filter" aria-label="Filter cases">
-          <option value="needs">Needs review</option>
-          <option value="llm">LLM output</option>
-          <option value="all">All cases</option>
-          <option value="reviewed">Reviewed</option>
-        </select>
-        <select id="limit" aria-label="Case limit">
-          <option value="25">25 latest</option>
-          <option value="50" selected>50 latest</option>
-          <option value="100">100 latest</option>
-        </select>
-      </div>
-      <div id="summary" class="summary"></div>
-      <div id="case-list" class="case-list"><p class="empty">Loading cases...</p></div>
-    </aside>
-    <main id="detail" class="content"><p class="empty">Select a case to review.</p></main>
-  </div>
+  <section id="review-pane">
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="filters">
+          <select id="filter" aria-label="Filter cases">
+            <option value="needs">Needs review</option>
+            <option value="llm">LLM output</option>
+            <option value="all">All cases</option>
+            <option value="reviewed">Reviewed</option>
+          </select>
+          <select id="limit" aria-label="Case limit">
+            <option value="25">25 latest</option>
+            <option value="50" selected>50 latest</option>
+            <option value="100">100 latest</option>
+          </select>
+        </div>
+        <div id="summary" class="summary"></div>
+        <div id="case-list" class="case-list"><p class="empty">Loading cases...</p></div>
+      </aside>
+      <main id="detail" class="content"><p class="empty">Select a case to review.</p></main>
+    </div>
+  </section>
+  ${renderEvalPane()}
+  <script>${evalPaneBodyScript()}</script>
   <script>
-    const state = { dashboard: null, selectedId: null };
+    const state = {
+      view: 'human',
+      apiPrefix: '/api/eval',
+      human: {
+        dashboard: null,
+        selectedId: null,
+      },
+      eval: ${JSON.stringify(defaultEvalPaneState())},
+    };
     const verdictValues = ['not_reviewed', 'correct', 'incorrect', 'unclear'];
     const verdictLabels = {
       not_reviewed: 'Not reviewed',
@@ -251,22 +348,40 @@ export function renderReviewApp(): string {
       unclear: 'Unclear',
     };
 
-    document.getElementById('refresh').addEventListener('click', loadCases);
+    document.getElementById('refresh').addEventListener('click', () => {
+      if (state.view === 'human') loadCases();
+      else document.getElementById('eval-refresh').click();
+    });
+    document.getElementById('tab-human').addEventListener('click', () => switchView('human'));
+    document.getElementById('tab-eval').addEventListener('click', () => switchView('eval'));
     document.getElementById('filter').addEventListener('change', render);
-    document.getElementById('limit').addEventListener('change', loadCases);
-    loadCases();
+    document.getElementById('limit').addEventListener('change', () => {
+      if (state.view === 'human') loadCases();
+      else document.getElementById('eval-refresh').click();
+    });
 
-    async function loadCases() {
+    function switchView(view) {
+      state.view = view;
+      document.getElementById('tab-human').classList.toggle('active', view === 'human');
+      document.getElementById('tab-eval').classList.toggle('active', view === 'eval');
+      document.getElementById('review-pane').hidden = view !== 'human';
+      document.getElementById('eval-pane').hidden = view !== 'eval';
+      document.getElementById('filter').disabled = view !== 'human';
+    }
+
+    async function loadCases(articleId = null) {
       const limit = document.getElementById('limit').value;
-      const response = await fetch('/api/review-cases?limit=' + encodeURIComponent(limit));
-      state.dashboard = await response.json();
+      const params = new URLSearchParams({ limit });
+      if (articleId) params.set('articleId', articleId);
+      const response = await fetch('/api/review-cases?' + params.toString());
+      state.human.dashboard = await response.json();
       const first = filteredCases()[0];
-      state.selectedId = first?.article.id ?? null;
+      state.human.selectedId = (articleId && filteredCases().some((item) => item.article.id === articleId)) ? articleId : first?.article.id ?? null;
       render();
     }
 
     function filteredCases() {
-      const cases = state.dashboard?.cases ?? [];
+      const cases = state.human.dashboard?.cases ?? [];
       const filter = document.getElementById('filter').value;
       if (filter === 'all') return cases;
       if (filter === 'llm') return cases.filter(hasLlmOutput);
@@ -275,10 +390,10 @@ export function renderReviewApp(): string {
     }
 
     function render() {
-      if (!state.dashboard) return;
-      renderSummary(state.dashboard.summary);
+      if (!state.human.dashboard) return;
+      renderSummary(state.human.dashboard.summary);
       renderList(filteredCases());
-      renderDetail(filteredCases().find((item) => item.article.id === state.selectedId) ?? filteredCases()[0] ?? null);
+      renderDetail(filteredCases().find((item) => item.article.id === state.human.selectedId) ?? filteredCases()[0] ?? null);
     }
 
     function renderSummary(summary) {
@@ -298,7 +413,7 @@ export function renderReviewApp(): string {
         return;
       }
       list.innerHTML = cases.map((item) => {
-        const active = item.article.id === state.selectedId ? ' active' : '';
+        const active = item.article.id === state.human.selectedId ? ' active' : '';
         return '<button class="case-button' + active + '" data-id="' + escapeAttr(item.article.id) + '">' +
           '<div class="case-title">' + escapeHtml(item.article.title || '(untitled article)') + '</div>' +
           '<div class="muted">' + escapeHtml(item.article.sourceName || 'unknown source') + ' · ' + formatDate(item.article.publishedAt) + '</div>' +
@@ -307,7 +422,8 @@ export function renderReviewApp(): string {
       }).join('');
       for (const button of list.querySelectorAll('.case-button')) {
         button.addEventListener('click', () => {
-          state.selectedId = button.dataset.id;
+          state.human.selectedId = button.dataset.id;
+          state.eval.selectedArticleId = button.dataset.id;
           render();
         });
       }
@@ -466,6 +582,22 @@ export function renderReviewApp(): string {
       return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
     }
     function escapeAttr(value) { return escapeHtml(value).replaceAll('\\x60', '&#96;'); }
+
+    // ---------- Cross-pane bridge for the eval pane ----------
+    // The eval pane's initEvalPane is defined in evalPaneBodyScript(); it calls
+    // hooks.onLiveArticleSelected whenever the user picks an article in the
+    // Live tab. We mirror the selection into the human pane's state so the
+    // human list refreshes the active article when its pane is visible.
+    initEvalPane(state, {
+      onLiveArticleSelected(articleId) {
+        if (state.human.selectedId !== articleId) {
+          state.human.selectedId = articleId;
+          if (state.view === 'human') loadCases(articleId);
+        }
+      },
+    });
+
+    loadCases();
   </script>
 </body>
 </html>`;

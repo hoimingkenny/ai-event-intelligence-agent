@@ -10,12 +10,21 @@ export interface ArticleRecord {
   titleHash: string | null;
   contentHash: string | null;
   rssSummary: string | null;
+  rssCategories?: string[];
   cleanText: string | null;
   publishedAt: Date | null;
   extractionStatus: string;
   extractionMethod: string | null;
   extractionError: string | null;
   processingStatus: string;
+}
+
+export interface CheapFilterResultInput {
+  decision: string;
+  score: number;
+  reasons: string[];
+  blockingReasons: string[];
+  matchedSignals: unknown;
 }
 
 export interface ArticleMetadataInput {
@@ -26,6 +35,7 @@ export interface ArticleMetadataInput {
   urlHash?: string | null;
   titleHash?: string | null;
   rssSummary?: string | null;
+  rssCategories?: string[];
   publishedAt?: Date | null;
 }
 
@@ -44,6 +54,7 @@ interface ArticleRow {
   title_hash: string | null;
   content_hash: string | null;
   rss_summary: string | null;
+  rss_categories?: string[];
   clean_text: string | null;
   published_at: Date | null;
   extraction_status: string;
@@ -66,13 +77,14 @@ export class ArticleRepository {
           url_hash,
           title_hash,
           rss_summary,
+          rss_categories,
           published_at,
           processing_status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'NEW')
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'NEW')
         ON CONFLICT (canonical_url) DO NOTHING
         RETURNING id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
       `,
       [
@@ -83,6 +95,7 @@ export class ArticleRepository {
         input.urlHash ?? null,
         input.titleHash ?? null,
         input.rssSummary ?? null,
+        input.rssCategories ?? [],
         input.publishedAt ?? null,
       ]
     );
@@ -103,7 +116,7 @@ export class ArticleRepository {
     const result = await this.db.query<ArticleRow>(
       `
         SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
         FROM articles
         WHERE canonical_url = $1
@@ -118,7 +131,7 @@ export class ArticleRepository {
     const result = await this.db.query<ArticleRow>(
       `
         SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
         FROM articles
         WHERE processing_status = $1
@@ -138,7 +151,7 @@ export class ArticleRepository {
     const result = await this.db.query<ArticleRow>(
       `
         SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
         FROM articles
         WHERE processing_status = ANY($1::text[])
@@ -152,11 +165,36 @@ export class ArticleRepository {
     return result.rows.map(mapArticle);
   }
 
+  async listExtractionCandidates(limit = 50): Promise<ArticleRecord[]> {
+    const result = await this.db.query<ArticleRow>(
+      `
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          processing_status
+        FROM articles
+        WHERE processing_status = ANY($1::text[])
+        ORDER BY
+          CASE processing_status
+            WHEN 'EXTRACTION_PENDING' THEN 0
+            WHEN 'EXTRACTION_PENDING_LOW_PRIORITY' THEN 1
+            ELSE 2
+          END ASC,
+          published_at DESC NULLS LAST,
+          fetched_at ASC,
+          id ASC
+        LIMIT $2
+      `,
+      [['EXTRACTION_PENDING', 'EXTRACTION_PENDING_LOW_PRIORITY'], limit]
+    );
+
+    return result.rows.map(mapArticle);
+  }
+
   async findEarlierByContentHash(contentHash: string, excludeArticleId: string): Promise<ArticleRecord | null> {
     const result = await this.db.query<ArticleRow>(
       `
         SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
         FROM articles
         WHERE content_hash = $1
@@ -178,7 +216,7 @@ export class ArticleRepository {
     const result = await this.db.query<ArticleRow>(
       `
         SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
         FROM articles
         WHERE title_hash = $1
@@ -213,6 +251,29 @@ export class ArticleRepository {
         WHERE id = $1
       `,
       [articleId, status, error]
+    );
+  }
+
+  async saveCheapFilterResult(articleId: string, decision: CheapFilterResultInput): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE articles
+        SET cheap_filter_decision = $2,
+          cheap_filter_score = $3,
+          cheap_filter_reasons = $4,
+          cheap_filter_blocking_reasons = $5,
+          cheap_filter_matched_signals = $6::jsonb,
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [
+        articleId,
+        decision.decision,
+        decision.score,
+        decision.reasons,
+        decision.blockingReasons,
+        JSON.stringify(decision.matchedSignals),
+      ]
     );
   }
 
@@ -308,7 +369,7 @@ export class ArticleRepository {
     const result = await this.db.query<ArticleRow & { distance: string }>(
       `
         SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
-          rss_summary, clean_text, published_at, extraction_status, extraction_method, extraction_error,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status,
           embedding <=> $1::vector AS distance
         FROM articles
@@ -348,6 +409,7 @@ function mapArticle(row: ArticleRow): ArticleRecord {
     titleHash: row.title_hash,
     contentHash: row.content_hash,
     rssSummary: row.rss_summary,
+    rssCategories: row.rss_categories ?? [],
     cleanText: row.clean_text,
     publishedAt: row.published_at,
     extractionStatus: row.extraction_status,
