@@ -4,6 +4,7 @@ import { extractCves } from '../detection/cve-extractor.js';
 import { detectVendorsFromInventory } from '../detection/vendor-detector.js';
 import { monitoredVendors } from '../storage/vendorInventory.js';
 import type { Queryable } from '../db/repositories/types.js';
+import type { VendorProduct } from '../types/domain.js';
 
 export type CheapFilterDecision = 'KEEP' | 'MAYBE_KEEP' | 'DROP';
 export type SourceTier =
@@ -67,9 +68,22 @@ const SECURITY_RSS_CATEGORIES = [
   'incident',
 ];
 
-const NOISY_VENDOR_NAMES = new Set(['microsoft', 'cloudflare', 'google', 'amazon', 'oracle', 'cisco', 'ibm']);
+interface CheapFilterSignals {
+  text: string;
+  keywords: ReturnType<typeof detectCategorizedCyberKeywords>;
+  cves: string[];
+  vendors: ReturnType<typeof detectVendorsFromInventory>;
+  sourceTier: SourceTier;
+  securityCategories: string[];
+  matchedInventory: VendorProduct[];
+}
 
 export function decideCheapFilter(article: CheapFilterInput): FilterDecision {
+  const signals = collectCheapFilterSignals(article);
+  return runCheapFilterCascade(article, signals);
+}
+
+function collectCheapFilterSignals(article: CheapFilterInput): CheapFilterSignals {
   const text = [article.title, article.rssSummary, ...(article.rssCategories ?? [])]
     .filter(Boolean)
     .join('\n');
@@ -78,51 +92,22 @@ export function decideCheapFilter(article: CheapFilterInput): FilterDecision {
   const vendors = detectVendorsFromInventory(text, monitoredVendors);
   const sourceTier = article.sourceTier ?? inferSourceTier(article.sourceName);
   const securityCategories = securityRssCategories(article.rssCategories ?? []);
+  return {
+    text,
+    keywords,
+    cves,
+    vendors,
+    sourceTier,
+    securityCategories,
+    matchedInventory: findMatchedInventory(vendors.vendors, vendors.products, monitoredVendors),
+  };
+}
+
+function runCheapFilterCascade(article: CheapFilterInput, signals: CheapFilterSignals): FilterDecision {
+  const { keywords, cves, vendors, sourceTier, securityCategories } = signals;
   const reasons = new Set<string>();
   const blockingReasons = new Set<string>();
-  let score = 0;
-
-  if (cves.length > 0) addScore('cve_found', 50);
-  if (vendors.products.length > 0) addScore('monitored_product_found', 65);
-  if (vendors.vendors.length > 0) addScore('monitored_vendor_found', 50);
-  if (keywords.critical.length > 0) addScore('critical_cyber_keyword_found', 35);
-  if (keywords.medium.length > 0) addScore('medium_cyber_keyword_found', 20);
-  if (keywords.low.length > 0) addScore('low_cyber_keyword_found', 5);
-  if (sourceTier === 'official_vendor') addScore('official_vendor_source', 25);
-  if (sourceTier === 'government_cert') addScore('government_cert_source', 25);
-  if (sourceTier === 'security_media') addScore('security_media_source', 10);
-  if (sourceTier === 'researcher_blog') addScore('researcher_blog_source', 10);
-  if (securityCategories.length > 0) addScore('security_rss_category_found', 10);
-  if (isRecent(article.publishedAt)) addScore('recent_article', 10);
-
-  if (keywords.negative.length > 0) {
-    score -= 20;
-    blockingReasons.add('cheap_filter_negative_business_context');
-  }
-
-  const hasCyberContext =
-    cves.length > 0 ||
-    keywords.critical.length > 0 ||
-    keywords.medium.length > 0 ||
-    securityCategories.length > 0 ||
-    sourceTier === 'official_vendor' ||
-    sourceTier === 'government_cert' ||
-    sourceTier === 'security_media';
-  const hasStrongPositiveSignal =
-    cves.length > 0 ||
-    keywords.critical.length > 0 ||
-    vendors.products.length > 0 ||
-    sourceTier === 'official_vendor' ||
-    sourceTier === 'government_cert';
-
-  if (vendors.products.length > 0 && hasCyberContext) reasons.add('product_with_cyber_context');
-  if (vendors.vendors.length > 0 && hasCyberContext) reasons.add('vendor_with_cyber_context');
-  if (
-    (sourceTier === 'official_vendor' || sourceTier === 'government_cert' || sourceTier === 'security_media') &&
-    (keywords.critical.length > 0 || keywords.medium.length > 0 || securityCategories.length > 0)
-  ) {
-    reasons.add('trusted_source_with_security_context');
-  }
+  addSignalReasons(article, signals, reasons, blockingReasons);
 
   if (cves.length === 0) blockingReasons.add('cheap_filter_no_cve_in_rss_metadata');
   if (vendors.vendors.length === 0 && vendors.products.length === 0) {
@@ -133,74 +118,134 @@ export function decideCheapFilter(article: CheapFilterInput): FilterDecision {
   }
   if (sourceTier === 'general_news') blockingReasons.add('cheap_filter_general_news_source');
 
-  if (isVendorOnlyWithoutSecurityContext(vendors.vendors, vendors.products, hasCyberContext)) {
-    blockingReasons.add('cheap_filter_vendor_only_without_security_context');
-    if (vendors.vendors.some((vendor) => NOISY_VENDOR_NAMES.has(vendor.toLowerCase()))) {
-      score -= 20;
-    }
-  }
-
   if (isOld(article.publishedAt)) {
-    score -= 20;
     blockingReasons.add('cheap_filter_old_or_stale_article');
   }
-  score = normalizeScore(score);
 
-  let decision: CheapFilterDecision;
-  if (cves.length > 0 || keywords.critical.length > 0 || (vendors.products.length > 0 && hasCyberContext)) {
-    decision = 'KEEP';
-  } else if (
-    sourceTier === 'official_vendor' ||
-    sourceTier === 'government_cert' ||
-    (vendors.vendors.length > 0 && keywords.medium.length > 0) ||
-    (score >= 40 && hasStrongPositiveSignal)
-  ) {
-    decision = hasNegativeDominance(hasStrongPositiveSignal, keywords.negative) ? 'MAYBE_KEEP' : 'KEEP';
-  } else if (score >= 15 || hasLowCombination(keywords.low)) {
-    decision = 'MAYBE_KEEP';
-  } else {
-    decision = 'DROP';
-  }
+  const hasVendorMatch = vendors.vendors.length > 0 || vendors.products.length > 0;
+  const hasEscapeHatchSignal = cves.length > 0 || keywords.criticalExploitation.length > 0 || isTrustedTier(sourceTier);
+  const score = calculatePriorityScore(article, signals);
 
-  if (decision === 'DROP') {
+  if (!hasVendorMatch) {
+    if (hasEscapeHatchSignal) {
+      reasons.add('cheap_filter_l1_severe_signal_escape_hatch');
+      return buildFilterDecision('MAYBE_KEEP', Math.min(score, 49), reasons, blockingReasons, signals);
+    }
+    blockingReasons.add('cheap_filter_l1_no_vendor_no_severe_signal');
     blockingReasons.add('cheap_filter_insufficient_rss_signal');
     if (score < 15) blockingReasons.add('cheap_filter_low_score');
+    return buildFilterDecision('DROP', score, reasons, blockingReasons, signals);
   }
 
-  const matchedSignals: CheapFilterMatchedSignals = {
-    criticalCyberKeywords: keywords.critical,
-    mediumCyberKeywords: keywords.medium,
-    lowCyberKeywords: keywords.low,
-    negativeKeywords: keywords.negative,
-    cves,
-    vendors: vendors.vendors,
-    products: vendors.products,
-    rssCategories: securityCategories,
-    sourceTier,
-  };
-
-  function addScore(reason: string, value: number): void {
-    reasons.add(reason);
-    score += value;
+  if (hasNegativeDominance(cves.length > 0 || keywords.critical.length > 0, keywords.negative)) {
+    blockingReasons.add('cheap_filter_l2_negative_dominance');
+    blockingReasons.add('cheap_filter_insufficient_rss_signal');
+    return buildFilterDecision('DROP', score, reasons, blockingReasons, signals);
   }
 
+  const hasCyberContext = hasLayer2CyberContext(signals);
+  if (!hasCyberContext) {
+    blockingReasons.add('cheap_filter_vendor_only_without_security_context');
+    blockingReasons.add('cheap_filter_l2_no_cyber_context');
+    blockingReasons.add('cheap_filter_insufficient_rss_signal');
+    return buildFilterDecision('DROP', score, reasons, blockingReasons, signals);
+  }
+
+  if (vendors.products.length > 0) reasons.add('product_with_cyber_context');
+  if (vendors.vendors.length > 0) reasons.add('vendor_with_cyber_context');
+  if (isTrustedTier(sourceTier) || sourceTier === 'security_media' || sourceTier === 'researcher_blog') {
+    reasons.add('trusted_source_with_security_context');
+  }
+
+  return buildFilterDecision(score >= 50 ? 'KEEP' : 'MAYBE_KEEP', score, reasons, blockingReasons, signals);
+}
+
+function buildFilterDecision(
+  decision: CheapFilterDecision,
+  score: number,
+  reasons: Set<string>,
+  blockingReasons: Set<string>,
+  signals: CheapFilterSignals
+): FilterDecision {
   const reasonList = Array.from(reasons);
   const blockingReasonList = Array.from(blockingReasons);
   if (reasonList.length === 0 && blockingReasonList.length === 0) {
     blockingReasonList.push('cheap_filter_insufficient_rss_signal');
   }
 
+  const matchedSignals: CheapFilterMatchedSignals = {
+    criticalCyberKeywords: signals.keywords.critical,
+    mediumCyberKeywords: signals.keywords.medium,
+    lowCyberKeywords: signals.keywords.low,
+    negativeKeywords: signals.keywords.negative,
+    cves: signals.cves,
+    vendors: signals.vendors.vendors,
+    products: signals.vendors.products,
+    rssCategories: signals.securityCategories,
+    sourceTier: signals.sourceTier,
+  };
+
   return {
     decision,
-    score,
+    score: normalizeScore(score),
     reasons: reasonList,
     blockingReasons: blockingReasonList,
     matchedSignals,
     shouldExtract: decision !== 'DROP',
-    cves,
-    vendors: vendors.vendors,
-    products: vendors.products,
+    cves: signals.cves,
+    vendors: signals.vendors.vendors,
+    products: signals.vendors.products,
   };
+}
+
+function addSignalReasons(
+  article: CheapFilterInput,
+  signals: CheapFilterSignals,
+  reasons: Set<string>,
+  blockingReasons: Set<string>
+): void {
+  const { cves, vendors, keywords, sourceTier, securityCategories } = signals;
+  if (cves.length > 0) reasons.add('cve_found');
+  if (vendors.products.length > 0) reasons.add('monitored_product_found');
+  if (vendors.vendors.length > 0) reasons.add('monitored_vendor_found');
+  if (keywords.critical.length > 0) reasons.add('critical_cyber_keyword_found');
+  if (keywords.medium.length > 0) reasons.add('medium_cyber_keyword_found');
+  if (keywords.low.length > 0) reasons.add('low_cyber_keyword_found');
+  if (sourceTier === 'official_vendor') reasons.add('official_vendor_source');
+  if (sourceTier === 'government_cert') reasons.add('government_cert_source');
+  if (sourceTier === 'security_media') reasons.add('security_media_source');
+  if (sourceTier === 'researcher_blog') reasons.add('researcher_blog_source');
+  if (securityCategories.length > 0) reasons.add('security_rss_category_found');
+  if (isRecent(article.publishedAt)) reasons.add('recent_article');
+  if (keywords.negative.length > 0) blockingReasons.add('cheap_filter_negative_business_context');
+}
+
+function hasLayer2CyberContext(signals: CheapFilterSignals): boolean {
+  const { keywords, cves, sourceTier, securityCategories, matchedInventory } = signals;
+  if (cves.length > 0 || keywords.critical.length > 0 || isTrustedTier(sourceTier)) return true;
+  if (keywords.medium.length === 0) return false;
+  const corroborated = securityCategories.length > 0 || sourceTier === 'security_media' || sourceTier === 'researcher_blog';
+  return matchedInventory.some((item) => item.newsVolume === 'noisy') ? corroborated : true;
+}
+
+function calculatePriorityScore(article: CheapFilterInput, signals: CheapFilterSignals): number {
+  const { keywords, cves, vendors, sourceTier, securityCategories } = signals;
+  let score = 0;
+  if (cves.length > 0) score += 35;
+  if (vendors.products.length > 0) score += 25;
+  else if (vendors.vendors.length > 0) score += 15;
+  if (keywords.criticalExploitation.length > 0) score += 35;
+  else if (keywords.criticalIncident.length > 0) score += 25;
+  else if (keywords.medium.length > 0) score += 20;
+  else if (hasLowCombination(keywords.low)) score += 10;
+  else if (keywords.low.length > 0) score += 5;
+  if (sourceTier === 'official_vendor' || sourceTier === 'government_cert') score += 25;
+  if (sourceTier === 'security_media' || sourceTier === 'researcher_blog') score += 10;
+  if (securityCategories.length > 0) score += 10;
+  if (isRecent(article.publishedAt)) score += 10;
+  if (keywords.negative.length > 0) score -= 20;
+  if (isOld(article.publishedAt)) score -= 20;
+  return normalizeScore(score);
 }
 
 export async function runCheapFilterStage(
@@ -264,6 +309,20 @@ function securityRssCategories(categories: string[]): string[] {
   });
 }
 
+function findMatchedInventory(
+  matchedVendors: string[],
+  matchedProducts: string[],
+  inventory: VendorProduct[]
+): VendorProduct[] {
+  const vendors = new Set(matchedVendors);
+  const products = new Set(matchedProducts);
+  return inventory.filter((item) => vendors.has(item.vendor) && (products.size === 0 || products.has(item.product)));
+}
+
+function isTrustedTier(sourceTier: SourceTier): boolean {
+  return sourceTier === 'official_vendor' || sourceTier === 'government_cert';
+}
+
 function isRecent(publishedAt?: Date | null): boolean {
   if (!publishedAt) return false;
   return Date.now() - publishedAt.getTime() <= 24 * 60 * 60 * 1000;
@@ -272,14 +331,6 @@ function isRecent(publishedAt?: Date | null): boolean {
 function isOld(publishedAt?: Date | null): boolean {
   if (!publishedAt) return false;
   return Date.now() - publishedAt.getTime() > 14 * 24 * 60 * 60 * 1000;
-}
-
-function isVendorOnlyWithoutSecurityContext(
-  matchedVendors: string[],
-  matchedProducts: string[],
-  hasCyberContext: boolean
-): boolean {
-  return matchedVendors.length > 0 && matchedProducts.length === 0 && !hasCyberContext;
 }
 
 function hasNegativeDominance(hasStrongPositiveSignal: boolean, negativeKeywords: string[]): boolean {

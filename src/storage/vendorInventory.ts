@@ -32,6 +32,7 @@ export const VendorProductSchema = z.object({
   aliases: z.array(z.string().trim().min(1)).default([]),
   criticality: z.enum(['critical', 'high', 'medium', 'low']),
   inProduction: z.boolean().default(true),
+  newsVolume: z.enum(['quiet', 'noisy']).default('quiet'),
 });
 
 export const VendorInventorySchema = z.array(VendorProductSchema).min(1);

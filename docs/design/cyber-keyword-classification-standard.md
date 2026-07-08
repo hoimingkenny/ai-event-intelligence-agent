@@ -919,18 +919,44 @@ general_news source requires stronger signal
 
 # 13. Recommended Cheap-Filter Decision Policy
 
-## KEEP
-
-Return `KEEP` if any of the following are true:
+The implemented cheap filter uses a layered cascade:
 
 ```text
-CVE found
-Critical keyword found
-Monitored product + cyber keyword found
-Monitored vendor + medium/critical cyber keyword found
-Official vendor advisory source
-Government/CERT source with security context
-Medium keyword + trusted security source
+Layer 1: monitored vendor/product gate, with a severe-signal escape hatch
+Layer 2: cyber-context gate
+Layer 3: priority score chooses KEEP vs MAYBE_KEEP
+```
+
+Critical keywords are split inside the implementation:
+
+```text
+exploitation-class critical:
+  active exploitation, KEV, zero-day/emergency patch, RCE/auth bypass,
+  privilege escalation
+
+incident-class critical:
+  ransomware, breach/leak, compromise, backdoor, supply-chain attack,
+  account takeover
+```
+
+## KEEP
+
+Return `KEEP` only after the article has passed both gates and the priority score reaches the
+KEEP threshold.
+
+```text
+monitored vendor/product present
+AND cyber context present
+AND priority score is high enough
+```
+
+Examples:
+
+```text
+Monitored product + exploitation-class critical keyword
+Monitored product + CVE + trusted source
+Noisy monitored vendor + medium keyword + security-media corroboration + enough score
+Quiet monitored vendor + medium keyword + enough score
 ```
 
 Status mapping:
@@ -946,13 +972,14 @@ KEEP → EXTRACTION_PENDING
 Return `MAYBE_KEEP` if any of the following are true:
 
 ```text
-Medium keyword only
-Security media source + recent article
-Security RSS category found
-Monitored vendor only from security source
-Monitored vendor only from general source without negative context
-Low keyword combinations suggest security context
+No monitored vendor/product, but severe RSS signal passes the escape hatch:
+  CVE, exploitation-class critical keyword, official vendor source, or government/CERT source
+
+Monitored vendor/product passes Layer 2, but priority score is below KEEP threshold
 ```
+
+Escape-hatch articles are permanently capped at `MAYBE_KEEP`; extracted text and downstream LLM
+classification decide whether they are truly relevant.
 
 Status mapping:
 
@@ -967,14 +994,12 @@ MAYBE_KEEP → EXTRACTION_PENDING_LOW_PRIORITY
 Return `DROP` only if:
 
 ```text
-No CVE
-No monitored product
-No monitored vendor with cyber context
-No critical keyword
-No medium keyword
-No useful security category
-Low-trust/general source
-Negative business/marketing context dominates
+Layer 1 fails:
+  no monitored vendor/product and no severe escape-hatch signal
+
+Layer 2 fails:
+  vendor/product mention has no cyber context
+  OR negative business/marketing context dominates without CVE/critical keyword
 ```
 
 Status mapping:
@@ -987,6 +1012,9 @@ Reason should be precise:
 
 ```text
 cheap_filter_insufficient_rss_signal
+cheap_filter_l1_no_vendor_no_severe_signal
+cheap_filter_l2_no_cyber_context
+cheap_filter_l2_negative_dominance
 ```
 
 Avoid using overly final reason names like:

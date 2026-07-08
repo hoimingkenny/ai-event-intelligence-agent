@@ -2,51 +2,58 @@ export type CyberKeywordCategory = 'critical' | 'medium' | 'low' | 'negative';
 
 export interface CategorizedKeywordMatches {
   critical: string[];
+  criticalExploitation: string[];
+  criticalIncident: string[];
   medium: string[];
   low: string[];
   negative: string[];
 }
 
+const CRITICAL_EXPLOITATION_KEYWORDS = [
+  'actively exploited',
+  'active exploitation',
+  'exploited in the wild',
+  'exploitation in the wild',
+  'exploitation observed',
+  'under active attack',
+  'mass exploitation',
+  'known exploited vulnerability',
+  'known exploited vulnerabilities',
+  'known exploited catalog',
+  'known exploited vulnerabilities catalog',
+  'cisa kev',
+  'kev catalog',
+  'zero-day',
+  '0-day',
+  'zero day',
+  'emergency patch',
+  'emergency update',
+  'out-of-band patch',
+  'weaponized exploit',
+  'weaponised exploit',
+  'remote code execution',
+  'pre-auth rce',
+  'unauthenticated rce',
+  'rce',
+  'authentication bypass',
+  'auth bypass',
+  'authorization bypass',
+  'privilege escalation',
+];
+
+const CRITICAL_INCIDENT_KEYWORDS = [
+  'ransomware',
+  'data breach',
+  'data leak',
+  'compromise',
+  'compromised',
+  'backdoor',
+  'supply chain attack',
+  'account takeover',
+];
+
 const KEYWORDS: Record<CyberKeywordCategory, string[]> = {
-  critical: [
-    'actively exploited',
-    'active exploitation',
-    'exploited in the wild',
-    'exploitation in the wild',
-    'exploitation observed',
-    'under active attack',
-    'mass exploitation',
-    'known exploited vulnerability',
-    'known exploited vulnerabilities',
-    'known exploited catalog',
-    'known exploited vulnerabilities catalog',
-    'cisa kev',
-    'kev catalog',
-    'zero-day',
-    '0-day',
-    'zero day',
-    'emergency patch',
-    'emergency update',
-    'out-of-band patch',
-    'remote code execution',
-    'pre-auth rce',
-    'unauthenticated rce',
-    'rce',
-    'authentication bypass',
-    'auth bypass',
-    'authorization bypass',
-    'privilege escalation',
-    'ransomware',
-    'data breach',
-    'data leak',
-    'compromise',
-    'compromised',
-    'backdoor',
-    'supply chain attack',
-    'weaponized exploit',
-    'weaponised exploit',
-    'account takeover',
-  ],
+  critical: [...CRITICAL_EXPLOITATION_KEYWORDS, ...CRITICAL_INCIDENT_KEYWORDS],
   medium: [
     'vulnerability',
     'security vulnerability',
@@ -172,12 +179,20 @@ const KEYWORDS: Record<CyberKeywordCategory, string[]> = {
 };
 
 export function detectCategorizedCyberKeywords(text: string): CategorizedKeywordMatches {
+  const criticalExploitation = matchKeywords(text, CRITICAL_EXPLOITATION_KEYWORDS);
+  const criticalIncident = matchKeywords(text, CRITICAL_INCIDENT_KEYWORDS);
   return {
-    critical: matchKeywords(text, KEYWORDS.critical),
+    critical: dedupe([...criticalExploitation, ...criticalIncident]),
+    criticalExploitation,
+    criticalIncident,
     medium: matchKeywords(text, KEYWORDS.medium),
     low: matchKeywords(text, KEYWORDS.low),
     negative: matchKeywords(text, KEYWORDS.negative),
   };
+}
+
+function dedupe(values: string[]): string[] {
+  return Array.from(new Set(values));
 }
 
 export function matchKeywords(text: string, keywords: string[]): string[] {

@@ -121,14 +121,14 @@ describe('cheap-filter gate small-dataset warning', () => {
 
 const candidate: CheapFilterCandidate = {
   id: deriveSampleId('https://example.test/candidate-1'),
-  sourceName: 'CISA',
-  sourceTier: 'government_cert',
+  sourceName: 'Bleeping Computer',
+  sourceTier: 'security_media',
   url: 'https://example.test/candidate-1',
-  title: 'CISA adds CVE-2026-9999 to KEV catalog',
-  rssSummary: 'Agencies must remediate the known exploited vulnerability.',
-  rssCategories: ['Known Exploited Vulnerabilities'],
+  title: 'CyberArk PAS authentication bypass exploited in attacks',
+  rssSummary: 'The remote code execution chain affects privileged access deployments.',
+  rssCategories: ['Security'],
   publishedAt: '2026-07-06T12:00:00Z',
-  harvest: { decision: 'KEEP', score: 105, harvestedAt: '2026-07-07T00:00:00Z' },
+  harvest: { decision: 'KEEP', score: 80, harvestedAt: '2026-07-07T00:00:00Z' },
 };
 
 describe('eval review server', () => {
@@ -371,6 +371,7 @@ describe('vendor inventory store', () => {
     expect(parsed[0].id).toBe('vp_okta_workforce_identity_cloud');
     expect(parsed[0].aliases).toEqual(['Okta WIC']);
     expect(parsed[0].inProduction).toBe(true);
+    expect(parsed[0].newsVolume).toBe('quiet');
 
     expect(() =>
       parseVendorInventory([
@@ -386,12 +387,12 @@ describe('vendor inventory store', () => {
     const dir = await mkdtemp(join(tmpdir(), 'vendor-inventory-'));
     const path = join(dir, 'vendors.json');
     saveMonitoredVendors(
-      [{ vendor: 'Okta', product: 'Workforce Identity Cloud', aliases: ['Okta WIC'], criticality: 'high', inProduction: false }],
+      [{ vendor: 'Okta', product: 'Workforce Identity Cloud', aliases: ['Okta WIC'], criticality: 'high', inProduction: false, newsVolume: 'noisy' }],
       path
     );
     const loaded = loadMonitoredVendors(path);
     expect(loaded).toHaveLength(1);
-    expect(loaded[0]).toMatchObject({ vendor: 'Okta', inProduction: false, id: 'vp_okta_workforce_identity_cloud' });
+    expect(loaded[0]).toMatchObject({ vendor: 'Okta', inProduction: false, newsVolume: 'noisy', id: 'vp_okta_workforce_identity_cloud' });
   });
 
   it('serves the current inventory over the api', async () => {
@@ -407,6 +408,7 @@ describe('vendor inventory store', () => {
       expect(Array.isArray(data.vendors)).toBe(true);
       expect(data.vendors.length).toBeGreaterThanOrEqual(1);
       expect(data.vendors[0]).toHaveProperty('aliases');
+      expect(data.vendors[0]).toHaveProperty('newsVolume');
     } finally {
       server.close();
     }

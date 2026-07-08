@@ -49,16 +49,17 @@ describe('cheap detection', () => {
     expect(decision.products).toContain('Zscaler Internet Access');
   });
 
-  it('keeps articles with CVEs in RSS metadata', () => {
+  it('caps vendorless CVEs in RSS metadata at maybe keep', () => {
     const decision = decideCheapFilter({
       title: 'CVE-2026-12345 affects enterprise VPN appliance',
       rssSummary: 'Patch guidance is available.',
       sourceName: 'Unknown Blog',
     });
 
-    expect(decision.decision).toBe('KEEP');
+    expect(decision.decision).toBe('MAYBE_KEEP');
     expect(decision.score).toBeGreaterThanOrEqual(40);
     expect(decision.reasons).toContain('cve_found');
+    expect(decision.reasons).toContain('cheap_filter_l1_severe_signal_escape_hatch');
     expect(decision.matchedSignals.cves).toEqual(['CVE-2026-12345']);
   });
 
@@ -81,7 +82,7 @@ describe('cheap detection', () => {
     expect(noisyDecision.score).toBeLessThanOrEqual(100);
   });
 
-  it('keeps critical exploitation phrases', () => {
+  it('caps vendorless exploitation phrases at maybe keep', () => {
     const decision = decideCheapFilter({
       title: 'Fortinet warns customers of actively exploited FortiOS flaw',
       rssSummary: 'Customers are urged to patch immediately.',
@@ -89,24 +90,25 @@ describe('cheap detection', () => {
       publishedAt: new Date(),
     });
 
-    expect(decision.decision).toBe('KEEP');
+    expect(decision.decision).toBe('MAYBE_KEEP');
     expect(decision.reasons).toContain('critical_cyber_keyword_found');
+    expect(decision.reasons).toContain('cheap_filter_l1_severe_signal_escape_hatch');
     expect(decision.reasons).toContain('security_media_source');
   });
 
-  it('keeps known exploited catalog language from CISA', () => {
+  it('caps vendorless known exploited catalog language from CISA at maybe keep', () => {
     const decision = decideCheapFilter({
       title: 'CISA adds new vulnerability to known exploited catalog',
       rssSummary: null,
       sourceName: 'CISA',
     });
 
-    expect(decision.decision).toBe('KEEP');
+    expect(decision.decision).toBe('MAYBE_KEEP');
     expect(decision.reasons).toContain('government_cert_source');
     expect(decision.reasons).toContain('critical_cyber_keyword_found');
   });
 
-  it('treats security media plus medium keyword as maybe keep', () => {
+  it('drops vendorless security media plus medium keyword', () => {
     const decision = decideCheapFilter({
       title: 'Critical flaw discovered in enterprise identity platform',
       rssSummary: 'Researchers say attackers may gain unauthorized access.',
@@ -114,12 +116,13 @@ describe('cheap detection', () => {
       publishedAt: new Date(),
     });
 
-    expect(decision.decision).toBe('MAYBE_KEEP');
-    expect(decision.shouldExtract).toBe(true);
+    expect(decision.decision).toBe('DROP');
+    expect(decision.shouldExtract).toBe(false);
     expect(decision.reasons).toContain('medium_cyber_keyword_found');
     expect(decision.reasons).toContain('security_media_source');
     expect(decision.blockingReasons).toContain('cheap_filter_no_cve_in_rss_metadata');
     expect(decision.blockingReasons).toContain('cheap_filter_no_vendor_product_in_rss_metadata');
+    expect(decision.blockingReasons).toContain('cheap_filter_l1_no_vendor_no_severe_signal');
   });
 
   it('does not blindly promote monitored vendor business articles', () => {
@@ -131,23 +134,24 @@ describe('cheap detection', () => {
 
     expect(decision.decision).toBe('DROP');
     expect(decision.reasons).toContain('monitored_vendor_found');
-    expect(decision.blockingReasons).toContain('cheap_filter_vendor_only_without_security_context');
+    expect(decision.blockingReasons).toContain('cheap_filter_l2_negative_dominance');
     expect(decision.blockingReasons).toContain('cheap_filter_negative_business_context');
   });
 
-  it('weights monitored vendor mentions as a strong cheap-filter signal', () => {
+  it('lets quiet monitored vendors pass medium keyword coverage as low priority', () => {
     const decision = decideCheapFilter({
-      title: 'CyberArk publishes customer guidance',
+      title: 'CyberArk publishes vulnerability guidance',
       rssSummary: 'Customers should review privileged access controls.',
       sourceName: 'Unknown Source',
     });
 
     expect(decision.decision).toBe('MAYBE_KEEP');
-    expect(decision.score).toBeGreaterThanOrEqual(55);
+    expect(decision.score).toBeGreaterThanOrEqual(35);
     expect(decision.reasons).toContain('monitored_vendor_found');
+    expect(decision.reasons).toContain('medium_cyber_keyword_found');
   });
 
-  it('uses RSS security categories as weak extraction signal', () => {
+  it('does not let RSS security categories bypass the vendor gate', () => {
     const decision = decideCheapFilter({
       title: 'Enterprise platform update released',
       rssSummary: 'A maintenance update is available.',
@@ -155,8 +159,9 @@ describe('cheap detection', () => {
       rssCategories: ['Vulnerabilities'],
     });
 
-    expect(decision.decision).toBe('MAYBE_KEEP');
+    expect(decision.decision).toBe('DROP');
     expect(decision.reasons).toContain('security_rss_category_found');
+    expect(decision.blockingReasons).toContain('cheap_filter_l1_no_vendor_no_severe_signal');
   });
 
   it('drops noisy business uses of exploit and breach', () => {
@@ -175,15 +180,48 @@ describe('cheap detection', () => {
     expect(breachDecision.decision).toBe('DROP');
   });
 
-  it('keeps Patch Tuesday security vulnerability coverage', () => {
+  it('keeps noisy-vendor medium coverage as low priority when corroborated', () => {
     const decision = decideCheapFilter({
       title: 'Microsoft Patch Tuesday fixes 120 security vulnerabilities',
       rssSummary: 'Several flaws received critical severity ratings.',
       sourceName: 'The Hacker News',
     });
 
-    expect(decision.decision).toBe('KEEP');
+    expect(decision.decision).toBe('MAYBE_KEEP');
     expect(decision.reasons).toContain('monitored_vendor_found');
     expect(decision.reasons).toContain('medium_cyber_keyword_found');
+  });
+
+  it('implements the cascade routing table and invariants', () => {
+    const zscalerLaunch = decideCheapFilter({
+      title: 'Zscaler announces product launch',
+      rssSummary: 'The new feature release is available for customers.',
+      sourceName: 'General Business News',
+    });
+    const ransomwareNoVendor = decideCheapFilter({
+      title: 'Hospital hit by ransomware',
+      rssSummary: 'The incident disrupted patient services.',
+      sourceName: 'Bleeping Computer',
+    });
+    const vendorlessZeroDay = decideCheapFilter({
+      title: 'Zero-day in popular PAM solution under active attack',
+      rssSummary: 'Researchers warn administrators to apply mitigations.',
+      sourceName: 'Research Blog',
+    });
+    const cyberarkExploit = decideCheapFilter({
+      title: 'CyberArk PAS authentication bypass exploited in attacks',
+      rssSummary: 'The remote code execution chain affects privileged access deployments.',
+      sourceName: 'Bleeping Computer',
+    });
+
+    expect(zscalerLaunch.decision).toBe('DROP');
+    expect(zscalerLaunch.blockingReasons).toContain('cheap_filter_l2_negative_dominance');
+    expect(ransomwareNoVendor.decision).toBe('DROP');
+    expect(ransomwareNoVendor.blockingReasons).toContain('cheap_filter_l1_no_vendor_no_severe_signal');
+    expect(vendorlessZeroDay.decision).toBe('MAYBE_KEEP');
+    expect(vendorlessZeroDay.score).toBeLessThan(50);
+    expect(cyberarkExploit.decision).toBe('KEEP');
+    expect(cyberarkExploit.blockingReasons).not.toContain('cheap_filter_l1_no_vendor_no_severe_signal');
+    expect(cyberarkExploit.blockingReasons).not.toContain('cheap_filter_l2_no_cyber_context');
   });
 });

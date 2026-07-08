@@ -12,7 +12,7 @@ const baseSample: CheapFilterEvaluationSample = {
   sourceName: 'Bleeping Computer',
   sourceTier: 'security_media',
   url: 'https://example.test/base',
-  title: 'Fortinet warns of actively exploited FortiOS vulnerability',
+  title: 'CyberArk PAS actively exploited vulnerability',
   rssSummary: 'Customers are urged to patch immediately.',
   rssCategories: ['Security', 'Vulnerabilities'],
   publishedAt: '2026-07-07T09:00:00Z',

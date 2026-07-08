@@ -10,7 +10,8 @@
       "IdentityIQ"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "quiet"
   },
   {
     "id": "vp_cyberark_pas",
@@ -23,7 +24,8 @@
       "CyberArk Password Vault"
     ],
     "criticality": "critical",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "quiet"
   },
   {
     "id": "vp_cyberark_conjur",
@@ -34,7 +36,8 @@
       "Conjur"
     ],
     "criticality": "critical",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "quiet"
   },
   {
     "id": "vp_zscaler_zia",
@@ -45,7 +48,8 @@
       "Zscaler Internet Access"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "quiet"
   },
   {
     "id": "vp_cloudflare_platform",
@@ -60,7 +64,8 @@
       "Cloudflare Workers"
     ],
     "criticality": "high",
-    "inProduction": false
+    "inProduction": false,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_microsoft_windows_server",
@@ -71,7 +76,8 @@
       "Windows Server"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_microsoft_sharepoint_server",
@@ -84,7 +90,8 @@
       "SharePoint Server"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_microsoft_exchange_server",
@@ -99,7 +106,8 @@
       "Exchange Server Subscription Edition"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_microsoft_entra",
@@ -112,7 +120,8 @@
       "Entra ID"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_microsoft_malware_protection_engine",
@@ -124,7 +133,8 @@
       "Microsoft Defender Malware Protection Engine"
     ],
     "criticality": "high",
-    "inProduction": true
+    "inProduction": true,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_salesforce_platform",
@@ -136,7 +146,8 @@
       "Salesforce data"
     ],
     "criticality": "low",
-    "inProduction": false
+    "inProduction": false,
+    "newsVolume": "noisy"
   },
   {
     "id": "vp_salesloft_drift",
@@ -148,7 +159,8 @@
       "Salesloft"
     ],
     "criticality": "low",
-    "inProduction": false
+    "inProduction": false,
+    "newsVolume": "quiet"
   },
   {
     "id": "vp_hashicorp_vault",
@@ -159,6 +171,7 @@
       "Vault"
     ],
     "criticality": "low",
-    "inProduction": false
+    "inProduction": false,
+    "newsVolume": "quiet"
   }
 ]

@@ -26,6 +26,7 @@ export interface VendorProduct {
   aliases: string[];
   criticality: 'low' | 'medium' | 'high' | 'critical';
   inProduction: boolean;
+  newsVolume: 'quiet' | 'noisy';
 }
 
 export interface RawArticle {
