@@ -67,6 +67,8 @@ export interface EventDetail extends EventListItem {
 }
 
 const MAX_LIMIT = 200;
+const VENDOR_PRODUCT_EVENT_CONDITION =
+  "(cardinality(coalesce(e.affected_vendors, '{}'::text[])) > 0 OR cardinality(coalesce(e.affected_products, '{}'::text[])) > 0)";
 
 export async function loadEventsOverview(
   db: Queryable,
@@ -75,7 +77,7 @@ export async function loadEventsOverview(
   const limit = clamp(query.limit ?? 50, 1, MAX_LIMIT);
   const offset = Math.max(0, query.offset ?? 0);
 
-  const conditions: string[] = [];
+  const conditions: string[] = [VENDOR_PRODUCT_EVENT_CONDITION];
   const params: unknown[] = [];
   if (query.minSources !== undefined) {
     params.push(query.minSources);
@@ -93,11 +95,10 @@ export async function loadEventsOverview(
 
   const orderBy =
     query.sort === 'recent'
-      ? 'last_seen_at DESC NULLS LAST, id DESC'
+      ? 'e.llm_summary IS NOT NULL DESC, last_seen_at DESC NULLS LAST, id DESC'
       : query.sort === 'severity'
-        ? "array_position(ARRAY['critical','high','medium','low'], severity), last_seen_at DESC NULLS LAST"
-        : // default: multi-source events first (the "same event, many sources" case)
-          'source_count DESC, last_seen_at DESC NULLS LAST, id DESC';
+        ? "e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST, last_seen_at DESC NULLS LAST, id DESC"
+        : "e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST, last_seen_at DESC NULLS LAST, id DESC";
 
   const listParams = [...params, limit, offset];
   const listResult = await db.query<EventRow>(
@@ -250,10 +251,15 @@ function mapListItem(row: EventRow): EventListItem {
 async function loadSummary(db: Queryable): Promise<EventsSummary> {
   const [totals, bySev] = await Promise.all([
     db.query<{ total: string; multi_source: string }>(
-      `SELECT count(*) AS total, count(*) FILTER (WHERE source_count > 1) AS multi_source FROM cyber_events`
+      `SELECT count(*) AS total, count(*) FILTER (WHERE source_count > 1) AS multi_source
+       FROM cyber_events e
+       WHERE ${VENDOR_PRODUCT_EVENT_CONDITION}`
     ),
     db.query<{ severity: string | null; count: string }>(
-      `SELECT severity, count(*) AS count FROM cyber_events GROUP BY severity`
+      `SELECT severity, count(*) AS count
+       FROM cyber_events e
+       WHERE ${VENDOR_PRODUCT_EVENT_CONDITION}
+       GROUP BY severity`
     ),
   ]);
 

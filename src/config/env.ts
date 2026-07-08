@@ -26,6 +26,7 @@ export const env = {
   playwrightExtractionTimeoutMs: Number(process.env.PLAYWRIGHT_EXTRACTION_TIMEOUT_MS ?? 15000),
   playwrightMinTextLength: Number(process.env.PLAYWRIGHT_MIN_TEXT_LENGTH ?? 250),
   llmConcurrency: Number(process.env.LLM_CONCURRENCY ?? 3),
+  llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 60000),
   alertSuppressionHours: Number(process.env.ALERT_SUPPRESSION_HOURS ?? 6),
   earlyWarningWindowHours: Number(process.env.EARLY_WARNING_WINDOW_HOURS ?? 24),
   alertLatencySloHours: Number(process.env.ALERT_LATENCY_SLO_HOURS ?? 2),

@@ -67,6 +67,7 @@ async function route(db: Queryable, req: IncomingMessage, res: ServerResponse): 
   if (path === '/api/articles') {
     const query: ArticlesQuery = {
       status: url.searchParams.get('status'),
+      cheapFilterDecision: url.searchParams.get('decision'),
       source: url.searchParams.get('source'),
       search: url.searchParams.get('q'),
       limit: numberParam(url, 'limit'),

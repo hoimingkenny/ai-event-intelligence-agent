@@ -11,6 +11,7 @@ export interface ArticleListItem {
   sourceName: string | null;
   canonicalUrl: string | null;
   processingStatus: string;
+  cheapFilterDecision: string | null;
   extractionStatus: string;
   extractionMethod: string | null;
   contentQualityScore: number | null;
@@ -44,10 +45,12 @@ export interface ArticlesOverview {
   offset: number;
   sources: string[];
   statuses: string[];
+  cheapFilterDecisions: string[];
 }
 
 export interface ArticlesQuery {
   status?: string | null;
+  cheapFilterDecision?: string | null;
   source?: string | null;
   search?: string | null;
   limit?: number;
@@ -71,6 +74,10 @@ export async function loadArticlesOverview(
   if (query.status) {
     params.push(query.status);
     conditions.push(`a.processing_status = $${params.length}`);
+  }
+  if (query.cheapFilterDecision) {
+    params.push(query.cheapFilterDecision);
+    conditions.push(`a.cheap_filter_decision = $${params.length}`);
   }
   if (query.source) {
     params.push(query.source);
@@ -97,7 +104,8 @@ export async function loadArticlesOverview(
   const listParams = [...params, limit, offset];
   const listResult = await db.query<ArticleRow>(
     `
-      SELECT a.id, a.title, a.source_name, a.canonical_url, a.processing_status, a.extraction_status,
+      SELECT a.id, a.title, a.source_name, a.canonical_url, a.processing_status, a.cheap_filter_decision,
+        a.extraction_status,
         a.extraction_method, a.content_quality_score, a.rss_recall,
         coalesce(length(a.clean_text), 0) AS clean_text_length,
         a.published_at, a.fetched_at, a.extracted_at,
@@ -122,10 +130,11 @@ export async function loadArticlesOverview(
     params
   );
 
-  const [summary, sources, statuses] = await Promise.all([
+  const [summary, sources, statuses, cheapFilterDecisions] = await Promise.all([
     loadSummary(db),
     loadDistinct(db, 'source_name'),
     loadDistinct(db, 'processing_status'),
+    loadDistinct(db, 'cheap_filter_decision'),
   ]);
 
   return {
@@ -137,6 +146,7 @@ export async function loadArticlesOverview(
     offset,
     sources,
     statuses,
+    cheapFilterDecisions,
   };
 }
 
@@ -153,7 +163,8 @@ export interface ArticleDetail extends ArticleListItem {
 export async function loadArticleDetail(db: Queryable, articleId: string): Promise<ArticleDetail | null> {
   const result = await db.query<ArticleRow & DetailRow>(
     `
-      SELECT a.id, a.title, a.source_name, a.canonical_url, a.processing_status, a.extraction_status,
+      SELECT a.id, a.title, a.source_name, a.canonical_url, a.processing_status, a.cheap_filter_decision,
+        a.extraction_status,
         a.extraction_method, a.content_quality_score, a.rss_recall,
         coalesce(length(a.clean_text), 0) AS clean_text_length,
         a.published_at, a.fetched_at, a.extracted_at,
@@ -241,6 +252,7 @@ interface ArticleRow {
   source_name: string | null;
   canonical_url: string | null;
   processing_status: string;
+  cheap_filter_decision: string | null;
   extraction_status: string;
   extraction_method: string | null;
   content_quality_score: string | null;
@@ -267,6 +279,7 @@ function mapListItem(row: ArticleRow): ArticleListItem {
     sourceName: row.source_name,
     canonicalUrl: row.canonical_url,
     processingStatus: row.processing_status,
+    cheapFilterDecision: row.cheap_filter_decision,
     extractionStatus: row.extraction_status,
     extractionMethod: row.extraction_method,
     contentQualityScore: row.content_quality_score === null ? null : Number(row.content_quality_score),
@@ -319,7 +332,10 @@ async function loadSummary(db: Queryable): Promise<ArticlesSummary> {
   };
 }
 
-async function loadDistinct(db: Queryable, column: 'source_name' | 'processing_status'): Promise<string[]> {
+async function loadDistinct(
+  db: Queryable,
+  column: 'source_name' | 'processing_status' | 'cheap_filter_decision'
+): Promise<string[]> {
   // column is a fixed literal (never user input) — safe to interpolate.
   const result = await db.query<Record<string, string | null>>(
     `SELECT DISTINCT ${column} AS value FROM articles WHERE ${column} IS NOT NULL ORDER BY value`

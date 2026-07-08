@@ -15,6 +15,9 @@ function scriptedDb(handlers: Array<{ match: string; rows: unknown[]; onQuery?: 
 describe('loadEventsOverview', () => {
   it('lists events with source counts and a multi-source summary', async () => {
     let listSql = '';
+    let filteredSql = '';
+    let totalSql = '';
+    let severitySql = '';
     const db = scriptedDb([
       {
         match: 'OFFSET',
@@ -37,9 +40,9 @@ describe('loadEventsOverview', () => {
           },
         ],
       },
-      { match: 'SELECT count(*) AS count', rows: [{ count: '1' }] },
-      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '5', multi_source: '2' }] },
-      { match: 'GROUP BY severity', rows: [{ severity: 'high', count: '3' }, { severity: 'low', count: '2' }] },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '1' }], onQuery: (sql) => { filteredSql = sql; } },
+      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '5', multi_source: '2' }], onQuery: (sql) => { totalSql = sql; } },
+      { match: 'GROUP BY severity', rows: [{ severity: 'high', count: '3' }, { severity: 'low', count: '2' }], onQuery: (sql) => { severitySql = sql; } },
     ]);
 
     const overview = await loadEventsOverview(db, {});
@@ -55,13 +58,40 @@ describe('loadEventsOverview', () => {
     expect(overview.items[0].lastSeenAt?.toISOString()).toBe('2026-07-01T13:10:00.000Z');
     expect(listSql).toContain('min(a.published_at)');
     expect(listSql).toContain('max(a.published_at)');
+    expect(listSql).toContain('SELECT e.id, e.event_title');
+    expect(listSql).not.toContain("e.llm_summary ->> 'title' AS event_title");
+    expect(listSql).not.toContain('e.llm_summary IS NOT NULL AND');
+    expect(listSql).toContain("ORDER BY e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST");
+    expect(listSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(filteredSql).not.toContain('e.llm_summary IS NOT NULL AND');
+    expect(filteredSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(totalSql).not.toContain('e.llm_summary IS NOT NULL AND');
+    expect(totalSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(severitySql).not.toContain('e.llm_summary IS NOT NULL AND');
+    expect(severitySql).toContain('cardinality(coalesce(e.affected_vendors');
     expect(overview.summary).toMatchObject({ total: 5, multiSource: 2 });
     expect(overview.summary.bySeverity).toEqual({ high: 3, low: 2 });
   });
 
-  it('applies the multi-source filter', async () => {
+  it('searches the event title and summary', async () => {
+    let listSql = '';
     const db = scriptedDb([
-      { match: 'OFFSET', rows: [] },
+      { match: 'OFFSET', rows: [], onQuery: (sql) => { listSql = sql; } },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '0' }] },
+      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '0', multi_source: '0' }] },
+      { match: 'GROUP BY severity', rows: [] },
+    ]);
+
+    await loadEventsOverview(db, { search: 'sharepoint' });
+
+    expect(listSql).toContain('e.event_title ILIKE');
+    expect(listSql).not.toContain("e.llm_summary ->> 'title' ILIKE");
+  });
+
+  it('applies the multi-source filter', async () => {
+    let listSql = '';
+    const db = scriptedDb([
+      { match: 'OFFSET', rows: [], onQuery: (sql) => { listSql = sql; } },
       { match: 'SELECT count(*) AS count', rows: [{ count: '0' }] },
       { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '0', multi_source: '0' }] },
       { match: 'GROUP BY severity', rows: [] },
@@ -69,6 +99,23 @@ describe('loadEventsOverview', () => {
     // Just assert it runs and shapes correctly with the filter set.
     const overview = await loadEventsOverview(db, { minSources: 2, sort: 'sources_desc' });
     expect(overview.filtered).toBe(0);
+    expect(listSql).toContain("ORDER BY e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST");
+  });
+
+  it('keeps LLM summaries first when sorting by recent or severity', async () => {
+    const orderBys: string[] = [];
+    const db = scriptedDb([
+      { match: 'OFFSET', rows: [], onQuery: (sql) => { orderBys.push(sql); } },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '0' }] },
+      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '0', multi_source: '0' }] },
+      { match: 'GROUP BY severity', rows: [] },
+    ]);
+
+    await loadEventsOverview(db, { sort: 'recent' });
+    await loadEventsOverview(db, { sort: 'severity' });
+
+    expect(orderBys[0]).toContain('ORDER BY e.llm_summary IS NOT NULL DESC, last_seen_at DESC');
+    expect(orderBys[1]).toContain("ORDER BY e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST");
   });
 });
 

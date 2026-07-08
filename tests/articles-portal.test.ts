@@ -8,10 +8,11 @@ import { renderPortalApp } from '../src/portal/articles-portal-view.js';
  * A scripted DB that answers each SQL shape the portal issues. Matching is by
  * substring so the tests assert the queries the portal actually runs.
  */
-function scriptedDb(handlers: Array<{ match: string; rows: unknown[] }>): Queryable {
+function scriptedDb(handlers: Array<{ match: string; rows: unknown[]; onQuery?: (sql: string) => void }>): Queryable {
   return {
     async query<T>(sql: string) {
       const handler = handlers.find((h) => sql.includes(h.match));
+      handler?.onQuery?.(sql);
       return { rows: (handler?.rows ?? []) as T[], rowCount: handler?.rows.length ?? 0 };
     },
   } as Queryable;
@@ -29,6 +30,7 @@ describe('loadArticlesOverview', () => {
             source_name: 'Test',
             canonical_url: 'https://x/1',
             processing_status: 'CLASSIFIED',
+            cheap_filter_decision: 'KEEP',
             extraction_status: 'http_success',
             extraction_method: 'http',
             content_quality_score: '0.82',
@@ -47,15 +49,44 @@ describe('loadArticlesOverview', () => {
       { match: 'percentile_cont', rows: [{ median_recall: '0.9', median_quality: '0.82' }] },
       { match: 'DISTINCT source_name', rows: [{ value: 'Test' }] },
       { match: 'DISTINCT processing_status', rows: [{ value: 'CLASSIFIED' }] },
+      { match: 'DISTINCT cheap_filter_decision', rows: [{ value: 'KEEP' }] },
     ]);
 
     const overview = await loadArticlesOverview(db, {});
 
     expect(overview.items).toHaveLength(1);
-    expect(overview.items[0]).toMatchObject({ id: '1', contentQualityScore: 0.82, rssRecall: 0.9, cleanTextLength: 1200, topVendor: 'CyberArk', vendorRelevance: 0.91 });
+    expect(overview.items[0]).toMatchObject({ id: '1', cheapFilterDecision: 'KEEP', contentQualityScore: 0.82, rssRecall: 0.9, cleanTextLength: 1200, topVendor: 'CyberArk', vendorRelevance: 0.91 });
     expect(overview.summary).toMatchObject({ total: 1, medianQuality: 0.82, extractionFailureRate: 0 });
     expect(overview.sources).toEqual(['Test']);
     expect(overview.statuses).toEqual(['CLASSIFIED']);
+    expect(overview.cheapFilterDecisions).toEqual(['KEEP']);
+  });
+
+  it('applies the cheap filter decision filter', async () => {
+    let listSql = '';
+    const db = scriptedDb([
+      {
+        match: 'OFFSET',
+        rows: [],
+      },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '0' }] },
+      { match: 'processing_status, count(*)', rows: [] },
+      { match: 'percentile_cont', rows: [{ median_recall: null, median_quality: null }] },
+      { match: 'DISTINCT source_name', rows: [] },
+      { match: 'DISTINCT processing_status', rows: [] },
+      { match: 'DISTINCT cheap_filter_decision', rows: [] },
+    ]);
+    const originalQuery = db.query.bind(db);
+    db.query = async (sql: string, params?: unknown[]) => {
+      if (sql.includes('OFFSET')) {
+        listSql = sql;
+        expect(params?.[0]).toBe('DROP');
+      }
+      return originalQuery(sql, params);
+    };
+
+    await loadArticlesOverview(db, { cheapFilterDecision: 'DROP' });
+    expect(listSql).toContain('a.cheap_filter_decision = $1');
   });
 
   it('computes extraction failure rate from FAIL statuses', async () => {
@@ -83,6 +114,7 @@ describe('loadArticlesOverview', () => {
 
 describe('loadArticleDetail', () => {
   it('assembles article + entities + events + alerts, coercing numerics', async () => {
+    let eventsSql = '';
     const db = scriptedDb([
       {
         match: 'WHERE a.id = $1',
@@ -93,6 +125,7 @@ describe('loadArticleDetail', () => {
             source_name: 'Test',
             canonical_url: 'https://x/5',
             processing_status: 'GROUPED',
+            cheap_filter_decision: 'MAYBE_KEEP',
             extraction_status: 'http_success',
             extraction_method: 'http',
             content_quality_score: '0.7',
@@ -111,14 +144,20 @@ describe('loadArticleDetail', () => {
         ],
       },
       { match: 'FROM article_entities', rows: [{ entity_type: 'vendor', entity_value: 'SailPoint', confidence: '0.9', role: 'affected' }] },
-      { match: 'FROM event_articles ea JOIN cyber_events', rows: [{ event_id: '10', event_title: 'E', relationship: 'same_event_new_source', severity: 'high', confidence: '0.8' }] },
+      {
+        match: 'FROM event_articles ea JOIN cyber_events',
+        rows: [{ event_id: '10', event_title: 'LLM event title', relationship: 'same_event_new_source', severity: 'high', confidence: '0.8' }],
+        onQuery: (sql) => { eventsSql = sql; },
+      },
       { match: 'FROM alerts a JOIN event_articles', rows: [{ alert_tier: 'confirmed', alert_status: 'sent', alert_reason: 'r', suppressed: false }] },
     ]);
 
     const detail = await loadArticleDetail(db, '5');
-    expect(detail).toMatchObject({ topVendor: 'SailPoint', vendorRelevance: 0.9 });
+    expect(detail).toMatchObject({ topVendor: 'SailPoint', vendorRelevance: 0.9, cheapFilterDecision: 'MAYBE_KEEP' });
     expect(detail?.entities[0]).toMatchObject({ entityValue: 'SailPoint', confidence: 0.9 });
     expect(detail?.events[0]).toMatchObject({ eventId: '10', confidence: 0.8 });
+    expect(eventsSql).toContain('e.event_title');
+    expect(eventsSql).not.toContain("e.llm_summary ->> 'title' AS event_title");
     expect(detail?.alerts[0]).toMatchObject({ alertTier: 'confirmed', suppressed: false });
     expect(detail?.llmClassification).toEqual({ cyberRelevant: true });
   });
@@ -140,6 +179,7 @@ describe('escapeHtml + portal shell', () => {
     expect(html).toContain('sandbox=""'); // extracted preview is sandboxed
     expect(html).toContain('Article Portal');
     expect(html).toContain('Vendor (closest)'); // vendor relevance column
+    expect(html).toContain('Cheap filter'); // cheap-filter decision column/filter
     expect(html).toContain('vendor_desc'); // sort by vendor relevance
   });
 });

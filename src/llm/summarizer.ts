@@ -10,7 +10,12 @@ const systemPrompt = [
   'Write titles in present tense, 96 characters or fewer, with the affected issue first.',
   'Do not prefix titles with only the vendor/product name, and do not end with filler like report, advisory, update, or alert.',
   'If evidence is thin, low-confidence, or early-warning only, explicitly label that uncertainty in the summary.',
-  'Return strict JSON only.',
+  'Return strict JSON only, with exactly these top-level keys:',
+  'title, summary, severity, urgency, confidence, keyFacts, recommendedActions.',
+  'Use severity as one of: low, medium, high, critical.',
+  'Use urgency as one of: P1, P2, P3, P4.',
+  'Use confidence as a number from 0 to 1, not a string.',
+  'keyFacts and recommendedActions must always be arrays, even when empty.',
   'Keep summaries concise, factual, and tied to the supplied source articles.',
 ].join(' ');
 

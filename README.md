@@ -60,6 +60,17 @@ npm run pipeline:run          # run the full pipeline once (advisory-locked)
 
 Without `MINIMAX_API_KEY` the pipeline still runs, but the embedding and classification stages are skipped/degraded (dedup loses its semantic tier).
 
+### Manual articles only
+
+Use this path when you want to test only `eval/datasets/manual-articles.jsonl` and avoid live RSS ingest:
+
+```bash
+npm run db:migrate
+npm run seed:vendors
+npm run articles:manual
+npm run pipeline:run -- --skip-ingest --include-llm --limit=50
+```
+
 ## Running continuously (every 20 minutes)
 
 Two deployment patterns share one advisory-locked core, so overlapping runs are skipped, not stacked:

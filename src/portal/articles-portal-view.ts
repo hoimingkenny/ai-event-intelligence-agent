@@ -78,6 +78,7 @@ export function renderPortalApp(): string {
 <div class="controls">
   <input id="q" placeholder="Search title or URL…" />
   <select id="status"><option value="">All statuses</option></select>
+  <select id="decision"><option value="">All filter decisions</option></select>
   <select id="source"><option value="">All sources</option></select>
   <select id="sort">
     <option value="recent">Newest first</option>
@@ -92,7 +93,7 @@ export function renderPortalApp(): string {
   <div class="list">
     <table>
       <thead><tr>
-        <th>Title</th><th>Source</th><th>Vendor (closest)</th><th>Status</th><th>Extraction</th>
+        <th>Title</th><th>Source</th><th>Vendor (closest)</th><th>Cheap filter</th><th>Status</th><th>Extraction</th>
         <th>Quality</th><th>RSS recall</th><th>Chars</th><th>Published</th>
       </tr></thead>
       <tbody id="rows"></tbody>
@@ -168,11 +169,13 @@ async function loadList() {
   const p = new URLSearchParams();
   if ($('q').value) p.set('q', $('q').value);
   if ($('status').value) p.set('status', $('status').value);
+  if ($('decision').value) p.set('decision', $('decision').value);
   if ($('source').value) p.set('source', $('source').value);
   p.set('sort', $('sort').value);
   const data = await fetch('/api/articles?' + p).then(r => r.json());
   renderMetrics(data.summary);
   fillOnce($('status'), data.statuses, 'All statuses');
+  fillOnce($('decision'), data.cheapFilterDecisions, 'All filter decisions');
   fillOnce($('source'), data.sources, 'All sources');
   $('count').textContent = data.filtered + ' of ' + data.summary.total + ' articles';
   const rows = $('rows'); rows.innerHTML = '';
@@ -184,6 +187,7 @@ async function loadList() {
       '<td class="title">' + esc(a.title || '(untitled)') + '</td>' +
       '<td class="muted">' + esc(a.sourceName || '—') + '</td>' +
       '<td>' + vendorCell(a.topVendor, a.vendorRelevance) + '</td>' +
+      '<td><span class="pill">' + esc(a.cheapFilterDecision || 'unscored') + '</span></td>' +
       '<td><span class="pill">' + esc(a.processingStatus) + '</span></td>' +
       '<td class="muted">' + esc(a.extractionStatus) + '</td>' +
       '<td>' + bar(a.contentQualityScore) + '</td>' +
@@ -237,6 +241,7 @@ async function openDetail(id) {
     (a.canonicalUrl ? '<a href="' + esc(a.canonicalUrl) + '" target="_blank" rel="noopener">' + esc(a.canonicalUrl) + '</a>' : '') +
     '<div class="kv">' +
       kv('Vendor (closest)', vendorCell(a.topVendor, a.vendorRelevance)) +
+      kv('Cheap filter', '<span class="pill">' + esc(a.cheapFilterDecision || 'unscored') + '</span>') +
       kv('Status', a.processingStatus) + kv('Extraction', a.extractionStatus + (a.extractionMethod ? ' (' + a.extractionMethod + ')' : '')) +
       kv('Quality', bar(a.contentQualityScore)) + kv('RSS recall', bar(a.rssRecall)) +
       kv('Clean chars', a.cleanTextLength) + kv('Source', a.sourceName || '—') +
@@ -371,6 +376,7 @@ function showPage(page) {
 $('refresh').onclick = loadList;
 $('sort').onchange = loadList;
 $('status').onchange = loadList;
+$('decision').onchange = loadList;
 $('source').onchange = loadList;
 let t; $('q').oninput = () => { clearTimeout(t); t = setTimeout(loadList, 250); };
 $('navArticles').onclick = () => showPage('articles');
