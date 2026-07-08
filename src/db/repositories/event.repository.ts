@@ -1,5 +1,6 @@
 import type { Queryable } from './types.js';
 import { vectorToSqlLiteral } from './article.repository.js';
+import type { ArticleRecord } from './article.repository.js';
 
 export interface CreateEventInput {
   eventTitle: string;
@@ -28,6 +29,7 @@ export interface EventRecord {
   affectedProducts?: string[];
   cves?: string[];
   attackTypes?: string[];
+  summaryStale?: boolean;
 }
 
 interface EventRow {
@@ -44,6 +46,26 @@ interface EventRow {
   affected_products?: string[];
   cves?: string[];
   attack_types?: string[];
+  summary_stale?: boolean;
+}
+
+interface EventArticleRow {
+  id: string;
+  feed_id: string | null;
+  source_name: string | null;
+  title: string | null;
+  canonical_url: string | null;
+  url_hash: string | null;
+  title_hash: string | null;
+  content_hash: string | null;
+  rss_summary: string | null;
+  rss_categories?: string[];
+  clean_text: string | null;
+  published_at: Date | null;
+  extraction_status: string;
+  extraction_method: string | null;
+  extraction_error: string | null;
+  processing_status: string;
 }
 
 export class EventRepository {
@@ -68,7 +90,7 @@ export class EventRepository {
         )
         VALUES ($1, $2, $3, $4, $5, $6, now(), now(), $7, $8, $9, $10)
         RETURNING id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types
+          affected_vendors, affected_products, cves, attack_types, summary_stale
       `,
       [
         input.groupingKey ?? null,
@@ -91,7 +113,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types
+          affected_vendors, affected_products, cves, attack_types, summary_stale
         FROM cyber_events
         WHERE id = $1
       `,
@@ -105,7 +127,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types
+          affected_vendors, affected_products, cves, attack_types, summary_stale
         FROM cyber_events
         WHERE event_title = $1 AND event_status = 'open'
         LIMIT 1
@@ -120,7 +142,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types
+          affected_vendors, affected_products, cves, attack_types, summary_stale
         FROM cyber_events
         WHERE grouping_key = $1 AND event_status = 'open'
         ORDER BY last_seen_at DESC NULLS LAST
@@ -136,7 +158,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         SELECT e.id, e.grouping_key, e.first_seen_at, e.event_title, e.event_summary, e.event_status, e.severity,
-          e.urgency, e.confidence, e.affected_vendors, e.affected_products, e.cves, e.attack_types
+          e.urgency, e.confidence, e.affected_vendors, e.affected_products, e.cves, e.attack_types, e.summary_stale
         FROM cyber_events e
         JOIN event_articles ea ON ea.event_id = e.id
         WHERE ea.article_id = $1
@@ -176,7 +198,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types
+          affected_vendors, affected_products, cves, attack_types, summary_stale
         FROM cyber_events
         WHERE event_status = 'open'
           AND source_count > 0
@@ -193,7 +215,7 @@ export class EventRepository {
     const result = await this.db.query<EventRow>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types
+          affected_vendors, affected_products, cves, attack_types, summary_stale
         FROM cyber_events
         WHERE event_embedding IS NULL
           AND event_status = 'open'
@@ -229,11 +251,76 @@ export class EventRepository {
           severity = COALESCE(($2::jsonb ->> 'severity'), severity),
           urgency = COALESCE(($2::jsonb ->> 'urgency'), urgency),
           confidence = COALESCE(($2::jsonb ->> 'confidence')::numeric, confidence),
+          summary_stale = false,
           updated_at = now()
         WHERE id = $1
       `,
       [eventId, JSON.stringify(summary)]
     );
+  }
+
+  async markSummaryStale(eventId: string): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE cyber_events
+        SET summary_stale = true,
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [eventId]
+    );
+  }
+
+  async listEventsNeedingSummary(limit = 20): Promise<EventRecord[]> {
+    const result = await this.db.query<EventRow>(
+      `
+        SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
+          affected_vendors, affected_products, cves, attack_types, summary_stale
+        FROM cyber_events
+        WHERE event_status = 'open'
+          AND source_count > 0
+          AND (llm_summary IS NULL OR summary_stale)
+        ORDER BY last_seen_at DESC NULLS LAST, id DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    return result.rows.map(mapEvent);
+  }
+
+  async listArticlesForEvent(eventId: string): Promise<ArticleRecord[]> {
+    const result = await this.db.query<EventArticleRow>(
+      `
+        SELECT a.id, a.feed_id, a.source_name, a.title, a.canonical_url, a.url_hash, a.title_hash, a.content_hash,
+          a.rss_summary, a.rss_categories, a.clean_text, a.published_at, a.extraction_status, a.extraction_method,
+          a.extraction_error, a.processing_status
+        FROM event_articles ea
+        JOIN articles a ON a.id = ea.article_id
+        WHERE ea.event_id = $1
+        ORDER BY a.published_at ASC NULLS LAST, a.fetched_at ASC, a.id ASC
+      `,
+      [eventId]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      feedId: row.feed_id,
+      sourceName: row.source_name,
+      title: row.title,
+      canonicalUrl: row.canonical_url,
+      urlHash: row.url_hash,
+      titleHash: row.title_hash,
+      contentHash: row.content_hash,
+      rssSummary: row.rss_summary,
+      rssCategories: row.rss_categories ?? [],
+      cleanText: row.clean_text,
+      publishedAt: row.published_at,
+      extractionStatus: row.extraction_status,
+      extractionMethod: row.extraction_method,
+      extractionError: row.extraction_error,
+      processingStatus: row.processing_status,
+    }));
   }
 
   async findSimilarEvents(
@@ -308,10 +395,11 @@ export class EventRepository {
           SELECT count(*) FROM event_articles WHERE event_id = $1
         ),
           last_seen_at = now(),
-          updated_at = now()
+          updated_at = now(),
+          summary_stale = CASE WHEN $2 = 'same_event_material_update' THEN true ELSE summary_stale END
         WHERE id = $1
       `,
-      [input.eventId]
+      [input.eventId, input.relationship]
     );
   }
 }
@@ -331,5 +419,6 @@ function mapEvent(row: EventRow): EventRecord {
     affectedProducts: row.affected_products ?? [],
     cves: row.cves ?? [],
     attackTypes: row.attack_types ?? [],
+    summaryStale: row.summary_stale ?? false,
   };
 }

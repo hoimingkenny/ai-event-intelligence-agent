@@ -6,6 +6,10 @@ import type { SchemaCaller } from './cyber-classifier.js';
 
 const systemPrompt = [
   'You summarize cyber events for vendor risk analysts.',
+  'The output is the standalone alert/channel payload humans will read first.',
+  'Write titles in present tense, 96 characters or fewer, with the affected issue first.',
+  'Do not prefix titles with only the vendor/product name, and do not end with filler like report, advisory, update, or alert.',
+  'If evidence is thin, low-confidence, or early-warning only, explicitly label that uncertainty in the summary.',
   'Return strict JSON only.',
   'Keep summaries concise, factual, and tied to the supplied source articles.',
 ].join(' ');

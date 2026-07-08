@@ -12,6 +12,7 @@ import { runEventEmbeddingStage } from './event-embedding-stage.js';
 import { runEventStage } from './event-stage.js';
 import { runExtractionStage } from './extraction-stage.js';
 import { runCheapFilterStage } from './filter-stage.js';
+import { runSummaryStage } from './summary-stage.js';
 import { ingestRssFeeds } from './ingest-stage.js';
 import { checkExtractionDrift } from '../monitoring/extraction-drift.js';
 import { checkAlertLatency } from '../monitoring/alert-latency.js';
@@ -32,6 +33,7 @@ export interface PipelineRunResult {
   events: Awaited<ReturnType<typeof runEventStage>>;
   eventEmbeddings: Awaited<ReturnType<typeof runEventEmbeddingStage>>;
   classification?: Awaited<ReturnType<typeof runClassificationStage>>;
+  summaries?: Awaited<ReturnType<typeof runSummaryStage>>;
   alerts: Awaited<ReturnType<typeof runAlertStage>>;
 }
 
@@ -55,6 +57,7 @@ const PipelineStateAnnotation = Annotation.Root({
   events: Annotation<PipelineRunResult['events']>(),
   eventEmbeddings: Annotation<PipelineRunResult['eventEmbeddings']>(),
   classification: Annotation<PipelineRunResult['classification']>(),
+  summaries: Annotation<PipelineRunResult['summaries']>(),
   alerts: Annotation<PipelineRunResult['alerts']>(),
 });
 
@@ -98,6 +101,7 @@ export function buildPipelineGraph(
     .addNode('classification_stage', node('classification', 'classification', () =>
       runClassificationStage(db, { limit })
     ))
+    .addNode('summary_stage', node('summaries', 'summaries', () => runSummaryStage(db, { limit })))
     .addNode('alerts_stage', node('alerts', 'alerts', () => runAlertStage(db, { limit })))
     .addNode('alert_latency', async () => {
       // Speed watchdog: publication → alert p50/p90 vs the 2h SLO.
@@ -122,7 +126,8 @@ export function buildPipelineGraph(
       'classification_stage',
       'alerts_stage',
     ])
-    .addEdge('classification_stage', 'alerts_stage')
+    .addEdge('classification_stage', 'summary_stage')
+    .addEdge('summary_stage', 'alerts_stage')
     .addEdge('alerts_stage', 'alert_latency')
     .addEdge('alert_latency', END);
 
@@ -151,6 +156,7 @@ export async function runPipeline(
     events: state.events,
     eventEmbeddings: state.eventEmbeddings,
     classification: state.classification,
+    summaries: state.summaries,
     alerts: state.alerts,
   };
 }

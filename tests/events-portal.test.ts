@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Queryable } from '../src/db/repositories/types.js';
 import { loadEventsOverview, loadEventDetail } from '../src/portal/events-portal.js';
 
-function scriptedDb(handlers: Array<{ match: string; rows: unknown[] }>): Queryable {
+function scriptedDb(handlers: Array<{ match: string; rows: unknown[]; onQuery?: (sql: string) => void }>): Queryable {
   return {
     async query<T>(sql: string) {
       const handler = handlers.find((h) => sql.includes(h.match));
+      handler?.onQuery?.(sql);
       return { rows: (handler?.rows ?? []) as T[], rowCount: handler?.rows.length ?? 0 };
     },
   } as Queryable;
@@ -13,9 +14,13 @@ function scriptedDb(handlers: Array<{ match: string; rows: unknown[] }>): Querya
 
 describe('loadEventsOverview', () => {
   it('lists events with source counts and a multi-source summary', async () => {
+    let listSql = '';
     const db = scriptedDb([
       {
         match: 'OFFSET',
+        onQuery: (sql) => {
+          listSql = sql;
+        },
         rows: [
           {
             id: '10',
@@ -25,9 +30,10 @@ describe('loadEventsOverview', () => {
             confidence: '0.82',
             source_count: 3,
             affected_vendors: ['CyberArk'],
-            cves: ['CVE-2026-21001'],
-            first_seen_at: new Date('2026-07-01T08:00:00Z'),
-            last_seen_at: new Date('2026-07-01T14:30:00Z'),
+            affected_products: ['PAM'],
+            has_llm_summary: true,
+            first_seen_at: new Date('2026-06-30T22:00:00Z'),
+            last_seen_at: new Date('2026-07-01T13:10:00Z'),
           },
         ],
       },
@@ -37,7 +43,18 @@ describe('loadEventsOverview', () => {
     ]);
 
     const overview = await loadEventsOverview(db, {});
-    expect(overview.items[0]).toMatchObject({ id: '10', sourceCount: 3, confidence: 0.82, affectedVendors: ['CyberArk'] });
+    expect(overview.items[0]).toMatchObject({
+      id: '10',
+      sourceCount: 3,
+      confidence: 0.82,
+      affectedVendors: ['CyberArk'],
+      affectedProducts: ['PAM'],
+      hasLlmSummary: true,
+    });
+    expect(overview.items[0].firstSeenAt?.toISOString()).toBe('2026-06-30T22:00:00.000Z');
+    expect(overview.items[0].lastSeenAt?.toISOString()).toBe('2026-07-01T13:10:00.000Z');
+    expect(listSql).toContain('min(a.published_at)');
+    expect(listSql).toContain('max(a.published_at)');
     expect(overview.summary).toMatchObject({ total: 5, multiSource: 2 });
     expect(overview.summary.bySeverity).toEqual({ high: 3, low: 2 });
   });
@@ -59,7 +76,7 @@ describe('loadEventDetail', () => {
   it('returns the event with its sources ordered as a timeline', async () => {
     const db = scriptedDb([
       {
-        match: 'WHERE id = $1',
+        match: 'WHERE e.id = $1',
         rows: [
           {
             id: '10',
@@ -72,6 +89,7 @@ describe('loadEventDetail', () => {
             source_count: 2,
             affected_vendors: ['CyberArk'],
             affected_products: ['PAM'],
+            has_llm_summary: true,
             cves: ['CVE-2026-21001'],
             attack_types: ['exploitation'],
             grouping_key: 'cve:cve-2026-21001',
@@ -95,10 +113,12 @@ describe('loadEventDetail', () => {
     expect(detail?.sources[1]).toMatchObject({ sourceName: 'BleepingComputer', isMaterialUpdate: true });
     expect(detail?.groupingKey).toBe('cve:cve-2026-21001');
     expect(detail?.attackTypes).toEqual(['exploitation']);
+    expect(detail?.affectedProducts).toEqual(['PAM']);
+    expect(detail?.hasLlmSummary).toBe(true);
   });
 
   it('returns null for a missing event', async () => {
-    const db = scriptedDb([{ match: 'WHERE id = $1', rows: [] }]);
+    const db = scriptedDb([{ match: 'WHERE e.id = $1', rows: [] }]);
     expect(await loadEventDetail(db, '999')).toBeNull();
   });
 });

@@ -29,7 +29,8 @@ export function renderPortalApp(): string {
   th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
   th { position:sticky; top:0; background:var(--bg); color:var(--muted); font-weight:500; font-size:12px; }
   tbody tr { cursor:pointer; } tbody tr:hover { background:#1d222c; } tbody tr.active { background:#232a38; }
-  td.title { white-space:normal; max-width:360px; }
+  td.title { white-space:normal; max-width:420px; }
+  td.desc { white-space:normal; min-width:320px; max-width:520px; }
   .pill { display:inline-block; padding:1px 8px; border-radius:20px; font-size:11px; border:1px solid var(--line); }
   .bar { display:inline-block; width:54px; height:8px; border-radius:4px; background:#2a2f3a; vertical-align:middle; overflow:hidden; }
   .bar > i { display:block; height:100%; }
@@ -40,6 +41,11 @@ export function renderPortalApp(): string {
   .kv { display:grid; grid-template-columns:130px 1fr; gap:4px 10px; margin:14px 0; }
   .kv .muted { color:var(--muted); }
   .tag { display:inline-block; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:2px 8px; margin:2px 4px 2px 0; font-size:12px; }
+  .summary-mark { color:#3fb950; font-size:11px; margin-top:3px; }
+  .fallback-mark { color:var(--muted); font-size:11px; margin-top:3px; }
+  .channel { border:1px solid var(--line); border-radius:8px; padding:14px; background:var(--panel); margin-bottom:14px; }
+  .channel h2 { margin:0 0 8px; font-size:18px; }
+  .channel p { margin:0; }
   .tabs { display:flex; gap:8px; margin:14px 0 8px; }
   .tabs button.active { border-color:var(--accent); color:var(--accent); }
   .nav { display:flex; gap:6px; }
@@ -117,7 +123,7 @@ export function renderPortalApp(): string {
   <div class="list">
     <table>
       <thead><tr>
-        <th>Event</th><th>Severity</th><th>Confidence</th><th>Sources</th><th>Vendors</th><th>CVEs</th><th>Last seen</th>
+        <th>Description</th><th>Vendor/Product</th><th>Severity</th><th>Confidence</th><th>Sources</th><th>First seen · Last update</th>
       </tr></thead>
       <tbody id="erows"></tbody>
     </table>
@@ -132,6 +138,15 @@ const esc = (s) => { const d = document.createElement('div'); d.textContent = s 
 const pct = (v) => v == null ? '—' : Math.round(v * 100) + '%';
 const scoreColor = (v) => v == null ? '#555' : v >= 0.7 ? '#3fb950' : v >= 0.4 ? '#d29922' : '#f85149';
 const dt = (v) => v ? new Date(v).toISOString().slice(0, 16).replace('T', ' ') : '—';
+const rel = (v) => {
+  if (!v) return '—';
+  const diff = Date.now() - new Date(v).getTime();
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return mins + 'm ago';
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return hours + 'h ago';
+  return Math.round(hours / 24) + 'd ago';
+};
 let activeId = null;
 
 function bar(v) {
@@ -143,6 +158,10 @@ function bar(v) {
 function vendorCell(vendor, relevance) {
   if (!vendor) return '<span class="muted">none</span>';
   return '<strong>' + esc(vendor) + '</strong> ' + bar(relevance);
+}
+
+function chips(values) {
+  return (values || []).map(v => '<span class="tag">' + esc(v) + '</span>').join('');
 }
 
 async function loadList() {
@@ -272,14 +291,18 @@ async function loadEvents() {
     const tr = document.createElement('tr');
     if (e.id === activeEventId) tr.className = 'active';
     const multi = e.sourceCount > 1 ? ' <span class="badge">' + e.sourceCount + ' sources</span>' : '';
+    const descriptionMark = e.hasLlmSummary
+      ? '<div class="summary-mark">LLM summary</div>'
+      : '<div class="fallback-mark">draft title</div>';
+    const vendorProduct = chips(e.affectedVendors).concat(chips(e.affectedProducts)) || '<span class="muted">—</span>';
     tr.innerHTML =
-      '<td class="title">' + esc(e.eventTitle || '(untitled)') + '</td>' +
+      '<td class="desc"><strong>' + esc(e.eventTitle || '(untitled)') + '</strong>' + descriptionMark + '</td>' +
+      '<td>' + vendorProduct + '</td>' +
       '<td><span class="sev ' + esc(e.severity || '') + '">' + esc(e.severity || '—') + '</span></td>' +
       '<td>' + bar(e.confidence) + '</td>' +
       '<td>' + e.sourceCount + multi + '</td>' +
-      '<td class="muted">' + esc((e.affectedVendors || []).join(', ') || '—') + '</td>' +
-      '<td class="muted">' + esc((e.cves || []).join(', ') || '—') + '</td>' +
-      '<td class="muted">' + dt(e.lastSeenAt) + '</td>';
+      '<td class="muted">' + rel(e.firstSeenAt) + ' · ' + rel(e.lastSeenAt) +
+        '<br><span class="muted">' + dt(e.firstSeenAt) + ' · ' + dt(e.lastSeenAt) + '</span></td>';
     tr.onclick = () => openEvent(e.id);
     rows.appendChild(tr);
   }
@@ -299,6 +322,7 @@ async function openEvent(id) {
   const e = await fetch('/api/events/' + id).then(r => r.json());
   const d = $('edetail'); d.classList.add('open');
   const vendors = (e.affectedVendors || []).map(v => '<span class="tag">' + esc(v) + '</span>').join('') || '<span class="muted">—</span>';
+  const products = (e.affectedProducts || []).map(v => '<span class="tag">' + esc(v) + '</span>').join('') || '<span class="muted">—</span>';
   const cves = (e.cves || []).map(c => '<span class="tag">' + esc(c) + '</span>').join('') || '<span class="muted">—</span>';
 
   // Sources as a timeline: first report → follow-ups (server orders by published time).
@@ -313,7 +337,11 @@ async function openEvent(id) {
   }).join('') : '<li class="muted">No sources.</li>';
 
   d.innerHTML =
-    '<h2>' + esc(e.eventTitle || '(untitled)') + '</h2>' +
+    '<div class="channel">' +
+      '<h2>' + esc(e.eventTitle || '(untitled)') + '</h2>' +
+      (e.eventSummary ? '<p class="muted">' + esc(e.eventSummary) + '</p>' : '<p class="muted">No LLM event summary yet. The draft title is shown until the summary stage runs.</p>') +
+      (e.hasLlmSummary ? '<div class="summary-mark">Generated event payload</div>' : '<div class="fallback-mark">Fallback event draft</div>') +
+    '</div>' +
     '<div class="kv">' +
       kv('Severity', '<span class="sev ' + esc(e.severity || '') + '">' + esc(e.severity || '—') + '</span>') +
       kv('Urgency', e.urgency || '—') + kv('Confidence', bar(e.confidence)) +
@@ -322,8 +350,8 @@ async function openEvent(id) {
       kv('First seen', dt(e.firstSeenAt)) + kv('Last seen', dt(e.lastSeenAt)) +
     '</div>' +
     '<div><strong>Vendors</strong><br>' + vendors + '</div>' +
+    '<div style="margin-top:10px"><strong>Products</strong><br>' + products + '</div>' +
     '<div style="margin-top:10px"><strong>CVEs</strong><br>' + cves + '</div>' +
-    (e.eventSummary ? '<div style="margin-top:12px"><strong>Summary</strong><p class="muted">' + esc(e.eventSummary) + '</p></div>' : '') +
     '<div style="margin-top:12px"><strong>Sources of this event (' + e.sources.length + ')</strong>' +
       '<ul class="timeline">' + sources + '</ul></div>';
   loadEvents();

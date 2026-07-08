@@ -114,10 +114,11 @@ npm run latency:check         # publication→alert p50/p90 vs 2h SLO (exit 2 on
 A read-only web portal with two views:
 
 - **Articles** — every article with its status, scores, extraction quality, and closest monitored vendor; click a row to inspect entities/events/alerts and **preview the extracted text**.
-- **Events** — deduplicated incidents, multi-source first; click one to see its **sources as a timeline** (first report → follow-ups), each linking to the original and the extracted preview.
+- **Events** — deduplicated incidents, multi-source first; click one to see its channel-ready summary, affected vendors/products, and **sources as a timeline** (first report → follow-ups), each linking to the original and the extracted preview.
 
 ```bash
 npm run portal                # http://127.0.0.1:4322 (Articles | Events tabs)
+npm run summarize:events      # regenerate missing/stale event titles + summaries
 ```
 
 ### Human review dashboard

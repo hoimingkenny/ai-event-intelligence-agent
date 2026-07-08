@@ -22,9 +22,11 @@ Structured entities extracted from articles. The MVP stores vendors, products, C
 
 ### `cyber_events`
 
-Canonical event records. Events aggregate related articles and track title, summary, status, severity, urgency, confidence, affected vendors/products, CVEs, attack types, source count, event embedding, and LLM summary JSON.
+Canonical event records. Events aggregate related articles and track title, summary, status, severity, urgency, confidence, affected vendors/products, CVEs, attack types, source count, event embedding, LLM summary JSON, and whether that summary is stale.
 
 `grouping_key` is the canonical dedup key (CVE-first, normalized vendor/product/attack fallback), indexed on open events — the first, free rung of the grouping ladder. `severity`/`urgency`/`confidence` are computed by classification rollup (never-downgrade semantics, corroboration bonus per source), not hardcoded at creation.
+
+`summary_stale` is set when a new source is a material update to an existing event. The summary stage selects events where `llm_summary IS NULL OR summary_stale`, regenerates the channel-ready event title/summary after classification rollup, writes an `event_summary` LLM audit row, and clears the flag on success.
 
 ### `event_articles`
 

@@ -31,6 +31,7 @@ describe('runPipeline', () => {
     });
 
     expect(result.classification).toEqual({ reviewed: 0, classified: 0, failed: 0, eventsUpdated: 0, vendorsReconciled: 0 });
+    expect(result.summaries).toEqual({ reviewed: 0, summarized: 0, failed: 0 });
     expect(result.alerts.reviewed).toBe(0);
   });
 

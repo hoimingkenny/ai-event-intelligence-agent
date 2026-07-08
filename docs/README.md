@@ -12,6 +12,8 @@ Forward-looking documents: what we intend to build, phased roadmaps, scope decis
 | [rss-vector-pipeline-implementation-plan.md](plans/rss-vector-pipeline-implementation-plan.md) | RSS ingestion + vector dedup pipeline implementation plan |
 | [production-readiness.md](plans/production-readiness.md) | Prototype → enterprise-grade: 8 pillars (current/target/done-when) + 4 phases |
 | [merge-review-and-eval.md](plans/merge-review-and-eval.md) | Merge `npm run review:dashboard` and `npm run eval:review` into a single server + page |
+| [cheap-filter-layered-cascade-plan.md](plans/cheap-filter-layered-cascade-plan.md) | Phased build-out of the layered cheap-filter cascade, gated on eval-dataset growth + recall acceptance |
+| [events-page-title-and-ui.md](plans/events-page-title-and-ui.md) | Stored LLM event titles/summaries (future channel payload) + six-column events table polish |
 
 ## `design/` — system design reference
 
@@ -23,7 +25,8 @@ The current-state reference: how the system is shaped and why. These documents a
 | [data-model.md](design/data-model.md) | Core tables and the article-vs-event separation |
 | [evaluation.md](design/evaluation.md) | Evaluation methodology: item/event-level metrics + human review dashboard |
 | [cyber-keyword-classification-standard.md](design/cyber-keyword-classification-standard.md) | Standard for cheap-filter cyber keyword categories, scoring, and false-positive control |
-| [cheap-filter-rule-engine.md](design/cheap-filter-rule-engine.md) | Implemented cheap-filter rule engine: signal extractors, score table, decision tree, and deviations from the standard |
+| [cheap-filter-rule-engine.md](design/cheap-filter-rule-engine.md) | Implemented cheap-filter cascade: signal extractors, vendor/context gates, priority score, and reason codes |
+| [cheap-filter-layered-cascade.md](design/cheap-filter-layered-cascade.md) | Cheap-filter cascade design rationale: vendor gate → cyber-context gate → priority score, with severe-signal escape hatch |
 | [ui-and-dashboards.md](design/ui-and-dashboards.md) | Dashboard surfaces: articles portal plus merged review/eval dashboard routes, data flow, shared patterns, deployment considerations |
 | [tradeoffs.md](design/tradeoffs.md) | Deliberate trade-offs and their rationale |
 | [limitations.md](design/limitations.md) | Known limits of the current approach |
@@ -65,6 +68,8 @@ One document per merge to `main`, written before merging (see the Development Wo
 | [2026-07-05-articles-portal.md](code-reviews/2026-07-05-articles-portal.md) | Read-only article monitoring portal (status/scores/quality + preview) |
 | [2026-07-05-portal-vendor-relevance.md](code-reviews/2026-07-05-portal-vendor-relevance.md) | Portal vendor relevance: closest monitored vendor + strength |
 | [2026-07-05-portal-events-page.md](code-reviews/2026-07-05-portal-events-page.md) | Events page: list → detail with timeline of same-event sources |
+| [2026-07-08-events-page-title-and-ui.md](code-reviews/2026-07-08-events-page-title-and-ui.md) | Event summary stage + channel-ready events portal UI |
+| [2026-07-08-cheap-filter-layered-cascade.md](code-reviews/2026-07-08-cheap-filter-layered-cascade.md) | Cheap-filter layered cascade: vendor gate → cyber-context gate → priority score |
 
 ## `interview/` — interview preparation
 

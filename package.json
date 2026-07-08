@@ -18,6 +18,7 @@
     "dedup:articles": "tsx scripts/run-dedup.ts",
     "events:articles": "tsx scripts/run-events.ts",
     "classify:articles": "tsx scripts/run-classification.ts",
+    "summarize:events": "tsx scripts/run-summaries.ts",
     "alerts:events": "tsx scripts/run-alerts.ts",
     "pipeline:run": "tsx scripts/run-pipeline.ts",
     "drift:check": "tsx scripts/run-drift-check.ts",

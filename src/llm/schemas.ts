@@ -39,7 +39,7 @@ export const EventComparisonSchema = z.object({
 });
 
 export const EventSummarySchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).max(96),
   summary: z.string().min(1).max(1200),
   severity: SeveritySchema,
   urgency: UrgencySchema,

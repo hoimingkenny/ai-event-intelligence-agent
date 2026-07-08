@@ -15,7 +15,8 @@ export interface EventListItem {
   confidence: number | null;
   sourceCount: number;
   affectedVendors: string[];
-  cves: string[];
+  affectedProducts: string[];
+  hasLlmSummary: boolean;
   firstSeenAt: Date | null;
   lastSeenAt: Date | null;
 }
@@ -59,7 +60,7 @@ export interface EventSource {
 export interface EventDetail extends EventListItem {
   eventSummary: string | null;
   eventStatus: string;
-  affectedProducts: string[];
+  cves: string[];
   attackTypes: string[];
   groupingKey: string | null;
   sources: EventSource[];
@@ -78,15 +79,15 @@ export async function loadEventsOverview(
   const params: unknown[] = [];
   if (query.minSources !== undefined) {
     params.push(query.minSources);
-    conditions.push(`source_count >= $${params.length}`);
+    conditions.push(`e.source_count >= $${params.length}`);
   }
   if (query.severity) {
     params.push(query.severity);
-    conditions.push(`severity = $${params.length}`);
+    conditions.push(`e.severity = $${params.length}`);
   }
   if (query.search) {
     params.push(`%${query.search}%`);
-    conditions.push(`event_title ILIKE $${params.length}`);
+    conditions.push(`(e.event_title ILIKE $${params.length} OR e.event_summary ILIKE $${params.length})`);
   }
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -101,9 +102,19 @@ export async function loadEventsOverview(
   const listParams = [...params, limit, offset];
   const listResult = await db.query<EventRow>(
     `
-      SELECT id, event_title, severity, urgency, confidence, source_count,
-        affected_vendors, cves, first_seen_at, last_seen_at
-      FROM cyber_events
+      SELECT e.id, e.event_title, e.severity, e.urgency, e.confidence, e.source_count,
+        e.affected_vendors, e.affected_products, e.llm_summary IS NOT NULL AS has_llm_summary,
+        COALESCE(article_dates.first_published_at, e.first_seen_at) AS first_seen_at,
+        COALESCE(article_dates.last_published_at, e.last_seen_at) AS last_seen_at
+      FROM cyber_events e
+      LEFT JOIN LATERAL (
+        SELECT min(a.published_at) AS first_published_at,
+          max(a.published_at) AS last_published_at
+        FROM event_articles ea
+        JOIN articles a ON a.id = ea.article_id
+        WHERE ea.event_id = e.id
+          AND a.published_at IS NOT NULL
+      ) article_dates ON true
       ${where}
       ORDER BY ${orderBy}
       LIMIT $${listParams.length - 1} OFFSET $${listParams.length}
@@ -112,7 +123,7 @@ export async function loadEventsOverview(
   );
 
   const filteredResult = await db.query<{ count: string }>(
-    `SELECT count(*) AS count FROM cyber_events ${where}`,
+    `SELECT count(*) AS count FROM cyber_events e ${where}`,
     params
   );
 
@@ -131,11 +142,21 @@ export async function loadEventsOverview(
 export async function loadEventDetail(db: Queryable, eventId: string): Promise<EventDetail | null> {
   const result = await db.query<EventRow & DetailRow>(
     `
-      SELECT id, event_title, event_summary, event_status, severity, urgency, confidence,
-        source_count, affected_vendors, affected_products, cves, attack_types, grouping_key,
-        first_seen_at, last_seen_at
-      FROM cyber_events
-      WHERE id = $1
+      SELECT e.id, e.event_title, e.event_summary, e.event_status, e.severity, e.urgency, e.confidence,
+        e.source_count, e.affected_vendors, e.affected_products, e.cves, e.attack_types, e.grouping_key,
+        e.llm_summary IS NOT NULL AS has_llm_summary,
+        COALESCE(article_dates.first_published_at, e.first_seen_at) AS first_seen_at,
+        COALESCE(article_dates.last_published_at, e.last_seen_at) AS last_seen_at
+      FROM cyber_events e
+      LEFT JOIN LATERAL (
+        SELECT min(a.published_at) AS first_published_at,
+          max(a.published_at) AS last_published_at
+        FROM event_articles ea
+        JOIN articles a ON a.id = ea.article_id
+        WHERE ea.event_id = e.id
+          AND a.published_at IS NOT NULL
+      ) article_dates ON true
+      WHERE e.id = $1
     `,
     [eventId]
   );
@@ -159,7 +180,7 @@ export async function loadEventDetail(db: Queryable, eventId: string): Promise<E
     ...mapListItem(row),
     eventSummary: row.event_summary,
     eventStatus: row.event_status,
-    affectedProducts: row.affected_products ?? [],
+    cves: row.cves ?? [],
     attackTypes: row.attack_types ?? [],
     groupingKey: row.grouping_key,
     sources: sources.rows.map((s) => ({
@@ -184,7 +205,8 @@ interface EventRow {
   confidence: string | null;
   source_count: string | number;
   affected_vendors: string[] | null;
-  cves: string[] | null;
+  affected_products: string[] | null;
+  has_llm_summary?: boolean | null;
   first_seen_at: Date | null;
   last_seen_at: Date | null;
 }
@@ -192,7 +214,7 @@ interface EventRow {
 interface DetailRow {
   event_summary: string | null;
   event_status: string;
-  affected_products: string[] | null;
+  cves: string[] | null;
   attack_types: string[] | null;
   grouping_key: string | null;
 }
@@ -218,7 +240,8 @@ function mapListItem(row: EventRow): EventListItem {
     confidence: row.confidence === null ? null : Number(row.confidence),
     sourceCount: Number(row.source_count),
     affectedVendors: row.affected_vendors ?? [],
-    cves: row.cves ?? [],
+    affectedProducts: row.affected_products ?? [],
+    hasLlmSummary: Boolean(row.has_llm_summary),
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,
   };

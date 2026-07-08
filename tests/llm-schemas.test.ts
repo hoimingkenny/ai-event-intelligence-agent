@@ -46,4 +46,18 @@ describe('LLM schemas', () => {
 
     expect(parsed.keyFacts).toHaveLength(1);
   });
+
+  it('rejects event summary titles that are too long for the portal list', () => {
+    expect(() =>
+      EventSummarySchema.parse({
+        title: 'A'.repeat(97),
+        summary: 'Attackers are exploiting a Vendor VPN vulnerability.',
+        severity: 'high',
+        urgency: 'P2',
+        confidence: 0.86,
+        keyFacts: [],
+        recommendedActions: [],
+      })
+    ).toThrow();
+  });
 });
