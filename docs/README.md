@@ -6,14 +6,18 @@ Three categories, organized by *why* a document exists rather than what feature 
 
 Forward-looking documents: what we intend to build, phased roadmaps, scope decisions. A plan is a snapshot of intent — it is not updated to match reality after the fact (the code and design docs do that job).
 
+Active plans: none at the moment.
+
+### `plans/archive/` — completed / superseded plans
+
 | Document | Scope |
 |---|---|
-| [ai-event-intelligence-agent-plan.md](plans/ai-event-intelligence-agent-plan.md) | Overall project plan: staged agent workflow, goals, phases |
-| [rss-vector-pipeline-implementation-plan.md](plans/rss-vector-pipeline-implementation-plan.md) | RSS ingestion + vector dedup pipeline implementation plan |
-| [production-readiness.md](plans/production-readiness.md) | Prototype → enterprise-grade: 8 pillars (current/target/done-when) + 4 phases |
-| [merge-review-and-eval.md](plans/merge-review-and-eval.md) | Merge `npm run review:dashboard` and `npm run eval:review` into a single server + page |
-| [cheap-filter-layered-cascade-plan.md](plans/cheap-filter-layered-cascade-plan.md) | Phased build-out of the layered cheap-filter cascade, gated on eval-dataset growth + recall acceptance |
-| [events-page-title-and-ui.md](plans/events-page-title-and-ui.md) | Stored LLM event titles/summaries (future channel payload) + six-column events table polish |
+| [ai-event-intelligence-agent-plan.md](plans/archive/ai-event-intelligence-agent-plan.md) | Overall project plan: staged agent workflow, goals, phases |
+| [rss-vector-pipeline-implementation-plan.md](plans/archive/rss-vector-pipeline-implementation-plan.md) | RSS ingestion + vector dedup pipeline implementation plan |
+| [production-readiness.md](plans/archive/production-readiness.md) | Prototype → enterprise-grade: 8 pillars (current/target/done-when) + 4 phases |
+| [merge-review-and-eval.md](plans/archive/merge-review-and-eval.md) | Merge `npm run review:dashboard` and `npm run eval:review` into a single server + page |
+| [cheap-filter-layered-cascade-plan.md](plans/archive/cheap-filter-layered-cascade-plan.md) | Phased build-out of the layered cheap-filter cascade, gated on eval-dataset growth + recall acceptance |
+| [events-page-title-and-ui.md](plans/archive/events-page-title-and-ui.md) | Stored LLM event titles/summaries (future channel payload) + six-column events table polish |
 
 ## `design/` — system design reference
 
