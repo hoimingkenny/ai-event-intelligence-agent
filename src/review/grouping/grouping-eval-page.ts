@@ -85,6 +85,7 @@ export function renderGroupingPane(): string {
             <h3>Basket</h3>
             <div id="grp-basket"></div>
             <div class="actions">
+              <button id="grp-new-incident" type="button">New gold incident</button>
               <button id="grp-save-incident" class="primary" type="button">Save gold incident</button>
               <button id="grp-bulk-same" type="button">Bulk-label pairs same_event</button>
             </div>
@@ -172,6 +173,7 @@ export function groupingPaneBodyScript(): string {
       document.getElementById('grp-refresh').addEventListener('click', () => refreshGrouping());
       document.getElementById('grp-article-search-btn').addEventListener('click', () => searchArticles('basket'));
       document.getElementById('grp-article-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchArticles('basket'); });
+      document.getElementById('grp-new-incident').addEventListener('click', startNewIncident);
       document.getElementById('grp-save-incident').addEventListener('click', saveIncident);
       document.getElementById('grp-bulk-same').addEventListener('click', bulkSame);
       document.getElementById('grp-adhoc-search-a-btn').addEventListener('click', () => searchArticles('a'));
@@ -353,6 +355,18 @@ export function groupingPaneBodyScript(): string {
         await refreshGrouping();
       }
 
+      function startNewIncident() {
+        g.selectedIncidentId = null;
+        g.incidentName = '';
+        g.basket = [];
+        document.getElementById('grp-incident-name').value = '';
+        document.getElementById('grp-article-hits').innerHTML = '';
+        renderIncidentList();
+        renderBasket();
+        renderExpanded();
+        setStatus('grp-incident-status', 'New gold incident — pick articles, then Save.');
+      }
+
       async function saveIncident() {
         const name = document.getElementById('grp-incident-name').value.trim();
         if (!name) { setStatus('grp-incident-status', 'Name required'); return; }
@@ -364,8 +378,12 @@ export function groupingPaneBodyScript(): string {
         });
         const data = await res.json();
         if (!res.ok) { setStatus('grp-incident-status', (data.error && data.error.message) || 'Save failed'); return; }
+        const wasUpdate = Boolean(g.selectedIncidentId);
         g.selectedIncidentId = data.incident.id;
-        setStatus('grp-incident-status', 'Saved gold incident.');
+        setStatus(
+          'grp-incident-status',
+          (wasUpdate ? 'Updated' : 'Created') + ' gold incident. Click “New gold incident” before starting another.'
+        );
         await refreshGrouping();
       }
 

@@ -13,6 +13,7 @@ export const SOURCE_SELECTORS: Record<string, string> = {
   'bleepingcomputer.com': 'div.articleBody',
   'krebsonsecurity.com': 'div.entry-content',
   'thehackernews.com': 'div#articlebody',
+  'securityweek.com': 'div.zox-post-body',
   'cisa.gov': 'div.l-page-section__content, div.usa-prose, main article',
 };
 
@@ -89,7 +90,9 @@ export function extractReadableContent(html: string, url?: string | null): Reada
       `<html><head><title>.</title></head><body>${article.content}</body></html>`
     );
     const text = cleanElementText(articleDoc.body as unknown as Element, url);
-    if (text.length > 0) {
+    // Reject short Readability hits (e.g. SecurityWeek search chrome) so callers
+    // can fall back to htmlToText / another path instead of treating junk as content.
+    if (text.length >= 200) {
       return { cleanText: text, method: 'readability' };
     }
   }

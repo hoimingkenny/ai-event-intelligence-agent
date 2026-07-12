@@ -48,6 +48,29 @@ describe('extractReadableContent', () => {
     expect(result.cleanText).not.toContain('Subscribe to our newsletter');
   });
 
+  it('uses SecurityWeek zox-post-body instead of the site search prompt', () => {
+    const html = `
+      <html><head><title>SharePoint Under Attack</title></head><body>
+        <div class="sw-algolia-search"><h2>Hi, what are you looking for?</h2></div>
+        <article>
+          <div class="zox-post-body">
+            <p>${paragraph}</p>
+            <p>Microsoft warned that CVE-2025-53770 is being exploited against on-premises SharePoint Server.</p>
+          </div>
+        </article>
+      </body></html>
+    `;
+    const result = extractReadableContent(
+      html,
+      'https://www.securityweek.com/sharepoint-under-attack-microsoft-warns-of-zero-day-exploited-in-the-wild-no-patch-available/'
+    );
+
+    expect(result.method).toBe('source_selector');
+    expect(result.cleanText).toContain('CVE-2025-53770');
+    expect(result.cleanText).not.toContain('Hi, what are you looking for?');
+    expect(result.cleanText!.length).toBeGreaterThan(200);
+  });
+
   it('drops high-link-density blocks (related-article lists)', () => {
     const html = `
       <html><body><div class="entry-content">
