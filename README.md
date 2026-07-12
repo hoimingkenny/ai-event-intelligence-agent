@@ -167,7 +167,7 @@ See [`docs/README.md`](docs/README.md) for the full index. Highlights:
 
 - [`docs/design/`](docs/design/) — architecture, data model, evaluation methodology, trade-offs, limitations
 - [`docs/engineering-notes/`](docs/engineering-notes/) — extraction quality, event-grouping ladder, early-warning redesign, entity confidence, deployment, agent-framework decision
-- [`docs/plans/production-readiness.md`](docs/plans/production-readiness.md) — prototype → enterprise-grade roadmap
+- [`docs/plans/archive/production-readiness.md`](docs/plans/archive/production-readiness.md) — prototype → enterprise-grade roadmap
 - [`docs/code-reviews/`](docs/code-reviews/) — a pre-merge review doc per change
 
 ## Development workflow

@@ -1,7 +1,7 @@
 # Cheap-Filter Layered Cascade — Implementation Plan
 
-Target design: [docs/design/cheap-filter-layered-cascade.md](../design/cheap-filter-layered-cascade.md).
-Current engine being replaced: [docs/design/cheap-filter-rule-engine.md](../design/cheap-filter-rule-engine.md).
+Target design: [docs/design/cheap-filter-layered-cascade.md](../../design/cheap-filter-layered-cascade.md).
+Current engine being replaced: [docs/design/cheap-filter-rule-engine.md](../../design/cheap-filter-rule-engine.md).
 
 ## Goal
 
@@ -21,7 +21,7 @@ large enough to trust.
   matchedSignals keep their shapes; only reason-code *values* are added. Dashboards, eval harness,
   and the status mapping in `runCheapFilterStage` keep working unmodified.
 - **No keyword-list rewrite.** Tier membership stays governed by the
-  [classification standard](../design/cyber-keyword-classification-standard.md); this plan only
+  [classification standard](../../design/cyber-keyword-classification-standard.md); this plan only
   changes how tiers are *used*. The one taxonomy change needed (exploitation-class vs
   incident-class split inside critical) is Phase 2.
 - **No downstream stage changes.** KEEP → `EXTRACTION_PENDING`, MAYBE_KEEP →
@@ -104,7 +104,7 @@ articles never KEEP).
 
 ## Phase 5 — docs and merge
 
-- Rewrite [cheap-filter-rule-engine.md](../design/cheap-filter-rule-engine.md) to describe the
+- Rewrite [cheap-filter-rule-engine.md](../../design/cheap-filter-rule-engine.md) to describe the
   implemented cascade (it documents *what is*); flip the cascade design doc's status to
   "implemented".
 - Update the standard's §13 decision policy to match.

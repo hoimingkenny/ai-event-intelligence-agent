@@ -7,7 +7,7 @@
 
 ## Summary of change
 
-Implemented the event-title/UI plan in `docs/plans/events-page-title-and-ui.md`. Events now have a `summary_stale` flag, material updates mark their event for regeneration, a new `summarize:events` stage generates channel-ready event titles/summaries after classification rollup, and the read-only portal now presents events as a six-column human monitoring table.
+Implemented the event-title/UI plan in `docs/plans/archive/events-page-title-and-ui.md`. Events now have a `summary_stale` flag, material updates mark their event for regeneration, a new `summarize:events` stage generates channel-ready event titles/summaries after classification rollup, and the read-only portal now presents events as a six-column human monitoring table.
 
 ## Behaviour changes
 
