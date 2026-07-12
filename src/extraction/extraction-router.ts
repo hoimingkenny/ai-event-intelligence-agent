@@ -3,14 +3,14 @@ import type {
   ArticleExtractionResult,
   ArticleExtractor,
 } from './article-extractor.interface.js';
-import { HttpArticleExtractor } from './http-article-extractor.js';
-// Playwright fallback disabled while we focus on HTTP + Readability quality.
-// import { PlaywrightArticleExtractor } from './playwright-article-extractor.js';
+import { HttpArticleExtractor, isHttpBlockError } from './http-article-extractor.js';
+import { PlaywrightArticleExtractor } from './playwright-article-extractor.js';
 
 export interface ExtractionRouterOptions {
   minRssSummaryLength?: number;
   httpExtractor?: ArticleExtractor;
-  fallbackExtractor?: ArticleExtractor;
+  /** When omitted, Playwright is used after HTTP 403/429. Pass `null` to disable. */
+  fallbackExtractor?: ArticleExtractor | null;
 }
 
 export class ExtractionRouter implements ArticleExtractor {
@@ -21,9 +21,10 @@ export class ExtractionRouter implements ArticleExtractor {
   constructor(options: ExtractionRouterOptions = {}) {
     this.minRssSummaryLength = options.minRssSummaryLength ?? 500;
     this.httpExtractor = options.httpExtractor ?? new HttpArticleExtractor();
-    // Playwright fallback disabled by default; an extractor can still be injected (used in tests).
-    this.fallbackExtractor = options.fallbackExtractor ?? null;
-    // this.fallbackExtractor = options.fallbackExtractor ?? new PlaywrightArticleExtractor();
+    this.fallbackExtractor =
+      options.fallbackExtractor === undefined
+        ? new PlaywrightArticleExtractor()
+        : options.fallbackExtractor;
   }
 
   async extract(input: ArticleExtractionInput): Promise<ArticleExtractionResult> {
@@ -38,7 +39,8 @@ export class ExtractionRouter implements ArticleExtractor {
     const http = await this.httpExtractor.extract(input);
     if (http.status === 'http_success') return http;
 
-    if (!this.fallbackExtractor) return http;
+    // Playwright only for WAF/rate blocks — not for short/noisy HTTP bodies.
+    if (!this.fallbackExtractor || !isHttpBlockError(http.error)) return http;
 
     const fallback = await this.fallbackExtractor.extract(input);
     if (fallback.status === 'playwright_success') return fallback;

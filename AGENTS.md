@@ -62,7 +62,7 @@ src/pipeline/             # Stage functions + runner (the real system)
 src/extraction/           # Article content extraction
   readable-content.ts     # Layered cleaning: per-source selectors → DOM pruning +
                           #   Readability → boilerplate filter; native-ad cluster removal
-  extraction-router.ts    # RSS-summary → HTTP; Playwright fallback disabled by default
+  extraction-router.ts    # RSS-summary → HTTP; Playwright after HTTP 403/429
 src/detection/            # Deterministic entity/CVE/vendor/keyword extractors
 src/dedup/                # Hash / title / semantic dedup decisions
 src/events/               # Article → event draft grouping

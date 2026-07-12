@@ -65,10 +65,26 @@ Without `MINIMAX_API_KEY` the pipeline still runs, but the embedding and classif
 Use this path when you want to test only `eval/datasets/manual-articles.jsonl` and avoid live RSS ingest:
 
 ```bash
+npm run db:reset:manual          # wipe app schema → migrate → seed vendors → import manual articles
+npm run pipeline:run -- --skip-ingest --include-llm --limit=50
+
+# or one shot:
+npm run db:reset -- --yes --manual --pipeline
+```
+
+Equivalent without the helper:
+
+```bash
 npm run db:migrate
 npm run seed:vendors
 npm run articles:manual
 npm run pipeline:run -- --skip-ingest --include-llm --limit=50
+```
+
+Full DB wipe (feeds + vendors + empty tables):
+
+```bash
+npm run db:reset -- --yes
 ```
 
 ## Running continuously (every 20 minutes)
@@ -167,7 +183,7 @@ See [`docs/README.md`](docs/README.md) for the full index. Highlights:
 
 - [`docs/design/`](docs/design/) — architecture, data model, evaluation methodology, trade-offs, limitations
 - [`docs/engineering-notes/`](docs/engineering-notes/) — extraction quality, event-grouping ladder, early-warning redesign, entity confidence, deployment, agent-framework decision
-- [`docs/plans/production-readiness.md`](docs/plans/production-readiness.md) — prototype → enterprise-grade roadmap
+- [`docs/plans/archive/production-readiness.md`](docs/plans/archive/production-readiness.md) — prototype → enterprise-grade roadmap
 - [`docs/code-reviews/`](docs/code-reviews/) — a pre-merge review doc per change
 
 ## Development workflow

@@ -46,7 +46,7 @@ Two independent Node HTTP servers:
 | Source of truth | Postgres only | JSONL + `monitored-vendors.json` + (optional) Postgres |
 | Routes | `GET /`, `GET /api/review-cases`, `GET /api/llm-evaluations`, `POST /api/reviews` | `GET /`, `GET /api/candidates`, `POST /api/labels`, `GET /api/decisions`, `POST /api/labels/from-article`, `GET /api/inventory`, `POST /api/inventory`, `GET /api/report` |
 
-Both bind `127.0.0.1`, both render server-side HTML, both share the same architectural pattern (vanilla `node:http`, hand-rolled UI). See [UI and Dashboards](../design/ui-and-dashboards.md) for the deeper survey.
+Both bind `127.0.0.1`, both render server-side HTML, both share the same architectural pattern (vanilla `node:http`, hand-rolled UI). See [UI and Dashboards](../../design/ui-and-dashboards.md) for the deeper survey.
 
 ## Target architecture
 

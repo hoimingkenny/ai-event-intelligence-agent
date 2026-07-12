@@ -5,6 +5,8 @@ import type {
 } from './article-extractor.interface.js';
 import { env } from '../config/env.js';
 import { contentQualityScore, htmlToText } from './content-cleaner.js';
+import { HTTP_ARTICLE_FETCH_HEADERS } from './http-article-extractor.js';
+import { extractReadableContent } from './readable-content.js';
 
 type PlaywrightModule = typeof import('playwright');
 type Browser = Awaited<ReturnType<PlaywrightModule['chromium']['launch']>>;
@@ -24,7 +26,7 @@ export class PlaywrightArticleExtractor implements ArticleExtractor {
   constructor(options: PlaywrightArticleExtractorOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? env.playwrightExtractionTimeoutMs;
     this.minTextLength = options.minTextLength ?? env.playwrightMinTextLength;
-    this.userAgent = options.userAgent ?? 'vendor-threat-watch/0.1 (+https://example.local)';
+    this.userAgent = options.userAgent ?? HTTP_ARTICLE_FETCH_HEADERS['user-agent'];
   }
 
   async extract(input: ArticleExtractionInput): Promise<ArticleExtractionResult> {
@@ -49,7 +51,9 @@ export class PlaywrightArticleExtractor implements ArticleExtractor {
 
         const rawHtml = await page.content();
         const bodyText = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
-        const cleanText = normalizeBrowserText(bodyText) || htmlToText(rawHtml);
+        const readable = extractReadableContent(rawHtml, input.url);
+        const cleanText =
+          readable.cleanText ?? (normalizeBrowserText(bodyText) || htmlToText(rawHtml));
         const score = contentQualityScore(cleanText);
 
         if (cleanText.length < this.minTextLength || score <= 0) {

@@ -211,7 +211,7 @@ export class EventRepository {
     return result.rows.map(mapEvent);
   }
 
-  async listEventsMissingEmbedding(limit = 20): Promise<EventRecord[]> {
+  async listEventsMissingEmbedding(limit = 20, maxRetries = 5): Promise<EventRecord[]> {
     const result = await this.db.query<EventRow>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
@@ -220,24 +220,50 @@ export class EventRepository {
         WHERE event_embedding IS NULL
           AND event_status = 'open'
           AND source_count > 0
+          AND event_embedding_retry_count < $2
         ORDER BY last_seen_at DESC NULLS LAST, id ASC
         LIMIT $1
       `,
-      [limit]
+      [limit, maxRetries]
     );
 
     return result.rows.map(mapEvent);
   }
 
-  async saveEventEmbedding(eventId: string, vector: number[]): Promise<void> {
+  async saveEventEmbedding(
+    eventId: string,
+    vector: number[],
+    provenance: { model: string; dims: number } = {
+      model: 'unknown',
+      dims: vector.length,
+    }
+  ): Promise<void> {
     await this.db.query(
       `
         UPDATE cyber_events
         SET event_embedding = $2::vector,
+          event_embedding_model = $3,
+          event_embedding_dims = $4,
+          event_embedded_at = now(),
+          event_embedding_retry_count = 0,
+          event_embedding_error = NULL,
           updated_at = now()
         WHERE id = $1
       `,
-      [eventId, vectorToSqlLiteral(vector)]
+      [eventId, vectorToSqlLiteral(vector), provenance.model, provenance.dims]
+    );
+  }
+
+  async recordEventEmbeddingFailure(eventId: string, message: string): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE cyber_events
+        SET event_embedding_retry_count = event_embedding_retry_count + 1,
+          event_embedding_error = $2,
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [eventId, message]
     );
   }
 
@@ -325,15 +351,24 @@ export class EventRepository {
 
   async findSimilarEvents(
     vector: number[],
-    options: { limit?: number; daysBack?: number; excludeEventId?: string } = {}
+    options: {
+      limit?: number;
+      daysBack?: number;
+      excludeEventId?: string;
+      model?: string;
+      dims?: number;
+    } = {}
   ): Promise<Array<EventRecord & { distance: number }>> {
     const result = await this.db.query<EventRow & { distance: string }>(
       `
         SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, severity, urgency, confidence,
-          affected_vendors, affected_products, cves, attack_types,
+          affected_vendors, affected_products, cves, attack_types, summary_stale,
           event_embedding <=> $1::vector AS distance
         FROM cyber_events
         WHERE event_embedding IS NOT NULL
+          AND event_embedding_model IS NOT NULL
+          AND event_embedding_model = $5
+          AND event_embedding_dims = $6
           AND last_seen_at > now() - make_interval(days => $2)
           AND ($3::BIGINT IS NULL OR id <> $3)
         ORDER BY event_embedding <=> $1::vector
@@ -344,6 +379,8 @@ export class EventRepository {
         options.daysBack ?? 30,
         options.excludeEventId ?? null,
         options.limit ?? 10,
+        options.model ?? 'unknown',
+        options.dims ?? 0,
       ]
     );
 

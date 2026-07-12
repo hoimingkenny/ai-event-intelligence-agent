@@ -100,7 +100,7 @@ Five tabs in the eval pane (the **Cheap-filter eval** top-level tab contains all
 1. **Label candidates** — primary labelling flow. The dataset of harvested candidates.
 2. **Live decisions** — same labelling flow but reading from `articles.cheap_filter_decision` (Postgres). `--no-db` flag disables this tab.
 3. **Report** — calls `/api/report` to compute the deterministic eval against the current labelled set. Renders confusion matrix, gate pass/fail, recommended actions, per-sample failure drill-down.
-4. **LLM evaluation** — per-article rollups of offline judge runs from `/api/llm-evaluations` (the bridge between the deterministic filter and the human review loop). Nested rather than promoted to a third top-level tab — see `docs/plans/merge-review-and-eval.md` for the deferred promotion.
+4. **LLM evaluation** — per-article rollups of offline judge runs from `/api/llm-evaluations` (the bridge between the deterministic filter and the human review loop). Nested rather than promoted to a third top-level tab — see `docs/plans/archive/merge-review-and-eval.md` for the deferred promotion.
 5. **Inventory** — editable table of monitored vendor products with search, criticality filter, row-level Edit/Delete, paste-JSON-to-append, and a copy-pasteable LLM prompt template for batch generation.
 
 ## Shared patterns

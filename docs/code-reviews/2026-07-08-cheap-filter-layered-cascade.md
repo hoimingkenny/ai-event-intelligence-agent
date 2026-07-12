@@ -8,7 +8,7 @@
 ## Summary of change
 
 Implements the layered cheap-filter cascade described in
-`docs/plans/cheap-filter-layered-cascade-plan.md` and
+`docs/plans/archive/cheap-filter-layered-cascade-plan.md` and
 `docs/design/cheap-filter-layered-cascade.md`.
 
 The filter now gates RSS metadata in three steps: monitored vendor/product relevance, cyber context,

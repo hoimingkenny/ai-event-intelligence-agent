@@ -10,6 +10,12 @@ export const env = {
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
   openRouterBaseUrl: process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
   openRouterEmbeddingModel: process.env.OPENROUTER_EMBEDDING_MODEL ?? 'openai/text-embedding-3-small',
+  ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? 'http://127.0.0.1:11434',
+  ollamaEmbeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? 'qwen3-embedding:4b',
+  // Keep in sync with PGVECTOR_DIMENSIONS (and any vector(...) migration).
+  // Ollama qwen3-embedding:4b is native 2560; request/truncate to stay ≤2000 for HNSW.
+  embeddingDimensions: Number(process.env.EMBEDDING_DIMENSIONS ?? process.env.PGVECTOR_DIMENSIONS ?? 2048),
+  embeddingMaxRetries: Number(process.env.EMBEDDING_MAX_RETRIES ?? 5),
   databaseUrl: process.env.DATABASE_URL ?? '',
   pgVectorDimensions: Number(process.env.PGVECTOR_DIMENSIONS ?? 2048),
   redisHost: process.env.REDIS_HOST ?? 'localhost',

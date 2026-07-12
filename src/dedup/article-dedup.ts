@@ -1,5 +1,6 @@
 import type { ArticleRecord } from '../db/repositories/article.repository.js';
 import { ArticleRepository } from '../db/repositories/article.repository.js';
+import { currentEmbeddingProvenance } from '../config/embeddings.js';
 
 export type DedupDecisionType =
   | 'unique'
@@ -52,12 +53,15 @@ export async function classifyArticleDedup(
     }
   }
 
+  const provenance = currentEmbeddingProvenance();
   const semanticCandidates = options.semanticVector
     ? (
         await articles.findSimilarArticles(options.semanticVector, {
           limit: options.semanticLimit ?? 5,
           daysBack: options.semanticDaysBack ?? 14,
           excludeArticleId: article.id,
+          model: provenance.model,
+          dims: provenance.dims,
         })
       ).filter((candidate) => candidate.distance <= (options.semanticDistanceThreshold ?? 0.18))
     : [];

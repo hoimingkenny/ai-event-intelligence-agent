@@ -6,7 +6,7 @@
 
 ## Summary of change
 
-Docs-only. Adds `docs/plans/production-readiness.md`: a six-level maturity roadmap (provable correctness → reliability → operability → security → data lifecycle → delivery), each level framed around an enterprise buyer's due-diligence question, with an explicit exit criterion per level and a sequencing rationale. Grounded in the current codebase — names real gaps (13 deps pinned to `"latest"`, batch sweeps vs push-through, unmeasured per-stage latency, localhost-only dashboard, forward-only migrations) rather than generic checklist items. Indexed in `docs/README.md` under plans.
+Docs-only. Adds `docs/plans/archive/production-readiness.md`: a six-level maturity roadmap (provable correctness → reliability → operability → security → data lifecycle → delivery), each level framed around an enterprise buyer's due-diligence question, with an explicit exit criterion per level and a sequencing rationale. Grounded in the current codebase — names real gaps (13 deps pinned to `"latest"`, batch sweeps vs push-through, unmeasured per-stage latency, localhost-only dashboard, forward-only migrations) rather than generic checklist items. Indexed in `docs/README.md` under plans.
 
 ## Behaviour changes
 
