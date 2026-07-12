@@ -1,10 +1,12 @@
 import { env } from '../config/env.js';
+import { currentEmbeddingProvenance } from '../config/embeddings.js';
 import { model } from '../config/llm.js';
 import { ArticleRepository, type ArticleRecord } from '../db/repositories/article.repository.js';
 import { EntityRepository } from '../db/repositories/entity.repository.js';
 import { EventRepository, type EventRecord } from '../db/repositories/event.repository.js';
 import { LlmAuditRepository } from '../db/repositories/llm-audit.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
+import { createEmbeddingLifecycle } from '../embedding/lifecycle.js';
 import { buildEventDraft } from '../events/event-grouper.js';
 import {
   applyComparison,
@@ -38,6 +40,8 @@ export async function runEventStage(
   const entities = new EntityRepository(db);
   const events = new EventRepository(db);
   const audit = new LlmAuditRepository(db);
+  const lifecycle = createEmbeddingLifecycle(db);
+  const provenance = currentEmbeddingProvenance();
   // Comparator only used in the uncertain embedding band; null disables rung 3.
   const comparator =
     options.comparator !== undefined
@@ -46,10 +50,8 @@ export async function runEventStage(
         ? compareArticleToEvent
         : null;
 
-  const candidates = [
-    ...(await articles.listByProcessingStatus('EMBEDDED', options.limit ?? 20)),
-    ...(await articles.listByProcessingStatus('ENTITY_EXTRACTED', options.limit ?? 20)),
-  ].slice(0, options.limit ?? 20);
+  // ADR-0001: never group unembedded articles (rung 2 must be available).
+  const candidates = await articles.listByProcessingStatus('EMBEDDED', options.limit ?? 20);
 
   const result: EventStageResult = {
     reviewed: candidates.length,
@@ -75,9 +77,17 @@ export async function runEventStage(
     const keyMatch =
       draft.groupingKey !== 'unknown' ? await events.findOpenByGroupingKey(draft.groupingKey) : null;
 
-    // Rung 2 input: nearest open events by embedding (skipped when unembedded).
-    const vector = keyMatch ? null : await articles.getEmbedding(article.id);
-    const similarEvents = vector ? await events.findSimilarEvents(vector, { limit: 3 }) : [];
+    // Rung 2 input: nearest open events by embedding (current-model only).
+    const vector = keyMatch
+      ? null
+      : await articles.getEligibleEmbedding(article.id, provenance.model, provenance.dims);
+    const similarEvents = vector
+      ? await events.findSimilarEvents(vector, {
+          limit: 3,
+          model: provenance.model,
+          dims: provenance.dims,
+        })
+      : [];
 
     let decision: GroupingDecision = decideEventGrouping({
       groupingKey: draft.groupingKey,
@@ -125,6 +135,15 @@ export async function runEventStage(
         confidence: 0.6,
         isPrimarySource: true,
       });
+      // ADR-0001: event vector = creating article vector (same run visibility).
+      try {
+        await lifecycle.copyArticleEmbeddingToEvent(event.id, article.id);
+      } catch (error) {
+        await events.recordEventEmbeddingFailure(
+          event.id,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
       result.created += 1;
       result.attached += 1;
     }

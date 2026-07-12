@@ -15,6 +15,7 @@ export const env = {
   // Keep in sync with PGVECTOR_DIMENSIONS (and any vector(...) migration).
   // Ollama qwen3-embedding:4b is native 2560; request/truncate to stay ≤2000 for HNSW.
   embeddingDimensions: Number(process.env.EMBEDDING_DIMENSIONS ?? process.env.PGVECTOR_DIMENSIONS ?? 2048),
+  embeddingMaxRetries: Number(process.env.EMBEDDING_MAX_RETRIES ?? 5),
   databaseUrl: process.env.DATABASE_URL ?? '',
   pgVectorDimensions: Number(process.env.PGVECTOR_DIMENSIONS ?? 2048),
   redisHost: process.env.REDIS_HOST ?? 'localhost',

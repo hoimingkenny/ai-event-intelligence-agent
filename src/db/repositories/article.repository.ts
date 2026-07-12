@@ -334,18 +334,75 @@ export class ArticleRepository {
       .map(Number);
   }
 
-  async saveEmbedding(articleId: string, vector: number[]): Promise<void> {
+  async getEligibleEmbedding(
+    articleId: string,
+    model: string,
+    dims: number
+  ): Promise<number[] | null> {
+    const result = await this.db.query<{ embedding: string | null }>(
+      `
+        SELECT embedding::text AS embedding
+        FROM articles
+        WHERE id = $1
+          AND embedding IS NOT NULL
+          AND embedding_model = $2
+          AND embedding_dims = $3
+      `,
+      [articleId, model, dims]
+    );
+    const raw = result.rows[0]?.embedding;
+    if (!raw) return null;
+    return raw
+      .replace(/^\[|\]$/g, '')
+      .split(',')
+      .map(Number);
+  }
+
+  async saveEmbedding(
+    articleId: string,
+    vector: number[],
+    provenance: { model: string; dims: number } = {
+      model: 'unknown',
+      dims: vector.length,
+    }
+  ): Promise<void> {
     await this.db.query(
       `
         UPDATE articles
         SET embedding = $2::vector,
+          embedding_model = $3,
+          embedding_dims = $4,
+          embedded_at = now(),
+          retry_count = 0,
+          processing_error = NULL,
           processing_status = 'EMBEDDED',
           last_processed_at = now(),
           updated_at = now()
         WHERE id = $1
       `,
-      [articleId, vectorToSqlLiteral(vector)]
+      [articleId, vectorToSqlLiteral(vector), provenance.model, provenance.dims]
     );
+  }
+
+  async recordEmbeddingFailure(articleId: string, message: string, maxRetries: number): Promise<'pending' | 'exhausted'> {
+    const result = await this.db.query<{ retry_count: number }>(
+      `
+        UPDATE articles
+        SET retry_count = retry_count + 1,
+          processing_error = $2,
+          processing_status = CASE
+            WHEN retry_count + 1 >= $3 THEN 'IGNORED'
+            ELSE 'EMBEDDING_PENDING'
+          END,
+          last_processed_at = now(),
+          updated_at = now()
+        WHERE id = $1
+        RETURNING retry_count
+      `,
+      [articleId, message, maxRetries]
+    );
+    const retryCount = result.rows[0]?.retry_count ?? maxRetries;
+    return retryCount >= maxRetries ? 'exhausted' : 'pending';
   }
 
   async saveClassification(articleId: string, classification: unknown): Promise<void> {
@@ -364,7 +421,13 @@ export class ArticleRepository {
 
   async findSimilarArticles(
     vector: number[],
-    options: { limit?: number; daysBack?: number; excludeArticleId?: string } = {}
+    options: {
+      limit?: number;
+      daysBack?: number;
+      excludeArticleId?: string;
+      model?: string;
+      dims?: number;
+    } = {}
   ): Promise<Array<ArticleRecord & { distance: number }>> {
     const result = await this.db.query<ArticleRow & { distance: string }>(
       `
@@ -374,6 +437,9 @@ export class ArticleRepository {
           embedding <=> $1::vector AS distance
         FROM articles
         WHERE embedding IS NOT NULL
+          AND embedding_model IS NOT NULL
+          AND embedding_model = $5
+          AND embedding_dims = $6
           AND published_at > now() - make_interval(days => $2)
           AND ($3::BIGINT IS NULL OR id <> $3)
         ORDER BY embedding <=> $1::vector
@@ -384,6 +450,8 @@ export class ArticleRepository {
         options.daysBack ?? 14,
         options.excludeArticleId ?? null,
         options.limit ?? 10,
+        options.model ?? 'unknown',
+        options.dims ?? 0,
       ]
     );
 

@@ -15,6 +15,7 @@
     "entities:articles": "tsx scripts/run-entities.ts",
     "embed:articles": "tsx scripts/run-embeddings.ts",
     "embed:events": "tsx scripts/run-event-embeddings.ts",
+    "embed:reembed": "tsx scripts/reembed-for-model-change.ts",
     "dedup:articles": "tsx scripts/run-dedup.ts",
     "events:articles": "tsx scripts/run-events.ts",
     "classify:articles": "tsx scripts/run-classification.ts",

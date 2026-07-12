@@ -158,3 +158,17 @@ export async function getEmbeddingDimensions(): Promise<number> {
 export function resetEmbeddingDimensionsCache(): void {
   cachedDimensions = null;
 }
+
+/** Model id written as vector provenance for the active embedding provider. */
+export function currentEmbeddingModel(): string {
+  if (env.embeddingProvider === 'openrouter') return env.openRouterEmbeddingModel;
+  if (env.embeddingProvider === 'ollama') return env.ollamaEmbeddingModel;
+  return env.minimaxEmbeddingModel;
+}
+
+export function currentEmbeddingProvenance(): { model: string; dims: number } {
+  return {
+    model: currentEmbeddingModel(),
+    dims: env.embeddingDimensions,
+  };
+}

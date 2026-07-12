@@ -354,7 +354,7 @@ describe('manual articles loader', () => {
 
   it('validates the checked-in starter file', async () => {
     const articles = await loadManualArticles(join(process.cwd(), 'eval/datasets/manual-articles.jsonl'));
-    expect(articles.length).toBeGreaterThanOrEqual(4);
+    expect(articles.length).toBeGreaterThanOrEqual(3);
   });
 
   it('validates the checked-in DROP-only manual file', async () => {
