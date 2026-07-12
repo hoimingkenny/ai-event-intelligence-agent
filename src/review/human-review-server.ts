@@ -17,6 +17,16 @@ import {
   renderEvalPane,
 } from './eval/eval-page.js';
 import { routeEvalRequest, sendEvalError, type EvalReviewServerOptions } from './eval/eval-routes.js';
+import {
+  defaultGroupingPaneState,
+  groupingPaneBodyScript,
+  groupingPaneStyles,
+  renderGroupingPane,
+} from './grouping/grouping-eval-page.js';
+import {
+  defaultGroupingEvalPaths,
+  routeGroupingEvalRequest,
+} from './grouping/grouping-eval-routes.js';
 
 const MAX_REVIEW_CASE_LIMIT = 200;
 const MAX_JSON_BODY_BYTES = 64 * 1024;
@@ -28,6 +38,8 @@ export interface HumanReviewServerOptions {
   evalDatasetPath?: string;
   evalCandidatesPath?: string;
   evalDb?: Queryable | null;
+  groupingPairDatasetPath?: string;
+  groupingGoldIncidentsPath?: string;
 }
 
 export async function startHumanReviewServer(
@@ -69,6 +81,11 @@ async function routeRequest(
 
   if (req.method === 'GET' && url.pathname === '/') {
     sendHtml(res, renderReviewApp());
+    return;
+  }
+
+  if (url.pathname.startsWith('/api/grouping-eval/')) {
+    await routeGroupingEvalRequest(req, res, getGroupingEvalOptions(db, options));
     return;
   }
 
@@ -133,6 +150,15 @@ function getEvalOptions(db: Queryable, options: HumanReviewServerOptions): EvalR
   return {
     datasetPath: options.evalDatasetPath ?? join(process.cwd(), 'eval/datasets/cheap-filter-eval.jsonl'),
     candidatesPath: options.evalCandidatesPath ?? join(process.cwd(), 'eval/datasets/cheap-filter-candidates.jsonl'),
+    db: options.evalDb === undefined ? db : options.evalDb,
+  };
+}
+
+function getGroupingEvalOptions(db: Queryable, options: HumanReviewServerOptions) {
+  const defaults = defaultGroupingEvalPaths();
+  return {
+    pairDatasetPath: options.groupingPairDatasetPath ?? defaults.pairDatasetPath,
+    goldIncidentsPath: options.groupingGoldIncidentsPath ?? defaults.goldIncidentsPath,
     db: options.evalDb === undefined ? db : options.evalDb,
   };
 }
@@ -207,7 +233,7 @@ class PayloadTooLargeError extends Error {
 
 /**
  * Render the merged dashboard. One HTML document, one shared `state` object,
- * two panes (`#review-pane` and `#eval-pane`) toggled by the top-level tabs.
+ * three panes (`#review-pane`, `#eval-pane`, `#grouping-pane`) toggled by top-level tabs.
  *
  * The eval pane's HTML, CSS, and JS come from src/review/eval/eval-page.ts so
  * the standalone eval server (used by tests + as a future debug surface)
@@ -293,6 +319,7 @@ export function renderReviewApp(): string {
       .case-list { max-height: 360px; }
     }
     ${evalPaneStyles()}
+    ${groupingPaneStyles()}
   </style>
 </head>
 <body>
@@ -302,6 +329,7 @@ export function renderReviewApp(): string {
       <span class="tabs" role="tablist" aria-label="Dashboard view">
         <button id="tab-human" class="tab active" type="button">Human review</button>
         <button id="tab-eval" class="tab" type="button">Cheap-filter eval</button>
+        <button id="tab-grouping" class="tab" type="button">Grouping eval</button>
       </span>
       <button id="refresh" type="button">Refresh</button>
     </div>
@@ -329,7 +357,9 @@ export function renderReviewApp(): string {
     </div>
   </section>
   ${renderEvalPane()}
+  ${renderGroupingPane()}
   <script>${evalPaneBodyScript()}</script>
+  <script>${groupingPaneBodyScript()}</script>
   <script>
     const state = {
       view: 'human',
@@ -339,6 +369,7 @@ export function renderReviewApp(): string {
         selectedId: null,
       },
       eval: ${JSON.stringify(defaultEvalPaneState())},
+      grouping: ${JSON.stringify(defaultGroupingPaneState())},
     };
     const verdictValues = ['not_reviewed', 'correct', 'incorrect', 'unclear'];
     const verdictLabels = {
@@ -350,22 +381,27 @@ export function renderReviewApp(): string {
 
     document.getElementById('refresh').addEventListener('click', () => {
       if (state.view === 'human') loadCases();
-      else document.getElementById('eval-refresh').click();
+      else if (state.view === 'eval') document.getElementById('eval-refresh').click();
+      else document.getElementById('grp-refresh').click();
     });
     document.getElementById('tab-human').addEventListener('click', () => switchView('human'));
     document.getElementById('tab-eval').addEventListener('click', () => switchView('eval'));
+    document.getElementById('tab-grouping').addEventListener('click', () => switchView('grouping'));
     document.getElementById('filter').addEventListener('change', render);
     document.getElementById('limit').addEventListener('change', () => {
       if (state.view === 'human') loadCases();
-      else document.getElementById('eval-refresh').click();
+      else if (state.view === 'eval') document.getElementById('eval-refresh').click();
+      else document.getElementById('grp-refresh').click();
     });
 
     function switchView(view) {
       state.view = view;
       document.getElementById('tab-human').classList.toggle('active', view === 'human');
       document.getElementById('tab-eval').classList.toggle('active', view === 'eval');
+      document.getElementById('tab-grouping').classList.toggle('active', view === 'grouping');
       document.getElementById('review-pane').hidden = view !== 'human';
       document.getElementById('eval-pane').hidden = view !== 'eval';
+      document.getElementById('grouping-pane').hidden = view !== 'grouping';
       document.getElementById('filter').disabled = view !== 'human';
     }
 
@@ -596,6 +632,7 @@ export function renderReviewApp(): string {
         }
       },
     });
+    initGroupingPane(state);
 
     loadCases();
   </script>

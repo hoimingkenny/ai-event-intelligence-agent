@@ -39,3 +39,11 @@ _Avoid_: Embedding stage (one pipeline step); provider client (transport only)
 **Unembedded article**:
 An article that does not yet have a usable, provenance-eligible embedding for similarity.
 _Avoid_: Failed article (failure is one cause; awaiting embed is another)
+
+**Grouping pair label**:
+A human judgement on two articles: same canonical event, different events, or too ambiguous to use for distance-threshold calibration.
+_Avoid_: Cluster label, duplicate label, grouping verdict (verdict is a per-article review of pipeline output)
+
+**Gold incident**:
+A human-curated set of articles known to describe one real-world incident, used to expand same-event grouping pair labels.
+_Avoid_: Cluster, canonical event (canonical event is the system's record; a gold incident is evaluation ground truth)
