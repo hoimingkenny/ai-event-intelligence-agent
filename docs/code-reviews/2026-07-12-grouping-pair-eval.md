@@ -1,7 +1,7 @@
 # Code Review: Grouping pair eval portal + threshold tuner
 
 - **Branch:** `feat/grouping-pair-eval` → `main`
-- **Commits:** (pending on branch)
+- **Commits:** `7e433b5`
 - **Date:** 2026-07-12
 - **Reviewer:** Cursor agent
 - **Spec:** [#2 Grouping pair eval portal + visual threshold tuner](https://github.com/hoimingkenny/ai-event-intelligence-agent/issues/2)
