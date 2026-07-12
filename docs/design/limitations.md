@@ -6,7 +6,7 @@ Known limits of the current implementation, ordered roughly by impact on the ear
 - **`trust_level` is stored on feeds but not yet used in any decision** — a single authoritative source should clear the confirmed gate alone; it currently cannot.
 - **Batch sweeps, not push-through.** Pipeline latency is bounded by sweep cadence × stage count. BullMQ job payloads carry article IDs but stages ignore them; per-article push-through is the follow-up that collapses queue latency to seconds.
 - **Grouping keys are identities, not aliases.** A CVE arriving after an event was keyed on vendor+attack-type can split the event exactly when it matters most; the embedding rung partially compensates. Key aliasing/merging is planned.
-- **Playwright is disabled**, so JavaScript-only publishers fail extraction entirely (accepted for current server-rendered feeds).
+- **Playwright runs only after HTTP 403/429** (post-retry). JS-only publishers that return 200 with an empty shell still fail extraction until that case is handled separately.
 - **Embedding thresholds (0.15/0.35) and confidence-rollup weights are unvalidated priors** — tunable against the labelled eval set, not yet tuned.
 - **Prompt injection is unaddressed**: untrusted web content flows into LLM prompts. Mitigations exist by construction (no tool access, schema-constrained outputs) but no deliberate hardening or cross-checking of verdicts against deterministic signals yet.
 - Entity extraction is deterministic and may miss obscure vendors, products, or threat names; the cheap filter marks misses `IGNORED` terminally, so inventory additions do not re-scan history.

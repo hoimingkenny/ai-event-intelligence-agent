@@ -6,9 +6,9 @@ PostgreSQL is the source of truth because the workflow is state-heavy and audit-
 
 pgvector keeps semantic retrieval close to that relational state. A dedicated vector database can be added later if vector search scale becomes the bottleneck.
 
-## HTTP + Readability Only; Playwright Disabled
+## HTTP First; Playwright Only After 403/429
 
-HTTP extraction with layered Readability cleaning is the only active path. The Playwright fallback is currently disabled (still injectable for tests) while extraction quality work focuses on the static path — the curated feeds are all server-rendered. JS-only sources will fail extraction until it is re-enabled.
+HTTP + Readability is the default path (fast, cheap). Node `fetch` is not a browser, so some publishers' WAFs return intermittent 403/429. The HTTP extractor retries those statuses a bounded number of times; if they still fail, the router escalates to Playwright (real Chromium). Other HTTP failures (short/noisy body) stay on the HTTP path and fail loud — Playwright is not a general “make extraction succeed” switch. Pass `fallbackExtractor: null` to disable.
 
 ## Structure-Based Ad Removal Over Class-Name Blacklists
 

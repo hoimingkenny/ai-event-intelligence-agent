@@ -13,7 +13,7 @@ const limit = limitArg ? Number(limitArg.split('=')[1]) : undefined;
 const includeIngest = !process.argv.includes('--skip-ingest');
 const includeLlm = process.argv.includes('--include-llm');
 
-async function main(): Promise<void> {
+async function main(): Promise<number> {
   const pool = getDatabasePool();
 
   try {
@@ -23,10 +23,15 @@ async function main(): Promise<void> {
       includeLlm,
     });
     console.log(JSON.stringify(outcome, null, 2));
-    if (!outcome.ran && outcome.reason === 'error') process.exitCode = 1;
+    return !outcome.ran && outcome.reason === 'error' ? 1 : 0;
   } finally {
     await pool.end();
   }
 }
 
-await main();
+const code = await main().catch((error) => {
+  console.error(error);
+  return 1;
+});
+// LLM / embedding HTTP clients keep sockets open; force exit for one-shot CLI.
+process.exit(code);

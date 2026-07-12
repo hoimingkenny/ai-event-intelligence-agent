@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "db:migrate": "tsx scripts/migrate.ts",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "db:reset:manual": "tsx scripts/db-reset.ts --yes --manual",
     "seed:feeds": "tsx scripts/seed-feeds.ts",
     "seed:vendors": "tsx scripts/seed-vendors.ts",
     "db:seed": "npm run seed:feeds && npm run seed:vendors",
