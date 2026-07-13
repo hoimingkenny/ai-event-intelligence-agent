@@ -13,8 +13,8 @@ import {
 const basePair: GroupingPairLabelRecord = {
   urlA: 'https://example.test/a',
   urlB: 'https://example.test/b',
-  label: 'same_event',
-  humanReason: 'Same vendor advisory and news rewrite.',
+  label: 'uncertain',
+  humanReason: 'Ambiguous whether same incident.',
   goldIncidentId: 'inc-1',
   labeledAt: '2026-07-12T12:00:00.000Z',
 };
@@ -67,7 +67,7 @@ describe('grouping pair JSONL dataset', () => {
     expect(samples).toHaveLength(1);
     expect(samples[0].urlA).toBe('https://example.test/a');
     expect(samples[0].urlB).toBe('https://example.test/z');
-    expect(samples[0].label).toBe('same_event');
+    expect(samples[0].label).toBe('uncertain');
   });
 
   it('rejects duplicate unordered pairs on append', async () => {
@@ -110,6 +110,6 @@ describe('grouping pair JSONL dataset', () => {
     expect(result.pair.label).toBe('uncertain');
     const samples = await loadGroupingPairDataset(path);
     expect(samples).toHaveLength(1);
-    expect(samples[0].label).toBe('uncertain');
+    expect(samples[0].humanReason).toBe('Changed mind after review.');
   });
 });

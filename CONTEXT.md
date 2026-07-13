@@ -41,9 +41,9 @@ An article that does not yet have a usable, provenance-eligible embedding for si
 _Avoid_: Failed article (failure is one cause; awaiting embed is another)
 
 **Grouping pair label**:
-A human judgement on two articles: same canonical event, different events, or too ambiguous to use for distance-threshold calibration.
+A derived or overridden judgement on two articles for embedding-threshold calibration: `same_event` / `different_event` are derived from gold incidents; only `uncertain` overrides are hand-persisted.
 _Avoid_: Cluster label, duplicate label, grouping verdict (verdict is a per-article review of pipeline output)
 
 **Gold incident**:
-A human-curated set of articles known to describe one real-world incident, used to expand same-event grouping pair labels.
+A human-curated set of articles known to describe one real-world incident. Within-basket pairs derive as same_event; cross-basket pairs derive as different_event. Article URLs must not appear in more than one gold incident.
 _Avoid_: Cluster, canonical event (canonical event is the system's record; a gold incident is evaluation ground truth)

@@ -1,6 +1,6 @@
 /**
- * Grouping eval pane — gold incidents, ad-hoc pairs, visual threshold tuner.
- * Composed like cheap-filter eval: styles + body + init script for the review shell.
+ * Grouping eval pane — gold incidents, uncertain overrides, visual threshold tuner.
+ * Same/different labels are derived from gold baskets at report time.
  */
 
 import {
@@ -15,8 +15,7 @@ const GROUPING_CSS = `
     #grouping-pane .item-button.active { background: #e9f6f4; box-shadow: inset 3px 0 0 var(--accent); }
     #grouping-pane .search-results { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
     #grouping-pane .pair-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #fbfcfd; }
-    #grouping-pane .label-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
-    #grouping-pane .label-buttons button.selected { outline: 3px solid var(--accent); }
+    #grouping-pane .label-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
     #grouping-pane .tuner-plot { width: 100%; height: 160px; background: #fbfcfe; border: 1px solid var(--line); border-radius: 8px; }
     #grouping-pane .slider-row { display: grid; grid-template-columns: 140px 1fr 70px; gap: 10px; align-items: center; margin: 10px 0; }
     #grouping-pane input[type="range"] { width: 100%; }
@@ -33,18 +32,15 @@ export function defaultGroupingPaneState(): Record<string, unknown> {
     subtab: 'incidents',
     incidents: [],
     selectedIncidentId: null,
-    pairs: [],
+    overrides: [],
     articleHits: [],
     searchQ: '',
     basket: [],
     incidentName: '',
-    adhocA: null,
-    adhocB: null,
-    adhocLabel: 'different_event',
-    adhocReason: '',
-    bulkReason: 'Gold incident: same real-world event across sources.',
+    overrideReason: 'Uncertain after review.',
     report: null,
     scoredPairs: [],
+    reportMeta: null,
     attach: EMBEDDING_ATTACH_DISTANCE,
     uncertain: EMBEDDING_UNCERTAIN_DISTANCE,
     status: '',
@@ -57,7 +53,6 @@ export function renderGroupingPane(): string {
     <header style="height:auto;padding:10px 18px">
       <div class="tabs" role="tablist" aria-label="Grouping eval view">
         <button id="grp-tab-incidents" class="active" type="button">Gold incidents</button>
-        <button id="grp-tab-adhoc" type="button">Ad-hoc pairs</button>
         <button id="grp-tab-tuner" type="button">Threshold tuner</button>
         <button id="grp-refresh" type="button">Refresh</button>
       </div>
@@ -73,7 +68,7 @@ export function renderGroupingPane(): string {
         <main class="content">
           <div class="panel">
             <h2>Build a gold incident</h2>
-            <p class="muted">Aim for ~3 DB articles about one real-world incident. Expand to pairs and bulk-label <code>same_event</code>.</p>
+            <p class="muted">Collect DB articles about one real-world incident. Same/different pair labels are derived automatically from gold baskets (≥2 incidents needed for different_event).</p>
             <label class="muted">Name</label>
             <input id="grp-incident-name" style="width:100%;margin:6px 0 10px;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="e.g. SailPoint GitHub July" />
             <label class="muted">Search articles in DB</label>
@@ -87,56 +82,23 @@ export function renderGroupingPane(): string {
             <div class="actions">
               <button id="grp-new-incident" type="button">New gold incident</button>
               <button id="grp-save-incident" class="primary" type="button">Save gold incident</button>
-              <button id="grp-bulk-same" type="button">Bulk-label pairs same_event</button>
             </div>
-            <textarea id="grp-bulk-reason" placeholder="Reason for bulk same_event labels"></textarea>
+            <textarea id="grp-override-reason" placeholder="Reason when marking a pair uncertain (min 3 chars)"></textarea>
             <p id="grp-incident-status" class="muted"></p>
           </div>
           <div class="panel">
-            <h2>Expanded pairs</h2>
+            <h2>Within-basket pairs</h2>
+            <p class="muted">Derived as <code>same_event</code>. Override to <code>uncertain</code> if a pair is ambiguous.</p>
             <div id="grp-expanded-pairs"></div>
           </div>
         </main>
       </div>
     </div>
-    <div id="grp-adhoc-view" style="display:none" class="content">
-      <div class="panel">
-        <h2>Ad-hoc pair</h2>
-        <p class="muted">Pick two DB articles — typically <code>different_event</code> negatives.</p>
-        <div class="grid">
-          <div>
-            <h3>Article A</h3>
-            <div style="display:flex;gap:8px;margin-bottom:8px">
-              <input id="grp-adhoc-search-a" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Search…" />
-              <button id="grp-adhoc-search-a-btn" type="button">Search</button>
-            </div>
-            <div id="grp-adhoc-hits-a" class="search-results"></div>
-            <div id="grp-adhoc-selected-a" class="muted" style="margin-top:8px">None selected</div>
-          </div>
-          <div>
-            <h3>Article B</h3>
-            <div style="display:flex;gap:8px;margin-bottom:8px">
-              <input id="grp-adhoc-search-b" style="flex:1;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Search…" />
-              <button id="grp-adhoc-search-b-btn" type="button">Search</button>
-            </div>
-            <div id="grp-adhoc-hits-b" class="search-results"></div>
-            <div id="grp-adhoc-selected-b" class="muted" style="margin-top:8px">None selected</div>
-          </div>
-        </div>
-        <div class="label-buttons" id="grp-adhoc-labels">
-          <button type="button" data-label="same_event">same_event</button>
-          <button type="button" data-label="different_event" class="selected">different_event</button>
-          <button type="button" data-label="uncertain">uncertain</button>
-        </div>
-        <textarea id="grp-adhoc-reason" placeholder="Why this label? (min 3 chars)"></textarea>
-        <div class="actions"><button id="grp-adhoc-save" class="primary" type="button">Save pair label</button></div>
-        <p id="grp-adhoc-status" class="muted"></p>
-      </div>
-    </div>
     <div id="grp-tuner-view" style="display:none" class="content">
       <div class="panel">
         <h2>Threshold tuner</h2>
-        <p class="muted">Article↔article cosine distance. <code>uncertain</code> labels and missing/old embeddings are excluded from fitting. Suggestions are not applied to production config.</p>
+        <p class="muted">Article↔article cosine distance from derived gold pairs. <code>uncertain</code> overrides are excluded from fitting. Suggestions are not applied to production config.</p>
+        <p id="grp-tuner-hint" class="muted"></p>
         <div class="metrics-grid" id="grp-tuner-metrics"></div>
         <svg id="grp-tuner-plot" class="tuner-plot" viewBox="0 0 800 160" preserveAspectRatio="none"></svg>
         <div class="slider-row">
@@ -153,7 +115,8 @@ export function renderGroupingPane(): string {
         <p id="grp-tuner-status" class="muted"></p>
       </div>
       <div class="panel">
-        <h2>Scorable pairs</h2>
+        <h2>Derived pairs</h2>
+        <p class="muted">Cross-basket pairs can be overridden to uncertain here.</p>
         <div id="grp-tuner-pairs"></div>
       </div>
     </div>
@@ -168,24 +131,13 @@ export function groupingPaneBodyScript(): string {
         return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
       }
       document.getElementById('grp-tab-incidents').addEventListener('click', () => switchGrpTab('incidents'));
-      document.getElementById('grp-tab-adhoc').addEventListener('click', () => switchGrpTab('adhoc'));
       document.getElementById('grp-tab-tuner').addEventListener('click', () => switchGrpTab('tuner'));
       document.getElementById('grp-refresh').addEventListener('click', () => refreshGrouping());
-      document.getElementById('grp-article-search-btn').addEventListener('click', () => searchArticles('basket'));
-      document.getElementById('grp-article-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchArticles('basket'); });
+      document.getElementById('grp-article-search-btn').addEventListener('click', () => searchArticles());
+      document.getElementById('grp-article-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchArticles(); });
       document.getElementById('grp-new-incident').addEventListener('click', startNewIncident);
       document.getElementById('grp-save-incident').addEventListener('click', saveIncident);
-      document.getElementById('grp-bulk-same').addEventListener('click', bulkSame);
-      document.getElementById('grp-adhoc-search-a-btn').addEventListener('click', () => searchArticles('a'));
-      document.getElementById('grp-adhoc-search-b-btn').addEventListener('click', () => searchArticles('b'));
-      document.getElementById('grp-adhoc-save').addEventListener('click', saveAdhoc);
-      document.getElementById('grp-bulk-reason').value = g.bulkReason || '';
-      document.querySelectorAll('#grp-adhoc-labels button').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          g.adhocLabel = btn.getAttribute('data-label');
-          document.querySelectorAll('#grp-adhoc-labels button').forEach((b) => b.classList.toggle('selected', b === btn));
-        });
-      });
+      document.getElementById('grp-override-reason').value = g.overrideReason || '';
       const attachEl = document.getElementById('grp-attach');
       const uncertainEl = document.getElementById('grp-uncertain');
       attachEl.addEventListener('input', () => { g.attach = Number(attachEl.value); document.getElementById('grp-attach-val').textContent = g.attach.toFixed(2); if (g.attach > g.uncertain) { g.uncertain = g.attach; uncertainEl.value = String(g.uncertain); document.getElementById('grp-uncertain-val').textContent = g.uncertain.toFixed(2); } loadReport(); });
@@ -195,10 +147,8 @@ export function groupingPaneBodyScript(): string {
       function switchGrpTab(tab) {
         g.subtab = tab;
         document.getElementById('grp-tab-incidents').classList.toggle('active', tab === 'incidents');
-        document.getElementById('grp-tab-adhoc').classList.toggle('active', tab === 'adhoc');
         document.getElementById('grp-tab-tuner').classList.toggle('active', tab === 'tuner');
         document.getElementById('grp-incidents-view').style.display = tab === 'incidents' ? '' : 'none';
-        document.getElementById('grp-adhoc-view').style.display = tab === 'adhoc' ? '' : 'none';
         document.getElementById('grp-tuner-view').style.display = tab === 'tuner' ? '' : 'none';
         if (tab === 'tuner') loadReport();
       }
@@ -211,12 +161,23 @@ export function groupingPaneBodyScript(): string {
         const incData = await incRes.json();
         const pairData = await pairRes.json();
         g.incidents = incData.incidents || [];
-        g.pairs = pairData.pairs || [];
+        g.overrides = pairData.pairs || [];
         document.getElementById('grp-incident-count').textContent = String(g.incidents.length);
         renderIncidentList();
         renderBasket();
         renderExpanded();
         if (g.subtab === 'tuner') loadReport();
+      }
+
+      function findOverride(ua, ub) {
+        return (g.overrides || []).find((p) =>
+          (p.urlA === ua && p.urlB === ub) || (p.urlA === ub && p.urlB === ua)
+        );
+      }
+
+      function overrideReason() {
+        const value = document.getElementById('grp-override-reason').value.trim();
+        return value.length >= 3 ? value : 'Uncertain after review.';
       }
 
       function renderIncidentList() {
@@ -242,18 +203,16 @@ export function groupingPaneBodyScript(): string {
         });
       }
 
-      async function searchArticles(target) {
-        const inputId = target === 'basket' ? 'grp-article-search' : (target === 'a' ? 'grp-adhoc-search-a' : 'grp-adhoc-search-b');
-        const q = document.getElementById(inputId).value.trim();
+      async function searchArticles() {
+        const q = document.getElementById('grp-article-search').value.trim();
         const res = await fetch('/api/grouping-eval/articles?q=' + encodeURIComponent(q) + '&limit=30');
         const data = await res.json();
         if (!res.ok) {
-          setStatus(target === 'basket' ? 'grp-incident-status' : 'grp-adhoc-status', (data.error && data.error.message) || 'Search failed');
+          setStatus('grp-incident-status', (data.error && data.error.message) || 'Search failed');
           return;
         }
         const hits = data.articles || [];
-        const host = target === 'basket' ? 'grp-article-hits' : (target === 'a' ? 'grp-adhoc-hits-a' : 'grp-adhoc-hits-b');
-        const el = document.getElementById(host);
+        const el = document.getElementById('grp-article-hits');
         if (!hits.length) { el.innerHTML = '<p class="empty">No matches.</p>'; return; }
         el.innerHTML = hits.map((a) =>
           '<button type="button" class="item-button" data-id="' + escapeHtml(a.articleId) + '">' +
@@ -264,17 +223,9 @@ export function groupingPaneBodyScript(): string {
           btn.addEventListener('click', () => {
             const article = hits.find((h) => h.articleId === btn.getAttribute('data-id'));
             if (!article) return;
-            if (target === 'basket') {
-              if (!g.basket.some((b) => b.url === article.url)) g.basket.push(article);
-              renderBasket();
-              renderExpanded();
-            } else if (target === 'a') {
-              g.adhocA = article;
-              document.getElementById('grp-adhoc-selected-a').textContent = article.title + ' — ' + article.sourceName;
-            } else {
-              g.adhocB = article;
-              document.getElementById('grp-adhoc-selected-b').textContent = article.title + ' — ' + article.sourceName;
-            }
+            if (!g.basket.some((b) => b.url === article.url)) g.basket.push(article);
+            renderBasket();
+            renderExpanded();
           });
         });
       }
@@ -310,49 +261,75 @@ export function groupingPaneBodyScript(): string {
         el.innerHTML = pairs.map(([ua, ub]) => {
           const a = g.basket.find((x) => x.url === ua);
           const b = g.basket.find((x) => x.url === ub);
-          const existing = (g.pairs || []).find((p) =>
-            (p.urlA === ua && p.urlB === ub) || (p.urlA === ub && p.urlB === ua)
-          );
-          const label = existing ? existing.label : '';
+          const existing = findOverride(ua, ub);
+          const label = existing ? 'uncertain (override)' : 'same_event (derived)';
           return '<div class="pair-row" data-ua="' + escapeHtml(ua) + '" data-ub="' + escapeHtml(ub) + '">' +
             '<div><strong>' + escapeHtml(a.title) + '</strong> <span class="muted">(' + escapeHtml(a.sourceName) + ')</span></div>' +
             '<div class="muted">' + escapeHtml(ua) + '</div>' +
             '<div style="margin:6px 0">×</div>' +
             '<div><strong>' + escapeHtml(b.title) + '</strong> <span class="muted">(' + escapeHtml(b.sourceName) + ')</span></div>' +
             '<div class="muted">' + escapeHtml(ub) + '</div>' +
-            '<div class="muted" style="margin-top:6px">Current label: ' + (label ? escapeHtml(label) : 'none') + '</div>' +
+            '<div class="muted" style="margin-top:6px">' + escapeHtml(label) + '</div>' +
             '<div class="label-buttons">' +
-            '<button type="button" data-label="same_event">same_event</button>' +
-            '<button type="button" data-label="different_event">different_event</button>' +
-            '<button type="button" data-label="uncertain">uncertain</button>' +
+            (existing
+              ? '<button type="button" data-action="clear">Clear uncertain</button>'
+              : '<button type="button" data-action="uncertain">Mark uncertain</button>') +
             '</div></div>';
         }).join('');
         el.querySelectorAll('.pair-row').forEach((row) => {
-          row.querySelectorAll('button[data-label]').forEach((btn) => {
-            btn.addEventListener('click', () => labelExpandedPair(row.getAttribute('data-ua'), row.getAttribute('data-ub'), btn.getAttribute('data-label')));
+          row.querySelectorAll('button[data-action]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const action = btn.getAttribute('data-action');
+              const ua = row.getAttribute('data-ua');
+              const ub = row.getAttribute('data-ub');
+              if (action === 'uncertain') markUncertain(ua, ub, 'grp-incident-status');
+              else clearUncertain(ua, ub, 'grp-incident-status');
+            });
           });
         });
       }
 
-      async function labelExpandedPair(urlA, urlB, label) {
-        const a = g.basket.find((x) => x.url === urlA);
-        const b = g.basket.find((x) => x.url === urlB);
-        const humanReason = document.getElementById('grp-bulk-reason').value.trim() || ('Pair override: ' + label);
+      async function markUncertain(urlA, urlB, statusId, meta) {
+        const body = {
+          urlA, urlB, label: 'uncertain', humanReason: overrideReason(),
+          goldIncidentId: (meta && meta.goldIncidentId) || g.selectedIncidentId || null,
+          articleIdA: meta && meta.articleIdA, articleIdB: meta && meta.articleIdB,
+          titleA: meta && meta.titleA, titleB: meta && meta.titleB,
+          sourceNameA: meta && meta.sourceNameA, sourceNameB: meta && meta.sourceNameB,
+        };
+        if (!meta) {
+          const a = g.basket.find((x) => x.url === urlA);
+          const b = g.basket.find((x) => x.url === urlB);
+          body.articleIdA = a && a.articleId;
+          body.articleIdB = b && b.articleId;
+          body.titleA = a && a.title;
+          body.titleB = b && b.title;
+          body.sourceNameA = a && a.sourceName;
+          body.sourceNameB = b && b.sourceName;
+        }
         const res = await fetch('/api/grouping-eval/pairs?upsert=1', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            urlA, urlB, label, humanReason,
-            goldIncidentId: g.selectedIncidentId || null,
-            articleIdA: a && a.articleId, articleIdB: b && b.articleId,
-            titleA: a && a.title, titleB: b && b.title,
-            sourceNameA: a && a.sourceName, sourceNameB: b && b.sourceName,
-          }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
-        if (!res.ok) { setStatus('grp-incident-status', (data.error && data.error.message) || 'Label failed'); return; }
-        setStatus('grp-incident-status', 'Updated pair label to ' + label);
+        if (!res.ok) { setStatus(statusId, (data.error && data.error.message) || 'Override failed'); return; }
+        setStatus(statusId, 'Marked pair uncertain');
         await refreshGrouping();
+        if (g.subtab === 'tuner') loadReport();
+      }
+
+      async function clearUncertain(urlA, urlB, statusId) {
+        const res = await fetch('/api/grouping-eval/pairs', {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ urlA, urlB }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setStatus(statusId, (data.error && data.error.message) || 'Clear failed'); return; }
+        setStatus(statusId, 'Cleared uncertain override');
+        await refreshGrouping();
+        if (g.subtab === 'tuner') loadReport();
       }
 
       function startNewIncident() {
@@ -382,49 +359,8 @@ export function groupingPaneBodyScript(): string {
         g.selectedIncidentId = data.incident.id;
         setStatus(
           'grp-incident-status',
-          (wasUpdate ? 'Updated' : 'Created') + ' gold incident. Click “New gold incident” before starting another.'
+          (wasUpdate ? 'Updated' : 'Created') + ' gold incident. Labels derive automatically — click “New gold incident” before starting another.'
         );
-        await refreshGrouping();
-      }
-
-      async function bulkSame() {
-        if (!g.selectedIncidentId) { setStatus('grp-incident-status', 'Save the gold incident first'); return; }
-        const humanReason = document.getElementById('grp-bulk-reason').value.trim();
-        if (humanReason.length < 3) { setStatus('grp-incident-status', 'Reason must be at least 3 characters'); return; }
-        const res = await fetch('/api/grouping-eval/incidents/bulk-same', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ goldIncidentId: g.selectedIncidentId, humanReason }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setStatus('grp-incident-status', (data.error && data.error.message) || 'Bulk label failed'); return; }
-        setStatus('grp-incident-status', 'Saved ' + data.savedCount + ' pairs' + (data.skippedCount ? ' (' + data.skippedCount + ' already labeled)' : ''));
-        await refreshGrouping();
-      }
-
-      async function saveAdhoc() {
-        if (!g.adhocA || !g.adhocB) { setStatus('grp-adhoc-status', 'Select both articles'); return; }
-        const humanReason = document.getElementById('grp-adhoc-reason').value.trim();
-        if (humanReason.length < 3) { setStatus('grp-adhoc-status', 'Reason required'); return; }
-        const res = await fetch('/api/grouping-eval/pairs', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            urlA: g.adhocA.url,
-            urlB: g.adhocB.url,
-            label: g.adhocLabel,
-            humanReason,
-            articleIdA: g.adhocA.articleId,
-            articleIdB: g.adhocB.articleId,
-            titleA: g.adhocA.title,
-            titleB: g.adhocB.title,
-            sourceNameA: g.adhocA.sourceName,
-            sourceNameB: g.adhocB.sourceName,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setStatus('grp-adhoc-status', (data.error && data.error.message) || 'Save failed'); return; }
-        setStatus('grp-adhoc-status', 'Pair saved.');
         await refreshGrouping();
       }
 
@@ -438,16 +374,25 @@ export function groupingPaneBodyScript(): string {
         }
         g.report = data.report;
         g.scoredPairs = data.pairs || [];
+        g.reportMeta = data.meta || null;
         renderTuner();
       }
 
       function renderTuner() {
         const r = g.report;
         if (!r) return;
+        const hint = document.getElementById('grp-tuner-hint');
+        if (g.reportMeta && g.reportMeta.differentEmptyHint) {
+          hint.textContent = g.reportMeta.differentEmptyHint;
+        } else {
+          hint.textContent = '';
+        }
         document.getElementById('grp-tuner-metrics').innerHTML =
           metric('Labeled', r.counts.labeled) +
           metric('Scorable', r.counts.scorable) +
           metric('Not scorable', r.counts.unscorable) +
+          metric('Fit same', r.counts.fitSame) +
+          metric('Fit different', r.counts.fitDifferent) +
           metric('False attach', r.metrics.falseAttachCount) +
           metric('Same miss attach', r.metrics.sameEventMissAttachCount) +
           metric('Uncertain band', r.metrics.uncertainBandCount);
@@ -456,13 +401,45 @@ export function groupingPaneBodyScript(): string {
           ' · Suggested: attach=' + r.suggested.attach + ', uncertain=' + r.suggested.uncertain +
           ' (copy into config manually — not auto-applied)';
         document.getElementById('grp-tuner-status').textContent =
-          r.counts.unscorable ? (r.counts.unscorable + ' labeled pairs waiting on current-model embeddings') : 'All labeled pairs scorable (or only uncertain/empty)';
+          r.counts.unscorable ? (r.counts.unscorable + ' derived pairs waiting on current-model embeddings') :
+          (r.counts.fitDifferent === 0 ? 'No different_event cloud yet — add another gold incident.' : 'Derived pairs ready for threshold review.');
         drawPlot(r.sameDistances, r.differentDistances, g.attach, g.uncertain);
         const list = document.getElementById('grp-tuner-pairs');
-        list.innerHTML = (g.scoredPairs || []).map((p) =>
-          '<div class="pair-row"><div><strong>' + escapeHtml(p.titleA || p.urlA) + '</strong> × <strong>' + escapeHtml(p.titleB || p.urlB) + '</strong></div>' +
-          '<div class="muted">' + escapeHtml(p.label) + ' · distance=' + (p.distance == null ? 'n/a' : p.distance.toFixed(3)) + '</div></div>'
-        ).join('') || '<p class="muted">No pairs labeled yet.</p>';
+        list.innerHTML = (g.scoredPairs || []).map((p) => {
+          const isUncertain = p.label === 'uncertain';
+          return '<div class="pair-row" data-ua="' + escapeHtml(p.urlA) + '" data-ub="' + escapeHtml(p.urlB) + '">' +
+            '<div><strong>' + escapeHtml(p.titleA || p.urlA) + '</strong> × <strong>' + escapeHtml(p.titleB || p.urlB) + '</strong></div>' +
+            '<div class="muted">' + escapeHtml(p.label) + ' · distance=' + (p.distance == null ? 'n/a' : p.distance.toFixed(3)) + '</div>' +
+            '<div class="label-buttons">' +
+            (isUncertain
+              ? '<button type="button" data-action="clear">Clear uncertain</button>'
+              : '<button type="button" data-action="uncertain">Mark uncertain</button>') +
+            '</div></div>';
+        }).join('') || '<p class="muted">No gold incidents yet — save baskets to derive pairs.</p>';
+        list.querySelectorAll('.pair-row').forEach((row) => {
+          row.querySelectorAll('button[data-action]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const ua = row.getAttribute('data-ua');
+              const ub = row.getAttribute('data-ub');
+              const pair = (g.scoredPairs || []).find((p) =>
+                (p.urlA === ua && p.urlB === ub) || (p.urlA === ub && p.urlB === ua)
+              );
+              if (btn.getAttribute('data-action') === 'uncertain') {
+                markUncertain(ua, ub, 'grp-tuner-status', pair && {
+                  goldIncidentId: pair.goldIncidentId,
+                  articleIdA: null,
+                  articleIdB: null,
+                  titleA: pair.titleA,
+                  titleB: pair.titleB,
+                  sourceNameA: pair.sourceNameA,
+                  sourceNameB: pair.sourceNameB,
+                });
+              } else {
+                clearUncertain(ua, ub, 'grp-tuner-status');
+              }
+            });
+          });
+        });
       }
 
       function metric(label, value) {
@@ -477,18 +454,19 @@ export function groupingPaneBodyScript(): string {
         const dots = (arr, y, color) => (arr || []).map((d) => '<circle cx="' + x(d) + '" cy="' + y + '" r="5" fill="' + color + '" opacity="0.85" />').join('');
         svg.innerHTML =
           '<line x1="' + pad + '" y1="' + (h - 30) + '" x2="' + (w - pad) + '" y2="' + (h - 30) + '" stroke="#d8dee8" />' +
-          '<line x1="' + x(attach) + '" y1="10" x2="' + x(attach) + '" y2="' + (h - 20) + '" stroke="#0f766e" stroke-dasharray="4 3" />' +
+          '<line x1="' + x(attach) + '" y1="10" x2="' + x(attach) + '" y2="' + (h - 20) + '" stroke="#0f6e56" stroke-dasharray="4 3" />' +
           '<line x1="' + x(uncertain) + '" y1="10" x2="' + x(uncertain) + '" y2="' + (h - 20) + '" stroke="#9a5b00" stroke-dasharray="4 3" />' +
-          dots(same, 50, '#146c43') +
-          dots(different, 100, '#b42318') +
+          dots(same, 50, '#0f6e56') +
+          dots(different, 100, '#9b1c1c') +
           '<text x="' + pad + '" y="54" fill="#5f6b7a" font-size="12">same_event</text>' +
           '<text x="' + pad + '" y="104" fill="#5f6b7a" font-size="12">different_event</text>' +
-          '<text x="' + x(attach) + '" y="14" fill="#0f766e" font-size="11">attach</text>' +
+          '<text x="' + x(attach) + '" y="14" fill="#0f6e56" font-size="11">attach</text>' +
           '<text x="' + x(uncertain) + '" y="14" fill="#9a5b00" font-size="11">uncertain</text>';
       }
 
       function setStatus(id, text) {
-        document.getElementById(id).textContent = text;
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
       }
     }
   `;
