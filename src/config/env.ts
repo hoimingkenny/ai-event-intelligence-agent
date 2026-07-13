@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import { installHttpProxyFromEnv } from './http-proxy.js';
+
+installHttpProxyFromEnv();
 
 export const env = {
   minimaxApiKey: process.env.MINIMAX_API_KEY ?? '',
