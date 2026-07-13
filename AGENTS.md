@@ -31,7 +31,8 @@ npm run scheduler        # Internal loop: full pipeline every RSS_FETCH_INTERVAL
 npm run worker           # BullMQ worker mode (needs Redis)
 npm run drift:check      # Per-source extraction quality report (exit 2 on drift)
 npm run latency:check    # Publication→alert p50/p90 vs 2h SLO (exit 2 on violation)
-npm run portal           # Public Events/Articles catalogue (:4322; approved-only)
+npm run portal           # Legacy public catalogue (:4322; approved-only)
+npm run web:dev          # Next.js public catalogue (:3000; phase-1 web surface)
 npm run review:dashboard # Human review dashboard with verdict capture (:4321)
 
 npm run fixtures:fetch -- <url>   # Save real article HTML as extraction fixture

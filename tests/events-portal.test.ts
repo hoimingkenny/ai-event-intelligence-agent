@@ -200,5 +200,6 @@ describe('loadEventDetail', () => {
 
     expect(await loadEventDetail(db, '10')).toBeNull();
     expect(detailSql).toContain("e.publication_status = 'approved'");
+    expect(detailSql).toContain('cardinality(coalesce(e.affected_vendors');
   });
 });

@@ -158,7 +158,7 @@ export async function loadEventDetail(db: Queryable, eventId: string): Promise<E
           AND a.published_at IS NOT NULL
       ) article_dates ON true
       WHERE e.id = $1
-        AND ${PUBLIC_EVENT_CONDITION}
+        AND ${PUBLIC_CATALOGUE_EVENT_CONDITION}
     `,
     [eventId]
   );
