@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { loadEventDetail } from '../../../../src/portal/events-portal.js';
+import { loadEventDetail } from '../../../../src/portal/events-portal';
 import { SiteHeader } from '../../../components/SiteHeader';
 import { getDb } from '../../../lib/db';
 import { formatConfidence, formatWhen } from '../../../lib/format';
