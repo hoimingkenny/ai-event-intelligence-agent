@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import Parser from 'rss-parser';
 import type { RawArticle } from '../types/domain.js';
 import { rssFeeds } from '../config/rssFeeds.js';
-import { env } from '../config/env.js';
+
+/** Legacy scaffold lookback (not part of the Postgres pipeline env). */
+const LEGACY_MONITOR_LOOKBACK_HOURS = Number(process.env.MONITOR_LOOKBACK_HOURS ?? 6);
 
 const parser = new Parser({
   timeout: 10_000,
@@ -67,7 +69,7 @@ export async function runCyberWebSearch(query: string): Promise<RawArticle[]> {
   const filtered = articles.filter((article) => {
     if (seen.has(article.id)) return false;
     seen.add(article.id);
-    if (!isFresh(article.publishedAt, env.monitorLookbackHours)) return false;
+    if (!isFresh(article.publishedAt, LEGACY_MONITOR_LOOKBACK_HOURS)) return false;
     return matchesQuery(article.title, article.snippet ?? '', terms);
   });
 

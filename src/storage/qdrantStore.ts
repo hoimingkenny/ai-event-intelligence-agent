@@ -1,7 +1,11 @@
 import { QdrantClient } from '@qdrant/js-client-rest';
-import { env } from '../config/env.js';
 import { getEmbeddingDimensions } from '../config/embeddings.js';
 import type { CyberEventType, SecurityEvent } from '../types/domain.js';
+
+/** Legacy in-memory/Qdrant scaffold defaults (not part of the Postgres pipeline env). */
+const LEGACY_QDRANT_URL = process.env.QDRANT_URL ?? 'http://localhost:6333';
+const LEGACY_QDRANT_API_KEY = process.env.QDRANT_API_KEY ?? '';
+const LEGACY_QDRANT_COLLECTION = process.env.QDRANT_COLLECTION ?? 'security_events';
 
 export interface SecurityEventPayload {
   eventId: string;
@@ -28,13 +32,13 @@ export class QdrantVectorStore {
   private dimensions: number | null = null;
   private ready: Promise<void> | null = null;
 
-  constructor(url: string = env.qdrantUrl, apiKey: string = env.qdrantApiKey) {
+  constructor(url: string = LEGACY_QDRANT_URL, apiKey: string = LEGACY_QDRANT_API_KEY) {
     this.client = new QdrantClient({
       url,
       apiKey: apiKey || undefined,
       checkCompatibility: false,
     });
-    this.collection = env.qdrantCollection;
+    this.collection = LEGACY_QDRANT_COLLECTION;
   }
 
   /**
