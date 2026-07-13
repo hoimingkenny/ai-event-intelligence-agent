@@ -61,4 +61,19 @@ describe('EventRepository', () => {
     const update = calls.find((call) => call.sql.includes('summary_stale = CASE'));
     expect(update?.params).toEqual(['10', 'same_event_material_update']);
   });
+
+  it('lists alert candidates without filtering on publication status', async () => {
+    let listSql = '';
+    const db = {
+      async query<T>(sql: string) {
+        listSql = sql;
+        return { rows: [] as T[], rowCount: 0 };
+      },
+    } as Queryable;
+
+    await new EventRepository(db).listAlertCandidates(10);
+
+    expect(listSql).toContain("event_status = 'open'");
+    expect(listSql).not.toMatch(/publication_status\s*=/);
+  });
 });

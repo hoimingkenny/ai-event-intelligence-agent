@@ -297,6 +297,86 @@ a:hover {
   color: var(--accent);
 }
 
+.workspace-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.chip.status-draft {
+  color: var(--ink-soft);
+}
+
+.chip.status-approved {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--rule));
+}
+
+.flash {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper-elevated));
+  color: var(--accent-ink);
+  font-size: 0.95rem;
+}
+
+.edit-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field span {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea,
+.field select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0.55rem 0.7rem;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.form-actions,
+.publication-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.publication-actions {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+
 @media (max-width: 640px) {
   .event-row {
     grid-template-columns: 1fr;
@@ -306,5 +386,13 @@ a:hover {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.75rem;
+  }
+
+  .workspace-toolbar {
+    flex-direction: column;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
   }
 }

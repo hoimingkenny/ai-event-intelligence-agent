@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export function SiteHeader({ active }: { active: 'events' | 'articles' }) {
+export function SiteHeader({ active }: { active: 'events' | 'articles' | 'workspace' }) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
@@ -14,7 +14,9 @@ export function SiteHeader({ active }: { active: 'events' | 'articles' }) {
           <Link href="/articles" className={active === 'articles' ? 'active' : undefined}>
             Articles
           </Link>
-          <Link href="/workspace">Workspace</Link>
+          <Link href="/workspace" className={active === 'workspace' ? 'active' : undefined}>
+            Workspace
+          </Link>
         </nav>
       </div>
     </header>
