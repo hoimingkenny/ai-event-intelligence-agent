@@ -21,6 +21,12 @@ const GROUPING_CSS = `
     #grouping-pane input[type="range"] { width: 100%; }
     #grouping-pane .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
     #grouping-pane .basket-chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin: 0 6px 6px 0; background: var(--soft); font-size: 12px; }
+    #grouping-pane .incident-delete { display:inline-block; margin-left:6px; padding:0 6px; border-radius:4px; cursor:pointer; color:#9b1c1c; }
+    #grouping-pane .incident-delete:hover { background:#fbeaea; }
+    #grouping-pane .assist-draft { border: 1px dashed var(--accent); border-radius: 8px; padding: 10px; background: #f4fbf9; margin-top: 8px; }
+    #grouping-pane .assist-draft ul { margin: 6px 0; padding-left: 18px; }
+    #grouping-pane .assist-draft .assist-rec { font-weight: 600; }
+    #grouping-pane .assist-brief { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; }
 `;
 
 export function groupingPaneStyles(): string {
@@ -81,8 +87,10 @@ export function renderGroupingPane(): string {
             <div id="grp-basket"></div>
             <div class="actions">
               <button id="grp-new-incident" type="button">New gold incident</button>
+              <button id="grp-assist" type="button" title="LLM-draft briefs + same-event recommendation (advisory only)">Assist</button>
               <button id="grp-save-incident" class="primary" type="button">Save gold incident</button>
             </div>
+            <div id="grp-assist-draft"></div>
             <textarea id="grp-override-reason" placeholder="Reason when marking a pair uncertain (min 3 chars)"></textarea>
             <p id="grp-incident-status" class="muted"></p>
           </div>
@@ -137,6 +145,7 @@ export function groupingPaneBodyScript(): string {
       document.getElementById('grp-article-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchArticles(); });
       document.getElementById('grp-new-incident').addEventListener('click', startNewIncident);
       document.getElementById('grp-save-incident').addEventListener('click', saveIncident);
+      document.getElementById('grp-assist').addEventListener('click', runAssist);
       document.getElementById('grp-override-reason').value = g.overrideReason || '';
       const attachEl = document.getElementById('grp-attach');
       const uncertainEl = document.getElementById('grp-uncertain');
@@ -186,21 +195,57 @@ export function groupingPaneBodyScript(): string {
         list.innerHTML = g.incidents.map((inc) =>
           '<button type="button" class="item-button' + (g.selectedIncidentId === inc.id ? ' active' : '') + '" data-id="' + escapeHtml(inc.id) + '">' +
           '<div class="item-title">' + escapeHtml(inc.name) + '</div>' +
-          '<div class="muted">' + inc.articles.length + ' articles</div></button>'
+          '<div class="muted">' + inc.articles.length + ' articles ' +
+          '<span class="incident-delete" data-action="delete" data-id="' + escapeHtml(inc.id) + '" title="Delete gold incident" role="button" tabindex="0">×</span>' +
+          '</div></button>'
         ).join('');
-        list.querySelectorAll('button').forEach((btn) => {
-          btn.addEventListener('click', () => {
+        list.querySelectorAll('button.item-button').forEach((btn) => {
+          btn.addEventListener('click', (ev) => {
+            if (ev.target && ev.target.getAttribute && ev.target.getAttribute('data-action') === 'delete') return;
             const inc = g.incidents.find((i) => i.id === btn.getAttribute('data-id'));
             if (!inc) return;
             g.selectedIncidentId = inc.id;
             g.incidentName = inc.name;
             g.basket = inc.articles.slice();
             document.getElementById('grp-incident-name').value = inc.name;
+            clearAssistDraft();
             renderIncidentList();
             renderBasket();
             renderExpanded();
           });
         });
+        list.querySelectorAll('.incident-delete').forEach((el) => {
+          const trigger = (ev) => {
+            ev.stopPropagation();
+            const id = el.getAttribute('data-id');
+            const inc = g.incidents.find((i) => i.id === id);
+            if (!inc) return;
+            if (!confirm('Delete gold incident "' + inc.name + '"? This removes the basket and all its derived same_event pairs.')) return;
+            deleteIncident(id);
+          };
+          el.addEventListener('click', trigger);
+          el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') trigger(e); });
+        });
+      }
+
+      async function deleteIncident(id) {
+        const res = await fetch('/api/grouping-eval/incidents/' + encodeURIComponent(id), { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) {
+          setStatus('grp-incident-status', (data.error && data.error.message) || 'Delete failed');
+          return;
+        }
+        if (g.selectedIncidentId === id) {
+          g.selectedIncidentId = null;
+          g.incidentName = '';
+          g.basket = [];
+          document.getElementById('grp-incident-name').value = '';
+          clearAssistDraft();
+          renderBasket();
+          renderExpanded();
+        }
+        setStatus('grp-incident-status', 'Deleted gold incident.');
+        await refreshGrouping();
       }
 
       async function searchArticles() {
@@ -223,7 +268,10 @@ export function groupingPaneBodyScript(): string {
           btn.addEventListener('click', () => {
             const article = hits.find((h) => h.articleId === btn.getAttribute('data-id'));
             if (!article) return;
-            if (!g.basket.some((b) => b.url === article.url)) g.basket.push(article);
+            if (!g.basket.some((b) => b.url === article.url)) {
+              g.basket.push(article);
+              clearAssistDraft();
+            }
             renderBasket();
             renderExpanded();
           });
@@ -240,6 +288,7 @@ export function groupingPaneBodyScript(): string {
         el.querySelectorAll('button').forEach((btn) => {
           btn.addEventListener('click', () => {
             g.basket.splice(Number(btn.getAttribute('data-idx')), 1);
+            clearAssistDraft();
             renderBasket();
             renderExpanded();
           });
@@ -332,12 +381,18 @@ export function groupingPaneBodyScript(): string {
         if (g.subtab === 'tuner') loadReport();
       }
 
+      function clearAssistDraft() {
+        const el = document.getElementById('grp-assist-draft');
+        if (el) el.innerHTML = '';
+      }
+
       function startNewIncident() {
         g.selectedIncidentId = null;
         g.incidentName = '';
         g.basket = [];
         document.getElementById('grp-incident-name').value = '';
         document.getElementById('grp-article-hits').innerHTML = '';
+        clearAssistDraft();
         renderIncidentList();
         renderBasket();
         renderExpanded();
@@ -362,6 +417,74 @@ export function groupingPaneBodyScript(): string {
           (wasUpdate ? 'Updated' : 'Created') + ' gold incident. Labels derive automatically — click “New gold incident” before starting another.'
         );
         await refreshGrouping();
+      }
+
+      async function runAssist() {
+        const draftEl = document.getElementById('grp-assist-draft');
+        if (!draftEl) {
+          console.warn('[assist] draft element missing — pane not initialized');
+          return;
+        }
+        draftEl.innerHTML = '';
+        if (g.basket.length < 2) {
+          setStatus('grp-incident-status', 'Add 2–5 articles to the basket before running Assist.');
+          return;
+        }
+        if (g.basket.length > 5) {
+          setStatus('grp-incident-status', 'Assist supports 2–5 articles; trim the basket.');
+          return;
+        }
+        const articleIds = g.basket.map((a) => a.articleId).filter(Boolean);
+        if (articleIds.length !== g.basket.length) {
+          setStatus('grp-incident-status', 'Basket has articles without an articleId; re-add them from search.');
+          return;
+        }
+        setStatus('grp-incident-status', 'Running assist…');
+        const res = await fetch('/api/grouping-eval/assist', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ articleIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          console.warn('[assist] failed', res.status, data);
+          setStatus('grp-incident-status', (data.error && data.error.message) || 'Assist failed');
+          draftEl.innerHTML = '';
+          return;
+        }
+        renderAssistDraft(data.draft);
+        setStatus('grp-incident-status', 'Assist draft ready — edit the name, then Save gold incident.');
+      }
+
+      function renderAssistDraft(draft) {
+        const draftEl = document.getElementById('grp-assist-draft');
+        if (!draftEl || !draft) return;
+        const rec = draft.recommendation || 'unknown';
+        const conf = typeof draft.confidence === 'number' ? ' (' + Math.round(draft.confidence * 100) + '%)' : '';
+        const briefsHtml = (draft.briefs || []).map((b) => {
+          const bullets = (b.brief || []).map((line) => '<li>' + escapeHtml(line) + '</li>').join('');
+          return '<div class="assist-brief"><strong>' + escapeHtml(b.title || b.url || b.articleId) +
+            '</strong> <span class="muted">' + escapeHtml(b.sourceName || '') + '</span>' +
+            (bullets ? '<ul>' + bullets + '</ul>' : '<p class="muted">No brief.</p>') + '</div>';
+        }).join('');
+        draftEl.innerHTML =
+          '<div class="assist-draft">' +
+            '<p class="assist-rec">Recommendation: ' + escapeHtml(rec) + conf + '</p>' +
+            '<p class="muted">' + escapeHtml(draft.rationale || '') + '</p>' +
+            '<label class="muted">Suggested name (edit if you want)</label>' +
+            '<input id="grp-assist-name" value="' + escapeHtml(draft.suggestedName || '') + '" style="width:100%;margin:6px 0;padding:8px;border:1px solid var(--line);border-radius:6px" />' +
+            '<button id="grp-assist-apply" type="button" class="primary">Apply name to gold incident</button>' +
+            briefsHtml +
+          '</div>';
+        const apply = document.getElementById('grp-assist-apply');
+        if (apply) {
+          apply.addEventListener('click', () => {
+            const name = document.getElementById('grp-assist-name').value.trim();
+            if (!name) { setStatus('grp-incident-status', 'Name is empty; edit before applying.'); return; }
+            document.getElementById('grp-incident-name').value = name;
+            setStatus('grp-incident-status', 'Applied suggested name — review basket, then Save gold incident.');
+          });
+        }
       }
 
       async function loadReport() {

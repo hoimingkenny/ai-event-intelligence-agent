@@ -7,6 +7,49 @@ import type { Queryable } from '../../src/db/repositories/types.js';
 import type { GroupingPairLabelRecord } from './pair-dataset.js';
 import type { ScoredGroupingPair } from './pair-metrics.js';
 
+export interface ArticleForAssist {
+  articleId: string;
+  url: string;
+  title: string;
+  sourceName: string;
+  cleanText: string | null;
+}
+
+/**
+ * Load the minimum fields needed for gold incident assist.
+ *
+ * Picker APIs omit cleanText for cost; assist requires the body so the LLM can
+ * summarize it. Returns null cleanText when the article has not been extracted
+ * yet — callers (the /assist route) must treat that as a refusal signal.
+ */
+export async function loadArticlesForAssist(
+  db: Queryable,
+  ids: string[]
+): Promise<ArticleForAssist[]> {
+  if (ids.length === 0) return [];
+  const result = await db.query<{
+    id: string;
+    canonical_url: string | null;
+    title: string | null;
+    source_name: string | null;
+    clean_text: string | null;
+  }>(
+    `
+      SELECT id, canonical_url, title, source_name, clean_text
+      FROM articles
+      WHERE id = ANY($1::bigint[])
+    `,
+    [ids.map((id) => Number(id)).filter((n) => Number.isFinite(n))]
+  );
+  return result.rows.map((row) => ({
+    articleId: String(row.id),
+    url: row.canonical_url ?? '',
+    title: row.title ?? (row.canonical_url ?? ''),
+    sourceName: row.source_name ?? 'unknown',
+    cleanText: row.clean_text,
+  }));
+}
+
 export function cosineDistance(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 1;
   let dot = 0;

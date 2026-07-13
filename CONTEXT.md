@@ -59,3 +59,7 @@ _Avoid_: Cluster label, duplicate label, grouping verdict (verdict is a per-arti
 **Gold incident**:
 A human-curated set of articles known to describe one real-world incident. Within-basket pairs derive as same_event; cross-basket pairs derive as different_event. Article URLs must not appear in more than one gold incident.
 _Avoid_: Cluster, canonical event (canonical event is the system's record; a gold incident is evaluation ground truth)
+
+**Gold incident assist**:
+An eval-only LLM draft that helps a human create a gold incident: per-article body briefs, a same-event recommendation, and a suggested name. It never writes gold without an explicit human Accept.
+_Avoid_: Auto-label, LLM gold, grouping assist (ambiguous with production grouping)

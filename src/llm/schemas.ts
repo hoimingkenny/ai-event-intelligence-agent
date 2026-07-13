@@ -48,6 +48,96 @@ export const EventSummarySchema = z.object({
   recommendedActions: z.array(z.string()).max(10),
 });
 
+export const GoldIncidentAssistArticleSchema = z.object({
+  articleId: z.string().min(1),
+  url: z.string().url(),
+  title: z.string().min(1),
+  sourceName: z.string().min(1),
+  brief: z.array(z.string().min(1)).min(1).max(8),
+});
+
+/** LLM output: bullets keyed by articleId only — URLs come from the DB at merge time. */
+function coerceNullToString(value: unknown): unknown {
+  if (value == null) return '';
+  return value;
+}
+
+function coerceBriefBullets(value: unknown): unknown {
+  if (value == null) return ['Summary unavailable from assist.'];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (item == null ? '' : String(item).trim()))
+      .filter(Boolean)
+      .slice(0, 8);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return ['Summary unavailable from assist.'];
+    const lines = trimmed
+      .split(/\r?\n+/)
+      .map((line) => line.replace(/^[\s\-*•]+\s*/, '').trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    return lines.length > 0 ? lines : [trimmed];
+  }
+  return value;
+}
+
+function normalizeAssistRecommendation(value: unknown): unknown {
+  if (value == null) return 'mixed';
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'sameevent') return 'same_event';
+  if (normalized === 'differentevent' || normalized === 'different_event') return 'different_event';
+  return normalized;
+}
+
+function coerceBriefsList(value: unknown): unknown {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+export const GoldIncidentAssistLlmSchema = z.object({
+  recommendation: z.preprocess(
+    normalizeAssistRecommendation,
+    z.enum(['same_event', 'mixed', 'different_event'])
+  ),
+  confidence: z.coerce.number().min(0).max(1),
+  rationale: z.preprocess(coerceNullToString, z.string()),
+  suggestedName: z.preprocess(coerceNullToString, z.string().max(96)),
+  briefs: z.preprocess(
+    coerceBriefsList,
+    z
+      .array(
+        z.object({
+          articleId: z.preprocess(
+            coerceNullToString,
+            z.union([z.string(), z.number()]).transform(String).pipe(z.string().min(1))
+          ),
+          brief: z.preprocess(coerceBriefBullets, z.array(z.string().min(1)).min(1).max(8)),
+        })
+      )
+      .min(1)
+  ),
+});
+
+export const GoldIncidentAssistSchema = z.object({
+  recommendation: z.enum(['same_event', 'mixed', 'different_event']),
+  confidence: z.number().min(0).max(1),
+  rationale: z.string().min(1),
+  suggestedName: z.string().trim().min(1).max(96),
+  briefs: z.array(GoldIncidentAssistArticleSchema).min(2).max(5),
+});
+
 export type CyberClassification = z.infer<typeof CyberClassificationSchema>;
 export type EventComparison = z.infer<typeof EventComparisonSchema>;
 export type EventSummary = z.infer<typeof EventSummarySchema>;
+export type GoldIncidentAssist = z.infer<typeof GoldIncidentAssistSchema>;
+export type GoldIncidentAssistArticle = z.infer<typeof GoldIncidentAssistArticleSchema>;
+export type GoldIncidentAssistLlm = z.infer<typeof GoldIncidentAssistLlmSchema>;

@@ -24,11 +24,21 @@ import {
   upsertGoldIncident,
 } from '../../../eval/grouping/gold-incidents.js';
 import { evaluateGroupingPairDataset } from '../../../eval/grouping/pair-metrics.js';
-import { scoreGroupingPairs, searchArticlesForPicker } from '../../../eval/grouping/score-pairs.js';
+import {
+  loadArticlesForAssist,
+  scoreGroupingPairs,
+  searchArticlesForPicker,
+} from '../../../eval/grouping/score-pairs.js';
 import {
   EMBEDDING_ATTACH_DISTANCE,
   EMBEDDING_UNCERTAIN_DISTANCE,
 } from '../../events/grouping-decision.js';
+import {
+  AssistInputError,
+  proposeGoldIncidentAssist,
+  validateAssistArticles,
+  type AssistArticleInput,
+} from '../../../eval/grouping/gold-incident-assist.js';
 
 const MAX_JSON_BODY_BYTES = 512 * 1024;
 
@@ -36,6 +46,8 @@ export interface GroupingEvalServerOptions {
   pairDatasetPath: string;
   goldIncidentsPath: string;
   db: Queryable | null;
+  /** Test seam: lets route tests inject a fake LLM caller. */
+  proposeAssist?: typeof proposeGoldIncidentAssist;
 }
 
 const UncertainOverrideSchema = z.object({
@@ -67,6 +79,10 @@ const GoldIncidentUpsertSchema = z.object({
     .min(1),
 });
 
+const AssistRequestSchema = z.object({
+  articleIds: z.array(z.string().min(1)).min(2).max(5),
+});
+
 const ReportQuerySchema = z.object({
   attach: z.coerce.number().min(0).max(2).default(EMBEDDING_ATTACH_DISTANCE),
   uncertain: z.coerce.number().min(0).max(2).default(EMBEDDING_UNCERTAIN_DISTANCE),
@@ -96,6 +112,39 @@ export async function routeGroupingEvalRequest(
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
       const articles = await searchArticlesForPicker(options.db!, q, limit);
       sendJson(res, { articles });
+      return true;
+    }
+
+    if (req.method === 'POST' && path === '/api/grouping-eval/assist') {
+      requireDb(options);
+      const body = AssistRequestSchema.parse(await readJson(req));
+      const articleIds = Array.from(new Set(body.articleIds));
+      const loaded = await loadArticlesForAssist(options.db!, articleIds);
+      const foundIds = new Set(loaded.map((row) => String(row.articleId)));
+      const missingIds = articleIds.filter((id) => !foundIds.has(String(id)));
+      if (missingIds.length > 0) {
+        sendJson(
+          res,
+          {
+            error: {
+              code: 'ARTICLES_NOT_FOUND',
+              message: `Articles not found: ${missingIds.join(', ')}`,
+            },
+          },
+          404
+        );
+        return true;
+      }
+      const articles: AssistArticleInput[] = loaded.map((row) => ({
+        articleId: String(row.articleId),
+        url: row.url,
+        title: row.title,
+        sourceName: row.sourceName,
+        cleanText: row.cleanText ?? '',
+      }));
+      validateAssistArticles(articles);
+      const draft = await (options.proposeAssist ?? proposeGoldIncidentAssist)(articles);
+      sendJson(res, { draft });
       return true;
     }
 
@@ -257,6 +306,10 @@ export function sendGroupingEvalError(res: ServerResponse, error: unknown): void
   }
   if (error instanceof ArticleInMultipleGoldIncidentsError) {
     sendJson(res, { error: { code: 'ARTICLE_OVERLAP', message: error.message } }, 409);
+    return;
+  }
+  if (error instanceof AssistInputError) {
+    sendJson(res, { error: { code: error.code, message: error.message } }, 400);
     return;
   }
   if (error instanceof ZodError) {
