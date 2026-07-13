@@ -1,0 +1,14 @@
+import { describe, expect, it } from 'vitest';
+import { formatConfidence, formatWhen } from '../web/lib/format.ts';
+
+describe('web format helpers', () => {
+  it('formats UTC timestamps for the events catalogue', () => {
+    expect(formatWhen(new Date('2026-07-13T12:30:00Z'))).toContain('13 Jul 2026');
+    expect(formatWhen(null)).toBe('—');
+  });
+
+  it('formats confidence as a percentage', () => {
+    expect(formatConfidence(0.82)).toBe('82%');
+    expect(formatConfidence(null)).toBe('—');
+  });
+});

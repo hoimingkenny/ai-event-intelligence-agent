@@ -7,6 +7,8 @@ node_modules/
 dist/
 build/
 out/
+web/.next/
+web/out/
 *.tsbuildinfo
 
 # Environment
