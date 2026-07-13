@@ -94,6 +94,7 @@ async function main(): Promise<void> {
         eventTitle: event.title,
         eventSummary: event.summary,
         eventStatus: 'open' as const,
+        publicationStatus: 'draft' as const,
         severity: 'medium' as const,
         urgency: 'P3' as const,
         confidence: 0.5,

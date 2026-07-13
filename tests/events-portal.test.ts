@@ -117,6 +117,23 @@ describe('loadEventsOverview', () => {
     expect(orderBys[0]).toContain('ORDER BY e.llm_summary IS NOT NULL DESC, last_seen_at DESC');
     expect(orderBys[1]).toContain("ORDER BY e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST");
   });
+
+  it('only includes approved events in list, filtered count, and summary', async () => {
+    const sqls: string[] = [];
+    const db = scriptedDb([
+      { match: 'OFFSET', rows: [], onQuery: (sql) => { sqls.push(sql); } },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '0' }], onQuery: (sql) => { sqls.push(sql); } },
+      { match: 'FILTER (WHERE source_count > 1)', rows: [{ total: '0', multi_source: '0' }], onQuery: (sql) => { sqls.push(sql); } },
+      { match: 'GROUP BY severity', rows: [], onQuery: (sql) => { sqls.push(sql); } },
+    ]);
+
+    await loadEventsOverview(db, {});
+
+    expect(sqls.length).toBeGreaterThanOrEqual(4);
+    for (const sql of sqls) {
+      expect(sql).toContain("e.publication_status = 'approved'");
+    }
+  });
 });
 
 describe('loadEventDetail', () => {
@@ -167,5 +184,21 @@ describe('loadEventDetail', () => {
   it('returns null for a missing event', async () => {
     const db = scriptedDb([{ match: 'WHERE e.id = $1', rows: [] }]);
     expect(await loadEventDetail(db, '999')).toBeNull();
+  });
+
+  it('only loads an event when it is approved', async () => {
+    let detailSql = '';
+    const db = scriptedDb([
+      {
+        match: 'WHERE e.id = $1',
+        rows: [],
+        onQuery: (sql) => {
+          detailSql = sql;
+        },
+      },
+    ]);
+
+    expect(await loadEventDetail(db, '10')).toBeNull();
+    expect(detailSql).toContain("e.publication_status = 'approved'");
   });
 });

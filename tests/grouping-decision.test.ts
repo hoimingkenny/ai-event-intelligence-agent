@@ -16,6 +16,7 @@ function event(overrides: Partial<EventRecord> = {}): EventRecord {
     eventTitle: 'Test event',
     eventSummary: null,
     eventStatus: 'open',
+    publicationStatus: 'draft',
     severity: 'medium',
     urgency: 'P3',
     confidence: 0.6,

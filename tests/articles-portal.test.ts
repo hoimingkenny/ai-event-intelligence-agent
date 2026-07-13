@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Queryable } from '../src/db/repositories/types.js';
-import { loadArticlesOverview, loadArticleDetail } from '../src/portal/articles-portal.js';
+import { loadArticlesOverview, loadArticleDetail, loadArticleCleanText } from '../src/portal/articles-portal.js';
 import { escapeHtml } from '../src/portal/articles-portal-server.js';
 import { renderPortalApp } from '../src/portal/articles-portal-view.js';
 
@@ -110,6 +110,27 @@ describe('loadArticlesOverview', () => {
     expect(overview.summary.extractionFailureRate).toBeCloseTo(0.2, 5);
     expect(overview.summary.medianRssRecall).toBeNull();
   });
+
+  it('only lists articles attached to at least one approved event', async () => {
+    let listSql = '';
+    let countSql = '';
+    const db = scriptedDb([
+      { match: 'OFFSET', rows: [], onQuery: (sql) => { listSql = sql; } },
+      { match: 'SELECT count(*) AS count', rows: [{ count: '0' }], onQuery: (sql) => { countSql = sql; } },
+      { match: 'processing_status, count(*)', rows: [] },
+      { match: 'percentile_cont', rows: [{ median_recall: null, median_quality: null }] },
+      { match: 'DISTINCT source_name', rows: [] },
+      { match: 'DISTINCT processing_status', rows: [] },
+      { match: 'DISTINCT cheap_filter_decision', rows: [] },
+    ]);
+
+    await loadArticlesOverview(db, {});
+
+    for (const sql of [listSql, countSql]) {
+      expect(sql).toContain('event_articles');
+      expect(sql).toContain("publication_status = 'approved'");
+    }
+  });
 });
 
 describe('loadArticleDetail', () => {
@@ -149,7 +170,7 @@ describe('loadArticleDetail', () => {
         rows: [{ event_id: '10', event_title: 'LLM event title', relationship: 'same_event_new_source', severity: 'high', confidence: '0.8' }],
         onQuery: (sql) => { eventsSql = sql; },
       },
-      { match: 'FROM alerts a JOIN event_articles', rows: [{ alert_tier: 'confirmed', alert_status: 'sent', alert_reason: 'r', suppressed: false }] },
+      { match: 'FROM alerts a', rows: [{ alert_tier: 'confirmed', alert_status: 'sent', alert_reason: 'r', suppressed: false }] },
     ]);
 
     const detail = await loadArticleDetail(db, '5');
@@ -157,6 +178,7 @@ describe('loadArticleDetail', () => {
     expect(detail?.entities[0]).toMatchObject({ entityValue: 'SailPoint', confidence: 0.9 });
     expect(detail?.events[0]).toMatchObject({ eventId: '10', confidence: 0.8 });
     expect(eventsSql).toContain('e.event_title');
+    expect(eventsSql).toContain("e.publication_status = 'approved'");
     expect(eventsSql).not.toContain("e.llm_summary ->> 'title' AS event_title");
     expect(detail?.alerts[0]).toMatchObject({ alertTier: 'confirmed', suppressed: false });
     expect(detail?.llmClassification).toEqual({ cyberRelevant: true });
@@ -165,6 +187,42 @@ describe('loadArticleDetail', () => {
   it('returns null for a missing article', async () => {
     const db = scriptedDb([{ match: 'WHERE a.id = $1', rows: [] }]);
     expect(await loadArticleDetail(db, '999')).toBeNull();
+  });
+
+  it('does not load articles that lack an approved event', async () => {
+    let detailSql = '';
+    const db = scriptedDb([
+      {
+        match: 'WHERE a.id = $1',
+        rows: [],
+        onQuery: (sql) => {
+          detailSql = sql;
+        },
+      },
+    ]);
+
+    expect(await loadArticleDetail(db, '5')).toBeNull();
+    expect(detailSql).toContain('event_articles');
+    expect(detailSql).toContain("publication_status = 'approved'");
+  });
+});
+
+describe('loadArticleCleanText', () => {
+  it('only previews articles attached to an approved event', async () => {
+    let previewSql = '';
+    const db = scriptedDb([
+      {
+        match: 'clean_text',
+        rows: [],
+        onQuery: (sql) => {
+          previewSql = sql;
+        },
+      },
+    ]);
+
+    expect(await loadArticleCleanText(db, '5')).toBeNull();
+    expect(previewSql).toContain('event_articles');
+    expect(previewSql).toContain("publication_status = 'approved'");
   });
 });
 

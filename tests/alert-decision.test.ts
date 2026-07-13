@@ -12,6 +12,7 @@ function event(overrides: Partial<EventRecord> = {}): EventRecord {
     eventTitle: 'CyberArk exploitation report',
     eventSummary: 'summary',
     eventStatus: 'open',
+    publicationStatus: 'draft',
     severity: 'high',
     urgency: 'P2',
     confidence: 0.8,

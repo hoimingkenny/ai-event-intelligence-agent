@@ -32,6 +32,7 @@ const event: EventRecord = {
   eventTitle: 'Draft title',
   eventSummary: 'Draft summary',
   eventStatus: 'open',
+  publicationStatus: 'draft',
   severity: 'high',
   urgency: 'P2',
   confidence: 0.7,

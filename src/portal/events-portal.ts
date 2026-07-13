@@ -1,10 +1,8 @@
 import type { Queryable } from '../db/repositories/types.js';
 
 /**
- * Read model for the events view of the portal. An event is a deduplicated
- * real-world incident; its "sources" are the articles the grouping ladder
- * attached to it. Multi-source events (corroborated by several outlets) are
- * surfaced first. All queries are parameterized.
+ * Public catalogue read model for events. Only **approved** canonical events
+ * with vendor/product impact are listed. Drafts never appear here.
  */
 
 export interface EventListItem {
@@ -69,6 +67,8 @@ export interface EventDetail extends EventListItem {
 const MAX_LIMIT = 200;
 const VENDOR_PRODUCT_EVENT_CONDITION =
   "(cardinality(coalesce(e.affected_vendors, '{}'::text[])) > 0 OR cardinality(coalesce(e.affected_products, '{}'::text[])) > 0)";
+const PUBLIC_EVENT_CONDITION = "e.publication_status = 'approved'";
+const PUBLIC_CATALOGUE_EVENT_CONDITION = `${PUBLIC_EVENT_CONDITION} AND ${VENDOR_PRODUCT_EVENT_CONDITION}`;
 
 export async function loadEventsOverview(
   db: Queryable,
@@ -77,7 +77,7 @@ export async function loadEventsOverview(
   const limit = clamp(query.limit ?? 50, 1, MAX_LIMIT);
   const offset = Math.max(0, query.offset ?? 0);
 
-  const conditions: string[] = [VENDOR_PRODUCT_EVENT_CONDITION];
+  const conditions: string[] = [PUBLIC_CATALOGUE_EVENT_CONDITION];
   const params: unknown[] = [];
   if (query.minSources !== undefined) {
     params.push(query.minSources);
@@ -158,6 +158,7 @@ export async function loadEventDetail(db: Queryable, eventId: string): Promise<E
           AND a.published_at IS NOT NULL
       ) article_dates ON true
       WHERE e.id = $1
+        AND ${PUBLIC_EVENT_CONDITION}
     `,
     [eventId]
   );
@@ -253,12 +254,12 @@ async function loadSummary(db: Queryable): Promise<EventsSummary> {
     db.query<{ total: string; multi_source: string }>(
       `SELECT count(*) AS total, count(*) FILTER (WHERE source_count > 1) AS multi_source
        FROM cyber_events e
-       WHERE ${VENDOR_PRODUCT_EVENT_CONDITION}`
+       WHERE ${PUBLIC_CATALOGUE_EVENT_CONDITION}`
     ),
     db.query<{ severity: string | null; count: string }>(
       `SELECT severity, count(*) AS count
        FROM cyber_events e
-       WHERE ${VENDOR_PRODUCT_EVENT_CONDITION}
+       WHERE ${PUBLIC_CATALOGUE_EVENT_CONDITION}
        GROUP BY severity`
     ),
   ]);
