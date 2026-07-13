@@ -15,7 +15,7 @@ export default async function EventsPage() {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader active="events" />
       <main className="page">
         <p className="page-kicker">Public catalogue</p>
         <h1 className="page-title">Events</h1>

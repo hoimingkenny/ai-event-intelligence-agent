@@ -26,7 +26,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader active="events" />
       <main className="page">
         <Link className="back-link" href="/events">
           ← All events

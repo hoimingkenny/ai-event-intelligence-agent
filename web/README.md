@@ -12,4 +12,6 @@ npm run web:build
 npm run web:start
 ```
 
-Public routes use the shared catalogue seam (`src/portal/events-portal.ts`): only **approved** canonical events with vendor/product impact.
+Public routes use the shared catalogue seam (`src/portal/events-portal.ts`, `src/portal/articles-portal.ts`): only **approved** canonical events (with vendor/product impact) and articles attached to them.
+
+Routes: `/` → `/events`, `/events/[id]`, `/articles`, `/articles/[id]`.

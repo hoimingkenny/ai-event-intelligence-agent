@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatConfidence, formatWhen } from '../web/lib/format.ts';
+import { excerpt, formatConfidence, formatWhen } from '../web/lib/format.ts';
 
 describe('web format helpers', () => {
   it('formats UTC timestamps for the events catalogue', () => {
@@ -10,5 +10,11 @@ describe('web format helpers', () => {
   it('formats confidence as a percentage', () => {
     expect(formatConfidence(0.82)).toBe('82%');
     expect(formatConfidence(null)).toBe('—');
+  });
+
+  it('excerpts long article bodies for the public detail page', () => {
+    expect(excerpt('  short  ')).toBe('short');
+    expect(excerpt('x'.repeat(10), 8)).toBe('xxxxxxxx…');
+    expect(excerpt(null)).toBeNull();
   });
 });

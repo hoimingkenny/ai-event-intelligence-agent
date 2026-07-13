@@ -251,6 +251,12 @@ a:hover {
   font-family: var(--font-mono);
 }
 
+.article-body {
+  white-space: pre-wrap;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
 .back-link {
   display: inline-block;
   margin-bottom: 1.25rem;
