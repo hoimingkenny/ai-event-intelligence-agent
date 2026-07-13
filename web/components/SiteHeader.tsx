@@ -14,6 +14,7 @@ export function SiteHeader({ active }: { active: 'events' | 'articles' }) {
           <Link href="/articles" className={active === 'articles' ? 'active' : undefined}>
             Articles
           </Link>
+          <Link href="/workspace">Workspace</Link>
         </nav>
       </div>
     </header>

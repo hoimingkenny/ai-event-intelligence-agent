@@ -14,4 +14,17 @@ npm run web:start
 
 Public routes use the shared catalogue seam (`src/portal/events-portal.ts`, `src/portal/articles-portal.ts`): only **approved** canonical events (with vendor/product impact) and articles attached to them.
 
-Routes: `/` → `/events`, `/events/[id]`, `/articles`, `/articles/[id]`.
+Routes: `/` → `/events`, `/events/[id]`, `/articles`, `/articles/[id]`, `/workspace` (GitHub allowlist).
+
+## Auth (analyst workspace)
+
+Set in the repo-root `.env`:
+
+```bash
+AUTH_SECRET=          # openssl rand -base64 32
+AUTH_GITHUB_ID=
+AUTH_GITHUB_SECRET=
+ANALYST_GITHUB_USERS=your-github-login
+```
+
+Create a GitHub OAuth App with callback `http://localhost:3000/api/auth/callback/github` (and the production URL in deploy). Empty `ANALYST_GITHUB_USERS` fails closed — nobody reaches `/workspace`.
