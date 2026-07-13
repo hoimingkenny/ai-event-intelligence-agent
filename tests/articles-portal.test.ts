@@ -129,6 +129,7 @@ describe('loadArticlesOverview', () => {
     for (const sql of [listSql, countSql]) {
       expect(sql).toContain('event_articles');
       expect(sql).toContain("publication_status = 'approved'");
+      expect(sql).toContain('cardinality(coalesce(e.affected_vendors');
     }
   });
 });
@@ -179,6 +180,7 @@ describe('loadArticleDetail', () => {
     expect(detail?.events[0]).toMatchObject({ eventId: '10', confidence: 0.8 });
     expect(eventsSql).toContain('e.event_title');
     expect(eventsSql).toContain("e.publication_status = 'approved'");
+    expect(eventsSql).toContain('cardinality(coalesce(e.affected_vendors');
     expect(eventsSql).not.toContain("e.llm_summary ->> 'title' AS event_title");
     expect(detail?.alerts[0]).toMatchObject({ alertTier: 'confirmed', suppressed: false });
     expect(detail?.llmClassification).toEqual({ cyberRelevant: true });
@@ -204,6 +206,7 @@ describe('loadArticleDetail', () => {
     expect(await loadArticleDetail(db, '5')).toBeNull();
     expect(detailSql).toContain('event_articles');
     expect(detailSql).toContain("publication_status = 'approved'");
+    expect(detailSql).toContain('cardinality(coalesce(e.affected_vendors');
   });
 });
 
@@ -223,6 +226,7 @@ describe('loadArticleCleanText', () => {
     expect(await loadArticleCleanText(db, '5')).toBeNull();
     expect(previewSql).toContain('event_articles');
     expect(previewSql).toContain("publication_status = 'approved'");
+    expect(previewSql).toContain('cardinality(coalesce(e.affected_vendors');
   });
 });
 

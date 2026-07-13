@@ -59,12 +59,15 @@ export interface ArticlesQuery {
 }
 
 const MAX_LIMIT = 200;
+const PUBLIC_EVENT_IMPACT_CONDITION =
+  "(cardinality(coalesce(e.affected_vendors, '{}'::text[])) > 0 OR cardinality(coalesce(e.affected_products, '{}'::text[])) > 0)";
+const PUBLIC_APPROVED_EVENT_CONDITION = `e.publication_status = 'approved' AND ${PUBLIC_EVENT_IMPACT_CONDITION}`;
 const PUBLIC_ARTICLE_CONDITION = `EXISTS (
         SELECT 1
         FROM event_articles ea
         JOIN cyber_events e ON e.id = ea.event_id
         WHERE ea.article_id = a.id
-          AND e.publication_status = 'approved'
+          AND ${PUBLIC_APPROVED_EVENT_CONDITION}
       )`;
 
 export async function loadArticlesOverview(
@@ -203,7 +206,7 @@ export async function loadArticleDetail(db: Queryable, articleId: string): Promi
       `SELECT e.id AS event_id, e.event_title, ea.relationship, e.severity, e.confidence
        FROM event_articles ea JOIN cyber_events e ON e.id = ea.event_id
        WHERE ea.article_id = $1
-         AND e.publication_status = 'approved'`,
+         AND ${PUBLIC_APPROVED_EVENT_CONDITION}`,
       [articleId]
     ),
     db.query<{ alert_tier: string | null; alert_status: string | null; alert_reason: string | null; suppressed: boolean }>(
@@ -212,7 +215,7 @@ export async function loadArticleDetail(db: Queryable, articleId: string): Promi
        JOIN event_articles ea ON ea.event_id = a.event_id
        JOIN cyber_events e ON e.id = ea.event_id
        WHERE ea.article_id = $1
-         AND e.publication_status = 'approved'
+         AND ${PUBLIC_APPROVED_EVENT_CONDITION}
        ORDER BY a.created_at DESC`,
       [articleId]
     ),
