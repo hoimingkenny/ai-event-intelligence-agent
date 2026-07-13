@@ -1,10 +1,5 @@
 import { env } from './env.js';
 
-interface MiniMaxEmbeddingResponse {
-  vectors: number[][] | null;
-  base_resp?: { status_code: number; status_msg: string };
-}
-
 interface OpenRouterEmbeddingResponse {
   data?: Array<{ embedding: number[] }>;
   error?: { message?: string };
@@ -18,33 +13,28 @@ interface OllamaEmbeddingResponse {
 let cachedDimensions: number | null = null;
 
 /**
- * MiniMax uses a non-OpenAI-standard embeddings endpoint:
- *   POST {baseURL}/embeddings
- *   body: { model, type: 'db' | 'query' | ..., texts: string[] }
- *   response: { vectors: number[][], base_resp: { status_code, status_msg } }
+ * Embedding providers:
+ * - openrouter: OpenAI-compatible POST {baseURL}/embeddings
+ * - ollama: native POST {baseURL}/api/embed
  *
- * - `type` distinguishes indexed documents (`db`) from search-time queries (`query`).
- *   The model can produce asymmetric embeddings; pick the right type for each side.
- * - The standard OpenAI JS SDK `client.embeddings.create({ input })` does NOT work against
- *   this endpoint — go through fetch directly.
- *
- * Ollama uses its native embeddings endpoint:
- *   POST {baseURL}/api/embed
- *   body: { model, input: string[], dimensions?: number }
- *   response: { embeddings: number[][] }
+ * MiniMax is LLM-only in this project (coding-plan keys cannot call embo-01).
  */
 
 export type EmbeddingType = 'db' | 'query' | 'passage' | 'document';
 
-export async function embed(texts: string[], type: EmbeddingType = 'db'): Promise<number[][]> {
+export async function embed(texts: string[], _type: EmbeddingType = 'db'): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const raw =
-    env.embeddingProvider === 'openrouter'
-      ? await embedWithOpenRouter(texts)
-      : env.embeddingProvider === 'ollama'
-        ? await embedWithOllama(texts)
-        : await embedWithMiniMax(texts, type);
+  let raw: number[][];
+  if (env.embeddingProvider === 'openrouter') {
+    raw = await embedWithOpenRouter(texts);
+  } else if (env.embeddingProvider === 'ollama') {
+    raw = await embedWithOllama(texts);
+  } else {
+    throw new Error(
+      `Unsupported EMBEDDING_PROVIDER="${env.embeddingProvider}". Use "openrouter" or "ollama".`
+    );
+  }
 
   const vectors = raw.map(truncateToConfiguredDimensions);
 
@@ -69,30 +59,6 @@ function truncateToConfiguredDimensions(vector: number[]): number[] {
   const norm = Math.sqrt(truncated.reduce((sum, value) => sum + value * value, 0));
   if (norm === 0) return truncated;
   return truncated.map((value) => value / norm);
-}
-
-async function embedWithMiniMax(texts: string[], type: EmbeddingType): Promise<number[][]> {
-
-  const resp = await fetch(`${env.minimaxBaseUrl}/embeddings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.minimaxApiKey}`,
-    },
-    body: JSON.stringify({
-      model: env.minimaxEmbeddingModel,
-      type,
-      texts,
-    }),
-  });
-
-  const data = (await resp.json()) as MiniMaxEmbeddingResponse;
-  if (!resp.ok || !data.vectors) {
-    const msg = data.base_resp?.status_msg ?? `HTTP ${resp.status}`;
-    throw new Error(`Embedding request failed: ${msg}`);
-  }
-
-  return data.vectors;
 }
 
 async function embedWithOpenRouter(texts: string[]): Promise<number[][]> {
@@ -163,7 +129,9 @@ export function resetEmbeddingDimensionsCache(): void {
 export function currentEmbeddingModel(): string {
   if (env.embeddingProvider === 'openrouter') return env.openRouterEmbeddingModel;
   if (env.embeddingProvider === 'ollama') return env.ollamaEmbeddingModel;
-  return env.minimaxEmbeddingModel;
+  throw new Error(
+    `Unsupported EMBEDDING_PROVIDER="${env.embeddingProvider}". Use "openrouter" or "ollama".`
+  );
 }
 
 export function currentEmbeddingProvenance(): { model: string; dims: number } {

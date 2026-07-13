@@ -2,7 +2,9 @@ import { z } from 'zod';
 import type { DedupRelationship, ExtractedCyberFacts, SecurityEvent } from '../types/domain.js';
 import { callLLMWithSchema } from './llmHelpers.js';
 import { qdrantStore, type SimilarityMatch, QdrantVectorStore } from '../storage/qdrantStore.js';
-import { env } from '../config/env.js';
+
+/** Legacy Qdrant scaffold threshold (not part of the Postgres pipeline env). */
+const LEGACY_DEDUP_SIMILARITY_THRESHOLD = Number(process.env.DEDUP_SIMILARITY_THRESHOLD ?? 0.82);
 
 export interface DedupDecision {
   relationship: DedupRelationship;
@@ -97,7 +99,7 @@ export async function decideDeduplication(
   try {
     matches = await store.findSimilar(vector, {
       limit: 5,
-      minScore: env.dedupSimilarityThreshold,
+      minScore: LEGACY_DEDUP_SIMILARITY_THRESHOLD,
       excludeEventId: options.excludeEventId,
     });
   } catch {

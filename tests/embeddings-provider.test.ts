@@ -149,4 +149,11 @@ describe('embedding provider selection', () => {
     const { embedOne } = await import('../src/config/embeddings.js');
     await expect(embedOne('hello')).rejects.toThrow('Embedding request failed: model not found');
   });
+
+  it('rejects MiniMax as an embedding provider', async () => {
+    process.env.EMBEDDING_PROVIDER = 'minimax';
+    const { embed, currentEmbeddingModel } = await import('../src/config/embeddings.js');
+    await expect(embed(['hello'])).rejects.toThrow(/openrouter.*ollama/i);
+    expect(() => currentEmbeddingModel()).toThrow(/openrouter.*ollama/i);
+  });
 });

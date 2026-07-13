@@ -20,7 +20,7 @@ Vendor Threat Watch is an AI-assisted cyber early-warning and vendor-impact tria
 
 ```bash
 npm install              # Install dependencies
-cp .env.example .env     # Configure environment (MINIMAX_API_KEY required for embeddings/LLM)
+cp .env.example .env     # Configure environment (MINIMAX_API_KEY for LLM; OPENROUTER_API_KEY or Ollama for embeddings)
 docker compose up -d     # Postgres (pgvector) + Redis
 npm run db:migrate       # Apply SQL migrations (src/db/migrations/)
 npm run db:seed          # Seed feeds + monitored vendors
@@ -72,7 +72,7 @@ src/evaluation/           # Labelled dataset evaluation
 src/db/                   # Postgres pool, SQL migrations, repositories
 src/queue/                # BullMQ queues + pipeline worker
 src/utils/word-overlap.ts # Word-level recall/precision (extraction ground truth)
-src/config/               # env, MiniMax LLM + embeddings clients, RSS feed list
+src/config/               # env, MiniMax LLM + OpenRouter/Ollama embeddings clients, RSS feed list
 src/types/domain.ts       # Core domain types
 docs/                     # plans/ | design/ | engineering-notes/ | code-reviews/ (see docs/README.md)
 ```
@@ -98,7 +98,7 @@ Legacy scaffold kept for reference: `src/graph.ts`, `src/nodes/`, `src/agents/`,
 
 ## Current State
 
-Done: Postgres/pgvector pipeline with per-stage state machine; LangGraph StateGraph runner; MiniMax LLM + embeddings; Readability-based extraction with per-source selectors and ad removal; extraction quality metrics + drift detection; event-grouping ladder (groupingKey → embedding → LLM comparator); classification→event rollup; two-tier early-warning/confirmed alerting with latency SLO watchdog; real-HTML fixture harness; deterministic local test source; labelled evaluation module; BullMQ worker skeleton.
+Done: Postgres/pgvector pipeline with per-stage state machine; LangGraph StateGraph runner; MiniMax LLM + OpenRouter/Ollama embeddings; Readability-based extraction with per-source selectors and ad removal; extraction quality metrics + drift detection; event-grouping ladder (groupingKey → embedding → LLM comparator); classification→event rollup; two-tier early-warning/confirmed alerting with latency SLO watchdog; real-HTML fixture harness; deterministic local test source; labelled evaluation module; BullMQ worker skeleton.
 
 Pending: wire semantic dedup vector into the dedup stage; per-article push-through workers; grouping-key aliases; tier-0/1 sources with trust_level wired into confidence; analyst copilot agent (LangGraph); notification channels.
 
