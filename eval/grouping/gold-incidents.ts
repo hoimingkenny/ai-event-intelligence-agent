@@ -25,6 +25,27 @@ export const GoldIncidentSchema = z.object({
 export type GoldIncident = z.infer<typeof GoldIncidentSchema>;
 export type GoldIncidentArticle = z.infer<typeof GoldIncidentArticleSchema>;
 
+export class ArticleInMultipleGoldIncidentsError extends Error {
+  readonly conflictingUrls: string[];
+  readonly otherIncidentId: string;
+  readonly otherIncidentName: string;
+
+  constructor(opts: {
+    conflictingUrls: string[];
+    otherIncidentId: string;
+    otherIncidentName: string;
+  }) {
+    const urls = opts.conflictingUrls.join(', ');
+    super(
+      `Article URL(s) already in gold incident "${opts.otherIncidentName}" (${opts.otherIncidentId}): ${urls}`
+    );
+    this.name = 'ArticleInMultipleGoldIncidentsError';
+    this.conflictingUrls = opts.conflictingUrls;
+    this.otherIncidentId = opts.otherIncidentId;
+    this.otherIncidentName = opts.otherIncidentName;
+  }
+}
+
 export async function loadGoldIncidents(path: string): Promise<GoldIncident[]> {
   let raw: string;
   try {
@@ -80,6 +101,20 @@ export async function upsertGoldIncident(
   const now = new Date().toISOString();
   const id = input.id ?? randomUUID();
   const existingIndex = incidents.findIndex((row) => row.id === id);
+
+  const inputUrls = new Set(input.articles.map((a) => a.url));
+  for (const other of incidents) {
+    if (other.id === id) continue;
+    const conflictingUrls = other.articles.map((a) => a.url).filter((url) => inputUrls.has(url));
+    if (conflictingUrls.length > 0) {
+      throw new ArticleInMultipleGoldIncidentsError({
+        conflictingUrls,
+        otherIncidentId: other.id,
+        otherIncidentName: other.name,
+      });
+    }
+  }
+
   const next: GoldIncident = GoldIncidentSchema.parse({
     id,
     name: input.name,

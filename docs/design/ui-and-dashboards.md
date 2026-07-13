@@ -75,11 +75,11 @@ POST /api/eval/inventory                -> monitored-vendors.json (replace, hot-
 GET  /api/eval/report                   -> evaluateCheapFilterDataset(samples)
 GET  /api/grouping-eval/articles        -> search DB articles for pair pickers
 GET  /api/grouping-eval/incidents       -> gold incident baskets (JSONL)
-POST /api/grouping-eval/incidents       -> upsert gold incident
-POST /api/grouping-eval/incidents/bulk-same -> expand basket → same_event pair labels
-GET  /api/grouping-eval/pairs           -> grouping pair labels (JSONL)
-POST /api/grouping-eval/pairs           -> append (or ?upsert=1 replace) pair label
-GET  /api/grouping-eval/report          -> score pairs + evaluateGroupingPairDataset
+POST /api/grouping-eval/incidents       -> upsert gold incident (rejects article URL overlap)
+GET  /api/grouping-eval/pairs           -> uncertain overrides only (JSONL)
+POST /api/grouping-eval/pairs           -> append/upsert uncertain override (?upsert=1)
+DELETE /api/grouping-eval/pairs         -> clear uncertain override by urlA/urlB
+GET  /api/grouping-eval/report          -> derive pairs from gold + overrides, score, evaluate
 ```
 
 The old eval API paths (`/api/candidates`, `/api/labels`, `/api/decisions`, `/api/labels/from-article`, `/api/inventory`, `/api/report`) are accepted by the merged server as compatibility aliases. New code should use `/api/eval/*`.

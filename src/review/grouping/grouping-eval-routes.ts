@@ -1,5 +1,6 @@
 /**
- * HTTP routes for grouping-pair eval (gold incidents, pair labels, threshold report).
+ * HTTP routes for grouping-pair eval (gold incidents, uncertain overrides, threshold report).
+ * Same/different labels are derived from gold baskets at report time.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -9,15 +10,15 @@ import { z, ZodError } from 'zod';
 import type { Queryable } from '../../db/repositories/types.js';
 import {
   DuplicateGroupingPairError,
-  GROUPING_PAIR_LABELS,
+  NonUncertainOverrideError,
   appendGroupingPairLabel,
-  canonicalPairKey,
-  expandGoldIncidentPairs,
+  deleteGroupingPairOverride,
+  deriveGroupingPairsFromGoldIncidents,
   loadGroupingPairDataset,
   upsertGroupingPairLabel,
-  type GroupingPairLabelRecord,
 } from '../../../eval/grouping/pair-dataset.js';
 import {
+  ArticleInMultipleGoldIncidentsError,
   deleteGoldIncident,
   loadGoldIncidents,
   upsertGoldIncident,
@@ -37,10 +38,10 @@ export interface GroupingEvalServerOptions {
   db: Queryable | null;
 }
 
-const PairLabelSchema = z.object({
+const UncertainOverrideSchema = z.object({
   urlA: z.string().url(),
   urlB: z.string().url(),
-  label: z.enum(GROUPING_PAIR_LABELS),
+  label: z.literal('uncertain'),
   humanReason: z.string().trim().min(3),
   goldIncidentId: z.string().min(1).nullable().optional(),
   articleIdA: z.string().min(1).nullable().optional(),
@@ -64,11 +65,6 @@ const GoldIncidentUpsertSchema = z.object({
       })
     )
     .min(1),
-});
-
-const BulkSameSchema = z.object({
-  goldIncidentId: z.string().min(1),
-  humanReason: z.string().trim().min(3),
 });
 
 const ReportQuerySchema = z.object({
@@ -128,13 +124,15 @@ export async function routeGroupingEvalRequest(
     }
 
     if (req.method === 'GET' && path === '/api/grouping-eval/pairs') {
-      const pairs = await loadGroupingPairDataset(options.pairDatasetPath);
-      sendJson(res, { pairs, count: pairs.length });
+      const overrides = (await loadGroupingPairDataset(options.pairDatasetPath)).filter(
+        (row) => row.label === 'uncertain'
+      );
+      sendJson(res, { pairs: overrides, count: overrides.length });
       return true;
     }
 
     if (req.method === 'POST' && path === '/api/grouping-eval/pairs') {
-      const body = PairLabelSchema.parse(await readJson(req));
+      const body = UncertainOverrideSchema.parse(await readJson(req));
       const upsert = url.searchParams.get('upsert') === '1' || url.searchParams.get('upsert') === 'true';
       if (upsert) {
         const result = await upsertGroupingPairLabel(options.pairDatasetPath, body);
@@ -146,47 +144,16 @@ export async function routeGroupingEvalRequest(
       return true;
     }
 
-    if (req.method === 'POST' && path === '/api/grouping-eval/incidents/bulk-same') {
-      const body = BulkSameSchema.parse(await readJson(req));
-      const incidents = await loadGoldIncidents(options.goldIncidentsPath);
-      const incident = incidents.find((row) => row.id === body.goldIncidentId);
-      if (!incident) {
-        sendJson(res, { error: { code: 'NOT_FOUND', message: 'Gold incident not found' } }, 404);
+    if (req.method === 'DELETE' && path === '/api/grouping-eval/pairs') {
+      const body = z
+        .object({ urlA: z.string().url(), urlB: z.string().url() })
+        .parse(await readJson(req));
+      const deleted = await deleteGroupingPairOverride(options.pairDatasetPath, body.urlA, body.urlB);
+      if (!deleted) {
+        sendJson(res, { error: { code: 'NOT_FOUND', message: 'Override not found' } }, 404);
         return true;
       }
-
-      const existing = await loadGroupingPairDataset(options.pairDatasetPath);
-      const existingKeys = new Set(existing.map((p) => canonicalPairKey(p.urlA, p.urlB)));
-      const expanded = expandGoldIncidentPairs(incident.articles.map((a) => a.url));
-      const saved: GroupingPairLabelRecord[] = [];
-      const skipped: string[] = [];
-
-      for (const pair of expanded) {
-        const key = canonicalPairKey(pair.urlA, pair.urlB);
-        if (existingKeys.has(key)) {
-          skipped.push(`${pair.urlA} | ${pair.urlB}`);
-          continue;
-        }
-        const articleA = incident.articles.find((a) => a.url === pair.urlA);
-        const articleB = incident.articles.find((a) => a.url === pair.urlB);
-        const record = await appendGroupingPairLabel(options.pairDatasetPath, {
-          urlA: pair.urlA,
-          urlB: pair.urlB,
-          label: 'same_event',
-          humanReason: body.humanReason,
-          goldIncidentId: incident.id,
-          articleIdA: articleA?.articleId ?? null,
-          articleIdB: articleB?.articleId ?? null,
-          titleA: articleA?.title,
-          titleB: articleB?.title,
-          sourceNameA: articleA?.sourceName,
-          sourceNameB: articleB?.sourceName,
-        });
-        existingKeys.add(key);
-        saved.push(record);
-      }
-
-      sendJson(res, { savedCount: saved.length, skippedCount: skipped.length, saved, skipped }, 201);
+      sendJson(res, { deleted: true });
       return true;
     }
 
@@ -204,10 +171,23 @@ export async function routeGroupingEvalRequest(
         );
         return true;
       }
-      const pairs = await loadGroupingPairDataset(options.pairDatasetPath);
+      const incidents = await loadGoldIncidents(options.goldIncidentsPath);
+      const overrides = await loadGroupingPairDataset(options.pairDatasetPath);
+      const pairs = deriveGroupingPairsFromGoldIncidents(incidents, overrides);
       const scored = await scoreGroupingPairs(options.db!, pairs);
       const report = evaluateGroupingPairDataset(scored, thresholds);
-      sendJson(res, { report, pairs: scored });
+      const needsSecondGoldIncident = incidents.length < 2;
+      sendJson(res, {
+        report,
+        pairs: scored,
+        meta: {
+          goldIncidentCount: incidents.length,
+          needsSecondGoldIncident,
+          differentEmptyHint: needsSecondGoldIncident
+            ? 'Need ≥2 gold incidents to derive different_event pairs.'
+            : null,
+        },
+      });
       return true;
     }
 
@@ -269,6 +249,14 @@ export function sendGroupingEvalError(res: ServerResponse, error: unknown): void
   }
   if (error instanceof DuplicateGroupingPairError) {
     sendJson(res, { error: { code: 'DUPLICATE_PAIR', message: error.message } }, 409);
+    return;
+  }
+  if (error instanceof NonUncertainOverrideError) {
+    sendJson(res, { error: { code: 'INVALID_OVERRIDE', message: error.message } }, 400);
+    return;
+  }
+  if (error instanceof ArticleInMultipleGoldIncidentsError) {
+    sendJson(res, { error: { code: 'ARTICLE_OVERLAP', message: error.message } }, 409);
     return;
   }
   if (error instanceof ZodError) {
