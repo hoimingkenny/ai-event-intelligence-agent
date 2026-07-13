@@ -12,6 +12,18 @@ _Avoid_: Document, post, story (when meaning a pipeline record)
 The system's single incident record that one or more articles may attach to.
 _Avoid_: Cluster, incident ticket, alert (alert is a downstream notification)
 
+**Publication status**:
+Whether a canonical event is visible on the public portal: `draft` (not public) or `approved` (public). Independent of incident lifecycle status such as open/closed.
+_Avoid_: event status, published (when used as a synonym for the event itself), visibility flag
+
+**Event approval**:
+The human action that sets a canonical event's publication status to `approved`.
+_Avoid_: Human review verdict (post-hoc correct/incorrect scoring of pipeline output), eval label
+
+**Event unpublish**:
+The human action that returns a canonical event's publication status from `approved` to `draft`.
+_Avoid_: Delete, close, suppress alert
+
 **Grouping**:
 Deciding whether an article attaches to an existing canonical event or creates a new one.
 _Avoid_: Dedup, merge (dedup is article-identity; grouping is incident-identity)

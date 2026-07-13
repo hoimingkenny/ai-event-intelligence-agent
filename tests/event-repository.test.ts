@@ -3,6 +3,44 @@ import { EventRepository } from '../src/db/repositories/event.repository.js';
 import type { Queryable } from '../src/db/repositories/types.js';
 
 describe('EventRepository', () => {
+  it('creates canonical events as draft publication status', async () => {
+    const calls: Array<{ sql: string; params?: unknown[] }> = [];
+    const db = {
+      async query<T>(sql: string, params?: unknown[]) {
+        calls.push({ sql, params });
+        return {
+          rows: [
+            {
+              id: '1',
+              grouping_key: null,
+              first_seen_at: new Date('2026-07-13T00:00:00Z'),
+              event_title: 'Test event',
+              event_summary: null,
+              event_status: 'open',
+              publication_status: 'draft',
+              severity: null,
+              urgency: null,
+              confidence: null,
+              affected_vendors: [],
+              affected_products: [],
+              cves: [],
+              attack_types: [],
+              summary_stale: false,
+            },
+          ] as T[],
+          rowCount: 1,
+        };
+      },
+    } as Queryable;
+
+    const created = await new EventRepository(db).createEvent({ eventTitle: 'Test event' });
+
+    const insert = calls.find((call) => call.sql.includes('INSERT INTO cyber_events'));
+    expect(insert?.sql).toContain('publication_status');
+    expect(insert?.params).toContain('draft');
+    expect(created.publicationStatus).toBe('draft');
+  });
+
   it('marks summaries stale only when attaching a material update relationship', async () => {
     const calls: Array<{ sql: string; params?: unknown[] }> = [];
     const db = {

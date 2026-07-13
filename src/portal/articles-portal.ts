@@ -1,8 +1,8 @@
 import type { Queryable } from '../db/repositories/types.js';
 
 /**
- * Read model for the article monitoring portal. Pure data access + shaping —
- * the HTTP layer and HTML are separate. All queries are parameterized.
+ * Public catalogue read model for articles. Only articles attached to at least
+ * one **approved** canonical event are listed. All queries are parameterized.
  */
 
 export interface ArticleListItem {
@@ -59,6 +59,13 @@ export interface ArticlesQuery {
 }
 
 const MAX_LIMIT = 200;
+const PUBLIC_ARTICLE_CONDITION = `EXISTS (
+        SELECT 1
+        FROM event_articles ea
+        JOIN cyber_events e ON e.id = ea.event_id
+        WHERE ea.article_id = a.id
+          AND e.publication_status = 'approved'
+      )`;
 
 export async function loadArticlesOverview(
   db: Queryable,
@@ -69,7 +76,7 @@ export async function loadArticlesOverview(
 
   // Build a parameterized WHERE from optional filters. Columns are aliased `a.`
   // to match the `articles a` alias used in both list and count queries.
-  const conditions: string[] = [];
+  const conditions: string[] = [PUBLIC_ARTICLE_CONDITION];
   const params: unknown[] = [];
   if (query.status) {
     params.push(query.status);
@@ -87,7 +94,7 @@ export async function loadArticlesOverview(
     params.push(`%${query.search}%`);
     conditions.push(`(a.title ILIKE $${params.length} OR a.canonical_url ILIKE $${params.length})`);
   }
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   const orderBy =
     query.sort === 'quality_asc'
@@ -179,6 +186,7 @@ export async function loadArticleDetail(db: Queryable, articleId: string): Promi
         LIMIT 1
       ) v ON true
       WHERE a.id = $1
+        AND ${PUBLIC_ARTICLE_CONDITION}
     `,
     [articleId]
   );
@@ -194,13 +202,18 @@ export async function loadArticleDetail(db: Queryable, articleId: string): Promi
     db.query<{ event_id: string; event_title: string | null; relationship: string | null; severity: string | null; confidence: string | null }>(
       `SELECT e.id AS event_id, e.event_title, ea.relationship, e.severity, e.confidence
        FROM event_articles ea JOIN cyber_events e ON e.id = ea.event_id
-       WHERE ea.article_id = $1`,
+       WHERE ea.article_id = $1
+         AND e.publication_status = 'approved'`,
       [articleId]
     ),
     db.query<{ alert_tier: string | null; alert_status: string | null; alert_reason: string | null; suppressed: boolean }>(
       `SELECT a.alert_tier, a.alert_status, a.alert_reason, a.suppressed
-       FROM alerts a JOIN event_articles ea ON ea.event_id = a.event_id
-       WHERE ea.article_id = $1 ORDER BY a.created_at DESC`,
+       FROM alerts a
+       JOIN event_articles ea ON ea.event_id = a.event_id
+       JOIN cyber_events e ON e.id = ea.event_id
+       WHERE ea.article_id = $1
+         AND e.publication_status = 'approved'
+       ORDER BY a.created_at DESC`,
       [articleId]
     ),
   ]);
@@ -233,13 +246,16 @@ export async function loadArticleDetail(db: Queryable, articleId: string): Promi
   };
 }
 
-/** Extracted clean text of one article (for the reader preview pane). */
+/** Extracted clean text of one public-catalogue article (for the reader preview pane). */
 export async function loadArticleCleanText(
   db: Queryable,
   articleId: string
 ): Promise<{ title: string | null; cleanText: string | null } | null> {
   const result = await db.query<{ title: string | null; clean_text: string | null }>(
-    `SELECT title, clean_text FROM articles WHERE id = $1`,
+    `SELECT a.title, a.clean_text
+     FROM articles a
+     WHERE a.id = $1
+       AND ${PUBLIC_ARTICLE_CONDITION}`,
     [articleId]
   );
   const row = result.rows[0];
@@ -295,7 +311,10 @@ function mapListItem(row: ArticleRow): ArticleListItem {
 
 async function loadSummary(db: Queryable): Promise<ArticlesSummary> {
   const statusResult = await db.query<{ processing_status: string; count: string }>(
-    `SELECT processing_status, count(*) AS count FROM articles GROUP BY processing_status`
+    `SELECT processing_status, count(*) AS count
+     FROM articles a
+     WHERE ${PUBLIC_ARTICLE_CONDITION}
+     GROUP BY processing_status`
   );
   const byStatus: Record<string, number> = {};
   let total = 0;
@@ -314,8 +333,9 @@ async function loadSummary(db: Queryable): Promise<ArticlesSummary> {
       SELECT
         percentile_cont(0.5) WITHIN GROUP (ORDER BY rss_recall) AS median_recall,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY content_quality_score) AS median_quality
-      FROM articles
-      WHERE rss_recall IS NOT NULL OR content_quality_score IS NOT NULL
+      FROM articles a
+      WHERE ${PUBLIC_ARTICLE_CONDITION}
+        AND (rss_recall IS NOT NULL OR content_quality_score IS NOT NULL)
     `
   );
 
@@ -338,7 +358,11 @@ async function loadDistinct(
 ): Promise<string[]> {
   // column is a fixed literal (never user input) — safe to interpolate.
   const result = await db.query<Record<string, string | null>>(
-    `SELECT DISTINCT ${column} AS value FROM articles WHERE ${column} IS NOT NULL ORDER BY value`
+    `SELECT DISTINCT ${column} AS value
+     FROM articles a
+     WHERE ${PUBLIC_ARTICLE_CONDITION}
+       AND ${column} IS NOT NULL
+     ORDER BY value`
   );
   return result.rows.map((r) => r.value).filter((v): v is string => Boolean(v));
 }

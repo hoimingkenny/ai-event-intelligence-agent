@@ -28,6 +28,7 @@ const event: EventRecord = {
   eventTitle: 'Vendor VPN vulnerability report',
   eventSummary: 'Existing event',
   eventStatus: 'open',
+  publicationStatus: 'draft',
   severity: 'high',
   urgency: 'P2',
   confidence: 0.7,
