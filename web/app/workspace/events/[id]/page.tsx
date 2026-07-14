@@ -1,20 +1,37 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { getWorkspaceEvent } from '../../../../../src/events/event-editorial';
+import {
+  getWorkspaceEvent,
+  listArticlesNeedingTriage,
+  listWorkspaceEventArticles,
+  listWorkspaceEvents,
+} from '../../../../../src/events/event-editorial';
 import {
   approveEventAction,
+  attachArticleAction,
+  detachArticleAction,
+  moveArticleAction,
   saveEventFieldsAction,
   unpublishEventAction,
 } from '../../../actions/events';
 import { SiteHeader } from '../../../../components/SiteHeader';
 import { getDb } from '../../../../lib/db';
+import { formatWhen } from '../../../../lib/format';
 import { requireAnalyst } from '../../../../lib/require-analyst';
 
 export const dynamic = 'force-dynamic';
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; approved?: string; unpublished?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    approved?: string;
+    unpublished?: string;
+    created?: string;
+    attached?: string;
+    detached?: string;
+    moved?: string;
+  }>;
 };
 
 export async function generateMetadata({ params }: PageProps) {
@@ -33,9 +50,19 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
 
   const { id } = await params;
   const notices = await searchParams;
-  const event = await getWorkspaceEvent(getDb(), id);
+  const db = getDb();
+  const event = await getWorkspaceEvent(db, id);
   if (!event) notFound();
 
+  const [members, triage, allEvents] = await Promise.all([
+    listWorkspaceEventArticles(db, id),
+    listArticlesNeedingTriage(db, { limit: 40 }),
+    listWorkspaceEvents(db, { limit: 100 }),
+  ]);
+
+  const memberIds = new Set(members.map((article) => article.id));
+  const attachCandidates = triage.filter((article) => !memberIds.has(article.id));
+  const moveTargets = allEvents.filter((item) => item.id !== event.id);
   const isApproved = event.publicationStatus === 'approved';
 
   return (
@@ -62,10 +89,14 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
         </p>
 
         {notices.saved ? <p className="flash">Fields saved.</p> : null}
+        {notices.created ? <p className="flash">Draft event created with selected articles.</p> : null}
         {notices.approved ? <p className="flash">Event approved — now visible on the public catalogue.</p> : null}
         {notices.unpublished ? (
           <p className="flash">Event unpublished — hidden from the public catalogue.</p>
         ) : null}
+        {notices.attached ? <p className="flash">Article attached.</p> : null}
+        {notices.detached ? <p className="flash">Article detached.</p> : null}
+        {notices.moved ? <p className="flash">Article moved to this event.</p> : null}
 
         <div className="detail-panel">
           <form action={saveEventFieldsAction} className="edit-form">
@@ -149,6 +180,93 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
             )}
           </div>
         </div>
+
+        <section className="workspace-section">
+          <h2 className="section-title">Membership</h2>
+          <p className="page-lede">
+            Attach, detach, or move source articles. Merge/split of whole events stays out of scope.
+          </p>
+
+          {members.length === 0 ? (
+            <p className="meta">No articles attached yet.</p>
+          ) : (
+            <ul className="sources membership-list">
+              {members.map((article) => (
+                <li key={article.id}>
+                  <div className="when">{formatWhen(article.publishedAt)}</div>
+                  <div>
+                    <strong>{article.sourceName || 'Unknown source'}</strong>
+                    <span className="meta" style={{ marginLeft: '0.75rem' }}>
+                      #{article.id}
+                    </span>
+                  </div>
+                  <div>{article.title || article.canonicalUrl || 'Untitled article'}</div>
+                  <div className="membership-ops">
+                    <form action={detachArticleAction}>
+                      <input type="hidden" name="eventId" value={event.id} />
+                      <input type="hidden" name="articleId" value={article.id} />
+                      <button className="auth-button secondary" type="submit">
+                        Detach
+                      </button>
+                    </form>
+                    {moveTargets.length > 0 ? (
+                      <form action={moveArticleAction} className="move-form">
+                        <input type="hidden" name="fromEventId" value={event.id} />
+                        <input type="hidden" name="articleId" value={article.id} />
+                        <select name="toEventId" required defaultValue="">
+                          <option value="" disabled>
+                            Move to…
+                          </option>
+                          {moveTargets.map((target) => (
+                            <option key={target.id} value={target.id}>
+                              {target.eventTitle || `Event #${target.id}`} ({target.publicationStatus})
+                            </option>
+                          ))}
+                        </select>
+                        <button className="auth-button secondary" type="submit">
+                          Move
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="detail-panel" style={{ marginTop: '1.5rem' }}>
+            <h3 className="page-kicker" style={{ marginBottom: '0.75rem' }}>
+              Attach article
+            </h3>
+            {attachCandidates.length === 0 ? (
+              <p className="meta" style={{ margin: 0 }}>
+                No triage candidates left to attach (or they are already on this event).
+              </p>
+            ) : (
+              <form action={attachArticleAction} className="edit-form">
+                <input type="hidden" name="eventId" value={event.id} />
+                <label className="field">
+                  <span>Article not on an approved event</span>
+                  <select name="articleId" required defaultValue="">
+                    <option value="" disabled>
+                      Select article…
+                    </option>
+                    {attachCandidates.map((article) => (
+                      <option key={article.id} value={article.id}>
+                        #{article.id} · {article.title || article.canonicalUrl || 'Untitled'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="form-actions">
+                  <button className="auth-button" type="submit">
+                    Attach
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </section>
       </main>
     </>
   );

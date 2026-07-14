@@ -112,6 +112,28 @@ export class ArticleRepository {
     return { article: existing, created: false };
   }
 
+  async findByIds(articleIds: string[]): Promise<ArticleRecord[]> {
+    if (articleIds.length === 0) return [];
+    const result = await this.db.query<ArticleRow>(
+      `
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method,
+          extraction_error, processing_status
+        FROM articles
+        WHERE id = ANY($1::BIGINT[])
+      `,
+      [articleIds]
+    );
+    const byId = new Map(result.rows.map((row) => [row.id, mapArticle(row)]));
+    return articleIds.map((id) => {
+      const article = byId.get(id);
+      if (!article) {
+        throw new Error(`Article ${id} was not found`);
+      }
+      return article;
+    });
+  }
+
   async findByCanonicalUrl(canonicalUrl: string): Promise<ArticleRecord | null> {
     const result = await this.db.query<ArticleRow>(
       `

@@ -29,4 +29,4 @@ ANALYST_GITHUB_USERS=your-github-login
 
 Create a GitHub OAuth App with callback `http://localhost:3000/api/auth/callback/github` (and the production URL in deploy). Empty `ANALYST_GITHUB_USERS` fails closed — nobody reaches `/workspace`.
 
-Allowlisted analysts can open `/workspace`, edit event fields, approve (public visibility), and unpublish (back to draft). Mutations go through `src/events/event-editorial.ts`.
+Allowlisted analysts can open `/workspace`, create draft events from triage articles, edit fields and membership (attach/detach/move), approve (public visibility), and unpublish (back to draft). Mutations go through `src/events/event-editorial.ts`.

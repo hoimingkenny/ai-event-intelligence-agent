@@ -539,6 +539,72 @@ export class EventRepository {
       [input.eventId, input.relationship]
     );
   }
+
+  async detachArticle(eventId: string, articleId: string): Promise<void> {
+    const result = await this.db.query<{ id: string }>(
+      `
+        DELETE FROM event_articles
+        WHERE event_id = $1 AND article_id = $2
+        RETURNING id
+      `,
+      [eventId, articleId]
+    );
+    if ((result.rowCount ?? result.rows.length) === 0) {
+      throw new Error(`Article ${articleId} is not attached to event ${eventId}`);
+    }
+
+    await this.db.query(
+      `
+        UPDATE cyber_events
+        SET source_count = (
+          SELECT count(*) FROM event_articles WHERE event_id = $1
+        ),
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [eventId]
+    );
+  }
+
+  async listArticlesNeedingTriage(limit = 50): Promise<ArticleRecord[]> {
+    const result = await this.db.query<EventArticleRow>(
+      `
+        SELECT a.id, a.feed_id, a.source_name, a.title, a.canonical_url, a.url_hash, a.title_hash, a.content_hash,
+          a.rss_summary, a.rss_categories, a.clean_text, a.published_at, a.extraction_status, a.extraction_method,
+          a.extraction_error, a.processing_status
+        FROM articles a
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM event_articles ea
+          JOIN cyber_events e ON e.id = ea.event_id
+          WHERE ea.article_id = a.id
+            AND e.publication_status = 'approved'
+        )
+        ORDER BY a.published_at DESC NULLS LAST, a.id DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      feedId: row.feed_id,
+      sourceName: row.source_name,
+      title: row.title,
+      canonicalUrl: row.canonical_url,
+      urlHash: row.url_hash,
+      titleHash: row.title_hash,
+      contentHash: row.content_hash,
+      rssSummary: row.rss_summary,
+      rssCategories: row.rss_categories ?? [],
+      cleanText: row.clean_text,
+      publishedAt: row.published_at,
+      extractionStatus: row.extraction_status,
+      extractionMethod: row.extraction_method,
+      extractionError: row.extraction_error,
+      processingStatus: row.processing_status,
+    }));
+  }
 }
 
 function mapEvent(row: EventRow): EventRecord {
