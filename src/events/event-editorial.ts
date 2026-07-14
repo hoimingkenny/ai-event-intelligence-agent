@@ -49,6 +49,107 @@ export interface WorkspaceArticleDetail {
   }>;
 }
 
+/** Article peek slide-over payload (fetch-on-open; slim vs full Workspace article). */
+export interface ArticlePeek {
+  id: string;
+  title: string | null;
+  sourceName: string | null;
+  processingStatus: string;
+  extractionStatus: string;
+  excerpt: string;
+  bodySource: 'cleanText' | 'rssSummary' | null;
+  truncated: boolean;
+  workspaceArticlePath: string;
+  filterSignals: FilterSignalBlock;
+  extractedEntities: Array<{
+    entityType: string;
+    entityValue: string;
+    confidence: number | null;
+    role: string | null;
+  }>;
+  llmDigest: string | null;
+  llmEmptyReason: string | null;
+}
+
+const PEEK_EXCERPT_MAX = 700;
+const PEEK_DIGEST_MAX = 500;
+
+export function truncateArticleExcerpt(
+  cleanText: string | null | undefined,
+  rssSummary: string | null | undefined,
+  maxChars = PEEK_EXCERPT_MAX
+): {
+  excerpt: string;
+  bodySource: 'cleanText' | 'rssSummary' | null;
+  truncated: boolean;
+} {
+  const clean = cleanText?.trim() ? cleanText.trim() : null;
+  const rss = rssSummary?.trim() ? rssSummary.trim() : null;
+  const source = clean ?? rss;
+  const bodySource: 'cleanText' | 'rssSummary' | null = clean
+    ? 'cleanText'
+    : rss
+      ? 'rssSummary'
+      : null;
+  if (!source) {
+    return { excerpt: '', bodySource: null, truncated: false };
+  }
+  if (source.length <= maxChars) {
+    return { excerpt: source, bodySource, truncated: false };
+  }
+  return {
+    excerpt: `${source.slice(0, maxChars).trimEnd()}…`,
+    bodySource,
+    truncated: true,
+  };
+}
+
+export function compactLlmDigest(
+  classification: unknown,
+  processingStatus: string
+): { digest: string | null; emptyReason: string | null } {
+  if (classification === null || classification === undefined) {
+    return {
+      digest: null,
+      emptyReason: `No LLM classification yet (status: ${processingStatus}).`,
+    };
+  }
+
+  if (typeof classification === 'object' && !Array.isArray(classification)) {
+    const record = classification as Record<string, unknown>;
+    const preferredKeys = [
+      'summary',
+      'eventSummary',
+      'headline',
+      'relevance',
+      'severity',
+      'urgency',
+      'confidence',
+      'affectedVendors',
+      'affectedProducts',
+      'cves',
+    ];
+    const compact: Record<string, unknown> = {};
+    for (const key of preferredKeys) {
+      if (key in record && record[key] !== undefined && record[key] !== null) {
+        compact[key] = record[key];
+      }
+    }
+    const payload = Object.keys(compact).length > 0 ? compact : record;
+    let text = JSON.stringify(payload, null, 2);
+    if (text.length > PEEK_DIGEST_MAX) {
+      text = `${text.slice(0, PEEK_DIGEST_MAX).trimEnd()}…`;
+    }
+    return { digest: text, emptyReason: null };
+  }
+
+  let text = String(classification);
+  if (text.length > PEEK_DIGEST_MAX) {
+    text = `${text.slice(0, PEEK_DIGEST_MAX).trimEnd()}…`;
+  }
+  return { digest: text, emptyReason: null };
+}
+
 export interface EventFieldsInput {
   eventTitle: string;
   eventSummary: string | null;
@@ -360,6 +461,42 @@ export async function getWorkspaceArticle(
       confidence: e.confidence === null ? null : Number(e.confidence),
       role: e.role,
     })),
+  };
+}
+
+export async function getArticlePeek(
+  db: Queryable,
+  articleId: string
+): Promise<ArticlePeek | null> {
+  const detail = await getWorkspaceArticle(db, articleId);
+  if (!detail) return null;
+
+  const excerptResult =
+    detail.bodySource === 'cleanText'
+      ? truncateArticleExcerpt(detail.bodyText, null)
+      : detail.bodySource === 'rssSummary'
+        ? truncateArticleExcerpt(null, detail.bodyText)
+        : truncateArticleExcerpt(null, null);
+
+  const { digest, emptyReason } = compactLlmDigest(
+    detail.llmClassification,
+    detail.processingStatus
+  );
+
+  return {
+    id: detail.id,
+    title: detail.title,
+    sourceName: detail.sourceName,
+    processingStatus: detail.processingStatus,
+    extractionStatus: detail.extractionStatus,
+    excerpt: excerptResult.excerpt,
+    bodySource: excerptResult.bodySource,
+    truncated: excerptResult.truncated,
+    workspaceArticlePath: `/workspace/articles/${detail.id}`,
+    filterSignals: detail.filterSignals,
+    extractedEntities: detail.extractedEntities,
+    llmDigest: digest,
+    llmEmptyReason: emptyReason,
   };
 }
 

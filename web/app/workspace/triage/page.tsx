@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { listArticlesNeedingTriagePage } from '../../../../src/events/event-editorial';
+import { ArticlePeekButton } from '../../../components/ArticlePeekButton';
 import { SiteHeader } from '../../../components/SiteHeader';
 import { TriageSignalIcons } from '../../../components/TriageSignalIcons';
 import { WorkspaceNav } from '../../../components/WorkspaceNav';
@@ -71,7 +72,13 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
                   {article.title || article.canonicalUrl || 'Untitled article'}
                 </Link>
                 <span className="triage-end">
-                  <TriageSignalIcons article={article} />
+                  <span className="triage-icons-row">
+                    <ArticlePeekButton
+                      articleId={article.id}
+                      articleTitle={article.title || article.canonicalUrl || 'Untitled article'}
+                    />
+                    <TriageSignalIcons article={article} />
+                  </span>
                   <span>{article.sourceName || 'Unknown source'}</span>
                   <span className="triage-mono">#{article.id}</span>
                 </span>
