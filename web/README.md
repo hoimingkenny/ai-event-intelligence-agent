@@ -12,6 +12,8 @@ npm run web:build
 npm run web:start
 ```
 
+Dev uses webpack (not Turbopack) so parent-package NodeNext `.js` import specifiers resolve to `.ts` via `extensionAlias` in `next.config.ts`. Turbopack does not honor that alias yet, which breaks workspace routes that import `src/events/event-editorial.ts`.
+
 Public routes use the shared catalogue seam (`src/portal/events-portal.ts`, `src/portal/articles-portal.ts`): only **approved** canonical events (with vendor/product impact) and articles attached to them.
 
 Routes: `/` → `/events`, `/events/[id]`, `/articles`, `/articles/[id]`, `/workspace` (GitHub allowlist; edit/approve/unpublish).
