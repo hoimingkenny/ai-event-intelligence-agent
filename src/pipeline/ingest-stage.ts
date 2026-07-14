@@ -1,9 +1,23 @@
 import { ArticleRepository } from '../db/repositories/article.repository.js';
 import { FeedRepository } from '../db/repositories/feed.repository.js';
-import { normalizeFeedItem } from '../rss/feed-normalizer.js';
+import { normalizeFeedItem, type NormalizedFeedItem } from '../rss/feed-normalizer.js';
 import { ParserRssFetcher, type RssFetcher } from '../rss/rss-fetcher.js';
 import type { Queryable } from '../db/repositories/types.js';
 import { logInfo } from '../utils/logger.js';
+
+/** Oldest published_at first; nulls last; original feed index as tie-break. */
+function compareForIngestOrder(
+  a: { index: number; normalized: NormalizedFeedItem },
+  b: { index: number; normalized: NormalizedFeedItem }
+): number {
+  const aTime = a.normalized.publishedAt?.getTime();
+  const bTime = b.normalized.publishedAt?.getTime();
+  if (aTime === undefined && bTime === undefined) return a.index - b.index;
+  if (aTime === undefined) return 1;
+  if (bTime === undefined) return -1;
+  if (aTime !== bTime) return aTime - bTime;
+  return a.index - b.index;
+}
 
 export interface IngestFeedResult {
   feedId: string;
@@ -57,7 +71,9 @@ export async function ingestRssFeeds(db: Queryable, options: IngestOptions = {})
       const items = await fetcher.fetch(feed.feedUrl);
       result.fetched = items.length;
 
-      for (const item of items) {
+      const prepared: Array<{ index: number; normalized: NormalizedFeedItem }> = [];
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
         let normalized;
         try {
           normalized = normalizeFeedItem(feed, item);
@@ -72,6 +88,12 @@ export async function ingestRssFeeds(db: Queryable, options: IngestOptions = {})
           continue;
         }
 
+        prepared.push({ index, normalized });
+      }
+
+      prepared.sort(compareForIngestOrder);
+
+      for (const { normalized } of prepared) {
         const saved = await articleRepository.insertDiscoveredArticle(normalized);
         if (saved.created) {
           result.created += 1;
