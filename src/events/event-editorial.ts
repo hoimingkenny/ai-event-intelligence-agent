@@ -1,9 +1,28 @@
 import type { PoolClient } from 'pg';
 import { ArticleRepository, type ArticleRecord } from '../db/repositories/article.repository.js';
+import { EntityRepository } from '../db/repositories/entity.repository.js';
 import { EventRepository, type EventRecord } from '../db/repositories/event.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
+import {
+  summarizeTriageSignals,
+  type TriageSignalSummary,
+} from './triage-signals.js';
 
 export type PublicationStatus = 'draft' | 'approved';
+
+/** Slim Needs-triage list row for presence icons and draft membership. */
+export interface TriageListItem {
+  id: string;
+  title: string | null;
+  canonicalUrl: string | null;
+  sourceName: string | null;
+  publishedAt: Date | null;
+  signals: TriageSignalSummary;
+  draft: {
+    primaryEventId: string;
+    eventTitles: string[];
+  } | null;
+}
 
 export interface EventFieldsInput {
   eventTitle: string;
@@ -187,13 +206,57 @@ export async function listArticlesNeedingTriage(
 export async function listArticlesNeedingTriagePage(
   db: Queryable,
   options: { limit?: number; offset?: number } = {}
-): Promise<WorkspacePage<ArticleRecord>> {
+): Promise<WorkspacePage<TriageListItem>> {
   const { limit, offset } = normalizePageOptions(options);
-  const repo = new EventRepository(db);
-  const [items, total] = await Promise.all([
-    repo.listArticlesNeedingTriage(limit, offset),
-    repo.countArticlesNeedingTriage(),
+  const events = new EventRepository(db);
+  const entities = new EntityRepository(db);
+  const [rows, total] = await Promise.all([
+    events.listArticlesNeedingTriageSlim(limit, offset),
+    events.countArticlesNeedingTriage(),
   ]);
+
+  const articleIds = rows.map((row) => row.id);
+  const [entityHits, drafts] = await Promise.all([
+    entities.listVendorProductCvesForArticles(articleIds),
+    events.listDraftMembershipsForArticles(articleIds),
+  ]);
+
+  const entitiesByArticle = new Map<string, Array<{ entityType: string; entityValue: string }>>();
+  for (const entity of entityHits) {
+    const list = entitiesByArticle.get(entity.articleId) ?? [];
+    list.push({ entityType: entity.entityType, entityValue: entity.entityValue });
+    entitiesByArticle.set(entity.articleId, list);
+  }
+
+  const draftsByArticle = new Map<
+    string,
+    Array<{ eventId: string; eventTitle: string | null }>
+  >();
+  for (const draft of drafts) {
+    const list = draftsByArticle.get(draft.articleId) ?? [];
+    list.push({ eventId: draft.eventId, eventTitle: draft.eventTitle });
+    draftsByArticle.set(draft.articleId, list);
+  }
+
+  const items: TriageListItem[] = rows.map((row) => {
+    const articleDrafts = draftsByArticle.get(row.id) ?? [];
+    return {
+      id: row.id,
+      title: row.title,
+      canonicalUrl: row.canonicalUrl,
+      sourceName: row.sourceName,
+      publishedAt: row.publishedAt,
+      signals: summarizeTriageSignals(row.matchedSignals, entitiesByArticle.get(row.id) ?? []),
+      draft:
+        articleDrafts.length === 0
+          ? null
+          : {
+              primaryEventId: articleDrafts[0]!.eventId,
+              eventTitles: articleDrafts.map((d) => d.eventTitle?.trim() || `Event ${d.eventId}`),
+            },
+    };
+  });
+
   return { items, total, limit, offset };
 }
 

@@ -661,6 +661,81 @@ export class EventRepository {
 
     return result.rows.map((row) => this.mapTriageArticle(row));
   }
+
+  /** Slim Needs-triage rows for list icons (matchedSignals included; no body text). */
+  async listArticlesNeedingTriageSlim(
+    limit = 50,
+    offset = 0
+  ): Promise<TriageSlimArticleRow[]> {
+    const result = await this.db.query<TriageSlimArticleSqlRow>(
+      `
+        SELECT a.id, a.source_name, a.title, a.canonical_url, a.published_at,
+          a.cheap_filter_matched_signals
+        FROM articles a
+        WHERE ${EventRepository.TRIAGE_WHERE}
+        ORDER BY a.published_at DESC NULLS LAST, a.id DESC
+        LIMIT $1 OFFSET $2
+      `,
+      [limit, offset]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      sourceName: row.source_name,
+      title: row.title,
+      canonicalUrl: row.canonical_url,
+      publishedAt: row.published_at,
+      matchedSignals: row.cheap_filter_matched_signals ?? null,
+    }));
+  }
+
+  async listDraftMembershipsForArticles(
+    articleIds: string[]
+  ): Promise<
+    Array<{ articleId: string; eventId: string; eventTitle: string | null; updatedAt: Date }>
+  > {
+    if (articleIds.length === 0) return [];
+    const result = await this.db.query<{
+      article_id: string;
+      event_id: string;
+      event_title: string | null;
+      updated_at: Date;
+    }>(
+      `
+        SELECT ea.article_id, e.id AS event_id, e.event_title, e.updated_at
+        FROM event_articles ea
+        JOIN cyber_events e ON e.id = ea.event_id
+        WHERE ea.article_id = ANY($1::bigint[])
+          AND e.publication_status = 'draft'
+        ORDER BY e.updated_at DESC NULLS LAST, e.id DESC
+      `,
+      [articleIds]
+    );
+    return result.rows.map((row) => ({
+      articleId: row.article_id,
+      eventId: row.event_id,
+      eventTitle: row.event_title,
+      updatedAt: row.updated_at,
+    }));
+  }
+}
+
+export interface TriageSlimArticleRow {
+  id: string;
+  sourceName: string | null;
+  title: string | null;
+  canonicalUrl: string | null;
+  publishedAt: Date | null;
+  matchedSignals: unknown;
+}
+
+interface TriageSlimArticleSqlRow {
+  id: string;
+  source_name: string | null;
+  title: string | null;
+  canonical_url: string | null;
+  published_at: Date | null;
+  cheap_filter_matched_signals: unknown;
 }
 
 function mapEvent(row: EventRow): EventRecord {

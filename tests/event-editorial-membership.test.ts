@@ -280,30 +280,53 @@ describe('event editorial membership', () => {
 
   it('lists triage articles with offset and total count', async () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
-    let i = 0;
     const db = {
       async query<T>(sql: string, params?: unknown[]) {
         queries.push({ sql, params });
-        i += 1;
         if (sql.includes('COUNT(*)')) {
           return { rows: [{ count: '87' }] as T[], rowCount: 1 };
         }
-        return { rows: [articleRow] as T[], rowCount: 1 };
+        if (sql.includes('cheap_filter_matched_signals')) {
+          return {
+            rows: [
+              {
+                id: '101',
+                source_name: 'CISA',
+                title: 'Advisory about PAS',
+                canonical_url: 'https://example.com/a',
+                published_at: new Date('2026-07-14T01:00:00Z'),
+                cheap_filter_matched_signals: null,
+              },
+            ] as T[],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('FROM article_entities') || sql.includes("publication_status = 'draft'")) {
+          return { rows: [] as T[], rowCount: 0 };
+        }
+        return { rows: [] as T[], rowCount: 0 };
       },
     };
 
     const page = await listArticlesNeedingTriagePage(db as never, { limit: 25, offset: 50 });
 
-    const list = queries.find((q) => q.sql.includes('LIMIT') && !q.sql.includes('COUNT(*)'));
+    const list = queries.find((q) => q.sql.includes('cheap_filter_matched_signals'));
     expect(list?.sql).toMatch(/NOT EXISTS/i);
     expect(list?.params).toEqual([25, 50]);
-    expect(page).toEqual({
-      items: [expect.objectContaining({ id: '101' })],
-      total: 87,
-      limit: 25,
-      offset: 50,
-    });
-    expect(i).toBe(2);
+    expect(page.total).toBe(87);
+    expect(page.limit).toBe(25);
+    expect(page.offset).toBe(50);
+    expect(page.items).toEqual([
+      expect.objectContaining({
+        id: '101',
+        draft: null,
+        signals: expect.objectContaining({
+          hasVendorOrProduct: false,
+          hasCve: false,
+          hasCriticalKeyword: false,
+        }),
+      }),
+    ]);
   });
 
   it('lists articles currently attached to a workspace event', async () => {
