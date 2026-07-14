@@ -59,9 +59,7 @@ export interface ArticlesQuery {
 }
 
 const MAX_LIMIT = 200;
-const PUBLIC_EVENT_IMPACT_CONDITION =
-  "(cardinality(coalesce(e.affected_vendors, '{}'::text[])) > 0 OR cardinality(coalesce(e.affected_products, '{}'::text[])) > 0)";
-const PUBLIC_APPROVED_EVENT_CONDITION = `e.publication_status = 'approved' AND ${PUBLIC_EVENT_IMPACT_CONDITION}`;
+const PUBLIC_APPROVED_EVENT_CONDITION = `e.publication_status = 'approved'`;
 const PUBLIC_ARTICLE_CONDITION = `EXISTS (
         SELECT 1
         FROM event_articles ea

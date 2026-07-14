@@ -18,8 +18,9 @@ Production-shaped Docker Compose for phase 1 (ADR-0003): Postgres/pgvector, migr
 
 ## Risks and concerns
 
-- **Docker typecheck skip** — intentional; parent `src` under `web/tsconfig` (bundler) falsely fails Queryable generics. Mitigated by root `tsc` in CI/workflow.
-- **No live full-stack e2e in this PR** — validated `docker compose config`, `Dockerfile.web` build, and local `web:build` / `check`. Operators still need LLM keys for a useful scheduler run.
+- **Docker typecheck skip** — `DOCKER_BUILD=1` still skips Next’s parent-`src` typecheck (false positives under web/tsconfig), but `Dockerfile.web` runs root `npm run check` first and fails the image build if it fails.
+- **Approve requires vendor or product** — editorial hard-block; public catalogue visibility is publication status only (aligned after 2026-07-14 clarification on ADR-0002).
+- **No live full-stack e2e in this PR** — validated `docker compose config`, local `web:build` / `check`, and targeted portal/editorial tests. Operators still need LLM keys for a useful scheduler run.
 - **Playwright browsers** in the pipeline image remain a pre-existing gap for sources that need Playwright extraction.
 - **Postgres password still compose-default (`cyber`)** — fine for PoC VPS; harden before broader exposure.
 

@@ -2,7 +2,8 @@ import type { Queryable } from '../db/repositories/types.js';
 
 /**
  * Public catalogue read model for events. Only **approved** canonical events
- * with vendor/product impact are listed. Drafts never appear here.
+ * are listed. Drafts never appear here. Vendor/product impact is required at
+ * approve time (editorial seam), not as a second public hide filter.
  */
 
 export interface EventListItem {
@@ -65,10 +66,7 @@ export interface EventDetail extends EventListItem {
 }
 
 const MAX_LIMIT = 200;
-const VENDOR_PRODUCT_EVENT_CONDITION =
-  "(cardinality(coalesce(e.affected_vendors, '{}'::text[])) > 0 OR cardinality(coalesce(e.affected_products, '{}'::text[])) > 0)";
-const PUBLIC_EVENT_CONDITION = "e.publication_status = 'approved'";
-const PUBLIC_CATALOGUE_EVENT_CONDITION = `${PUBLIC_EVENT_CONDITION} AND ${VENDOR_PRODUCT_EVENT_CONDITION}`;
+const PUBLIC_CATALOGUE_EVENT_CONDITION = "e.publication_status = 'approved'";
 
 export async function loadEventsOverview(
   db: Queryable,

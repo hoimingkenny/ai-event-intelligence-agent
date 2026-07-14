@@ -17,3 +17,7 @@ Phase-1 public launch must not wait on eval maturity, but raw pipeline output is
 - **Approval also gates alerts** — deferred; couples launch to notification hardening.
 - **Re-approve or freeze a public snapshot on pipeline updates** — deferred; heavier model, fights material-update continuity.
 - **Show all articles publicly, hide unapproved event links** — rejected; chosen rule is articles appear only when tied to an approved event.
+
+## Clarification (2026-07-14)
+
+Public list/detail filters use publication status alone. **Event approval** additionally hard-requires at least one affected vendor or product on the event (enforced in the editorial seam) so analysts must identify impact before publish. That is not a second public hide filter — Approve and public visibility stay aligned.

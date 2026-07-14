@@ -79,7 +79,17 @@ export async function withTransaction<T>(
  * Does not gate alerts.
  */
 export async function approveEvent(db: Queryable, eventId: string): Promise<EventRecord> {
-  return new EventRepository(db).setPublicationStatus(eventId, 'approved');
+  const events = new EventRepository(db);
+  const event = await events.findById(eventId);
+  if (!event) {
+    throw new Error(`Canonical event ${eventId} was not found`);
+  }
+  const vendors = event.affectedVendors ?? [];
+  const products = event.affectedProducts ?? [];
+  if (vendors.length === 0 && products.length === 0) {
+    throw new Error('Cannot approve without at least one affected vendor or product');
+  }
+  return events.setPublicationStatus(eventId, 'approved');
 }
 
 export async function unpublishEvent(db: Queryable, eventId: string): Promise<EventRecord> {
