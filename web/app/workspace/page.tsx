@@ -1,12 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import {
-  listArticlesNeedingTriage,
-  listWorkspaceEvents,
-} from '../../../src/events/event-editorial';
+import { getWorkspaceQueueCounts } from '../../../src/events/event-editorial';
 import { SiteHeader } from '../../components/SiteHeader';
+import { WorkspaceNav } from '../../components/WorkspaceNav';
 import { getDb } from '../../lib/db';
-import { formatWhen } from '../../lib/format';
 import { requireAnalyst } from '../../lib/require-analyst';
 import { signOutAction } from '../actions/auth';
 
@@ -23,11 +20,7 @@ export default async function WorkspacePage() {
   }
 
   const login = gate.session.user.githubLogin || gate.session.user.name || 'analyst';
-  const db = getDb();
-  const [events, triage] = await Promise.all([
-    listWorkspaceEvents(db, { limit: 100 }),
-    listArticlesNeedingTriage(db, { limit: 12 }),
-  ]);
+  const counts = await getWorkspaceQueueCounts(getDb());
 
   return (
     <>
@@ -36,10 +29,10 @@ export default async function WorkspacePage() {
         <div className="workspace-toolbar">
           <div>
             <p className="page-kicker">Analyst workspace</p>
-            <h1 className="page-title">Events queue</h1>
+            <h1 className="page-title">Overview</h1>
             <p className="page-lede">
-              Signed in as <strong>{login}</strong>. Draft and approved events both appear here —
-              approve to publish, unpublish to hide from the public catalogue.
+              Signed in as <strong>{login}</strong>. Open a queue to triage articles, review drafts,
+              or manage approved events.
             </p>
           </div>
           <div className="form-actions">
@@ -54,76 +47,31 @@ export default async function WorkspacePage() {
           </div>
         </div>
 
-        <section className="workspace-section">
-          <div className="section-head">
-            <h2 className="section-title">Needs triage</h2>
-            <Link href="/workspace/new">Open create flow</Link>
-          </div>
-          <p className="page-lede" style={{ marginBottom: '1rem' }}>
-            Articles not yet on any approved event. Create a draft event from one or more of them,
-            or attach them from an event detail page.
-          </p>
-          {triage.length === 0 ? (
-            <p className="meta">No untriaged articles right now.</p>
-          ) : (
-            <ul className="sources">
-              {triage.map((article) => (
-                <li key={article.id}>
-                  <div className="when">{formatWhen(article.publishedAt)}</div>
-                  <div>
-                    <strong>{article.sourceName || 'Unknown source'}</strong>
-                    <span className="meta" style={{ marginLeft: '0.75rem' }}>
-                      #{article.id}
-                    </span>
-                  </div>
-                  <div>{article.title || article.canonicalUrl || 'Untitled article'}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <WorkspaceNav active="overview" />
 
-        <section className="workspace-section">
-          <h2 className="section-title">Events</h2>
-          {events.length === 0 ? (
-            <div className="empty-state">
-              <h2>No events yet</h2>
-              <p>
-                Pipeline-created drafts appear here, or{' '}
-                <Link href="/workspace/new">create an event from articles</Link>.
-              </p>
-            </div>
-          ) : (
-            <ul className="event-list">
-              {events.map((event) => (
-                <li key={event.id} className="event-row">
-                  <div>
-                    <Link className="title" href={`/workspace/events/${event.id}`}>
-                      {event.eventTitle || 'Untitled event'}
-                    </Link>
-                    <div className="meta">
-                      <span className={`chip status-${event.publicationStatus}`}>
-                        {event.publicationStatus}
-                      </span>
-                      {event.severity ? (
-                        <span className={`chip ${event.severity.toLowerCase()}`}>{event.severity}</span>
-                      ) : null}
-                      <span>
-                        {event.sourceCount} source{event.sourceCount === 1 ? '' : 's'}
-                      </span>
-                      {event.affectedVendors && event.affectedVendors.length > 0 ? (
-                        <span>{event.affectedVendors.join(', ')}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="meta" style={{ justifyContent: 'flex-end' }}>
-                    <span>{formatWhen(event.lastSeenAt)}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <ul className="workspace-hub">
+          <li>
+            <Link href="/workspace/triage" className="workspace-hub-card">
+              <span className="workspace-hub-label">Needs triage</span>
+              <span className="workspace-hub-count">{counts.triage}</span>
+              <span className="meta">Articles not yet on an approved event</span>
+            </Link>
+          </li>
+          <li>
+            <Link href="/workspace/drafts" className="workspace-hub-card">
+              <span className="workspace-hub-label">Draft events</span>
+              <span className="workspace-hub-count">{counts.drafts}</span>
+              <span className="meta">Edit and approve before publishing</span>
+            </Link>
+          </li>
+          <li>
+            <Link href="/workspace/approved" className="workspace-hub-card">
+              <span className="workspace-hub-label">Approved events</span>
+              <span className="workspace-hub-count">{counts.approved}</span>
+              <span className="meta">Live on the public catalogue — unpublish to hide</span>
+            </Link>
+          </li>
+        </ul>
       </main>
     </>
   );

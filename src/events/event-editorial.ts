@@ -104,11 +104,62 @@ export async function updateEventFields(
   return new EventRepository(db).updateEventFields(eventId, fields);
 }
 
+export interface WorkspacePage<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface WorkspaceQueueCounts {
+  triage: number;
+  drafts: number;
+  approved: number;
+}
+
+const DEFAULT_PAGE_SIZE = 25;
+
+function normalizePageOptions(options: { limit?: number; offset?: number } = {}): {
+  limit: number;
+  offset: number;
+} {
+  const limit = Math.max(1, Math.min(options.limit ?? DEFAULT_PAGE_SIZE, 100));
+  const offset = Math.max(0, options.offset ?? 0);
+  return { limit, offset };
+}
+
 export async function listWorkspaceEvents(
   db: Queryable,
   options: { limit?: number } = {}
 ): Promise<WorkspaceEventListItem[]> {
   return new EventRepository(db).listForWorkspace(options.limit ?? 100);
+}
+
+export async function listWorkspaceEventsPage(
+  db: Queryable,
+  options: {
+    publicationStatus: PublicationStatus;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<WorkspacePage<WorkspaceEventListItem>> {
+  const { limit, offset } = normalizePageOptions(options);
+  const repo = new EventRepository(db);
+  const [items, total] = await Promise.all([
+    repo.listForWorkspacePage(options.publicationStatus, limit, offset),
+    repo.countForWorkspace(options.publicationStatus),
+  ]);
+  return { items, total, limit, offset };
+}
+
+export async function getWorkspaceQueueCounts(db: Queryable): Promise<WorkspaceQueueCounts> {
+  const repo = new EventRepository(db);
+  const [triage, drafts, approved] = await Promise.all([
+    repo.countArticlesNeedingTriage(),
+    repo.countForWorkspace('draft'),
+    repo.countForWorkspace('approved'),
+  ]);
+  return { triage, drafts, approved };
 }
 
 export async function getWorkspaceEvent(db: Queryable, eventId: string): Promise<EventRecord | null> {
@@ -124,9 +175,26 @@ export async function listWorkspaceEventArticles(
 
 export async function listArticlesNeedingTriage(
   db: Queryable,
-  options: { limit?: number } = {}
+  options: { limit?: number; offset?: number } = {}
 ): Promise<ArticleRecord[]> {
-  return new EventRepository(db).listArticlesNeedingTriage(options.limit ?? 50);
+  const { limit, offset } = normalizePageOptions({
+    limit: options.limit ?? 50,
+    offset: options.offset,
+  });
+  return new EventRepository(db).listArticlesNeedingTriage(limit, offset);
+}
+
+export async function listArticlesNeedingTriagePage(
+  db: Queryable,
+  options: { limit?: number; offset?: number } = {}
+): Promise<WorkspacePage<ArticleRecord>> {
+  const { limit, offset } = normalizePageOptions(options);
+  const repo = new EventRepository(db);
+  const [items, total] = await Promise.all([
+    repo.listArticlesNeedingTriage(limit, offset),
+    repo.countArticlesNeedingTriage(),
+  ]);
+  return { items, total, limit, offset };
 }
 
 export async function createEventFromArticles(

@@ -37,6 +37,9 @@ function articleIdsFromForm(formData: FormData): string[] {
 
 function revalidateCatalogue(eventId?: string) {
   revalidatePath('/workspace');
+  revalidatePath('/workspace/triage');
+  revalidatePath('/workspace/drafts');
+  revalidatePath('/workspace/approved');
   revalidatePath('/workspace/new');
   revalidatePath('/events');
   revalidatePath('/articles');
