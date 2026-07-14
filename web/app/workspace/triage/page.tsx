@@ -69,6 +69,7 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
                   {formatWhen(article.publishedAt)}
                 </time>
                 <Link className="triage-title" href={`/workspace/articles/${article.id}`}>
+                  <span className="triage-mono">#{article.id}</span>{' '}
                   {article.title || article.canonicalUrl || 'Untitled article'}
                 </Link>
                 <span className="triage-end">
@@ -80,7 +81,6 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
                     />
                   </span>
                   <span>{article.sourceName || 'Unknown source'}</span>
-                  <span className="triage-mono">#{article.id}</span>
                 </span>
               </li>
             ))}
