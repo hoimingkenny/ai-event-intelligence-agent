@@ -19,7 +19,7 @@ Extends the analyst editorial seam so operators can create a draft canonical eve
 
 ## Risks and concerns
 
-- **Create is not transactional** across create + N attaches — a mid-loop failure can leave a draft with partial membership; acceptable for phase 1; retry/attach from UI covers recovery.
+- **Create/move use a DB transaction** (`withTransaction`) so mid-failure rolls back; covered by rollback tests in `event-editorial-membership.test.ts`.
 - **Triage can be large** in a full pipeline DB — UI caps lists (workspace preview 12, create 80, attach 40).
 - **Articles may still sit on other draft events** while appearing in triage — intentional per “not on an approved event”; attach uses `ON CONFLICT` upsert so re-attach is safe.
 - **No empty-event cleanup** after detaching the last article — empty drafts can remain until manual handling.

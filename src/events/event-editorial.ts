@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { ArticleRepository, type ArticleRecord } from '../db/repositories/article.repository.js';
 import { EventRepository, type EventRecord } from '../db/repositories/event.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
@@ -33,6 +34,45 @@ export interface CreateEventFromArticlesInput {
 }
 
 const ANALYST_RELATIONSHIP = 'analyst_membership';
+
+type Connectable = Queryable & {
+  connect: () => Promise<PoolClient>;
+};
+
+function isConnectable(db: Queryable): db is Connectable {
+  return typeof (db as Connectable).connect === 'function';
+}
+
+/** Run membership write-sets atomically. Uses a pooled client when available. */
+export async function withTransaction<T>(
+  db: Queryable,
+  work: (tx: Queryable) => Promise<T>
+): Promise<T> {
+  if (isConnectable(db)) {
+    const client = (await db.connect()) as PoolClient;
+    try {
+      await client.query('BEGIN');
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  await db.query('BEGIN');
+  try {
+    const result = await work(db);
+    await db.query('COMMIT');
+    return result;
+  } catch (error) {
+    await db.query('ROLLBACK');
+    throw error;
+  }
+}
 
 /**
  * Analyst editorial seam for publication status, field edits, and article membership (ADR-0002).
@@ -88,35 +128,37 @@ export async function createEventFromArticles(
     throw new Error('Create requires at least one article');
   }
 
-  const articles = await new ArticleRepository(db).findByIds(articleIds);
-  const eventTitle =
-    input.eventTitle?.trim() || articles[0]?.title?.trim() || 'Untitled event';
+  return withTransaction(db, async (tx) => {
+    const articles = await new ArticleRepository(tx).findByIds(articleIds);
+    const eventTitle =
+      input.eventTitle?.trim() || articles[0]?.title?.trim() || 'Untitled event';
 
-  const events = new EventRepository(db);
-  const event = await events.createEvent({
-    eventTitle,
-    eventSummary: input.eventSummary ?? null,
-    severity: input.severity ?? null,
-    urgency: input.urgency ?? null,
-    affectedVendors: input.affectedVendors ?? [],
-    affectedProducts: input.affectedProducts ?? [],
-    cves: input.cves ?? [],
-    attackTypes: input.attackTypes ?? [],
-  });
-
-  for (let i = 0; i < articles.length; i += 1) {
-    const article = articles[i]!;
-    await events.attachArticle({
-      eventId: event.id,
-      articleId: article.id,
-      relationship: ANALYST_RELATIONSHIP,
-      confidence: 1,
-      isPrimarySource: i === 0,
-      isMaterialUpdate: false,
+    const events = new EventRepository(tx);
+    const event = await events.createEvent({
+      eventTitle,
+      eventSummary: input.eventSummary ?? null,
+      severity: input.severity ?? null,
+      urgency: input.urgency ?? null,
+      affectedVendors: input.affectedVendors ?? [],
+      affectedProducts: input.affectedProducts ?? [],
+      cves: input.cves ?? [],
+      attackTypes: input.attackTypes ?? [],
     });
-  }
 
-  return event;
+    for (let i = 0; i < articles.length; i += 1) {
+      const article = articles[i]!;
+      await events.attachArticle({
+        eventId: event.id,
+        articleId: article.id,
+        relationship: ANALYST_RELATIONSHIP,
+        confidence: 1,
+        isPrimarySource: i === 0,
+        isMaterialUpdate: false,
+      });
+    }
+
+    return event;
+  });
 }
 
 export async function attachArticleToEvent(
@@ -149,14 +191,17 @@ export async function moveArticleBetweenEvents(
   if (input.fromEventId === input.toEventId) {
     throw new Error('Move requires distinct source and target events');
   }
-  const events = new EventRepository(db);
-  await events.detachArticle(input.fromEventId, input.articleId);
-  await events.attachArticle({
-    eventId: input.toEventId,
-    articleId: input.articleId,
-    relationship: ANALYST_RELATIONSHIP,
-    confidence: 1,
-    isPrimarySource: false,
-    isMaterialUpdate: false,
+
+  await withTransaction(db, async (tx) => {
+    const events = new EventRepository(tx);
+    await events.detachArticle(input.fromEventId, input.articleId);
+    await events.attachArticle({
+      eventId: input.toEventId,
+      articleId: input.articleId,
+      relationship: ANALYST_RELATIONSHIP,
+      confidence: 1,
+      isPrimarySource: false,
+      isMaterialUpdate: false,
+    });
   });
 }

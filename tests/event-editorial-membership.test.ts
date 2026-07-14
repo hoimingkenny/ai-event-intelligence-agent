@@ -14,17 +14,38 @@ function scriptedDb(
     match: string;
     rows?: unknown[];
     onQuery?: (sql: string, params?: unknown[]) => void;
-  }>
+  }>,
+  options: { withConnect?: boolean } = {}
 ): { db: Queryable; calls: Array<{ sql: string; params?: unknown[] }> } {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
+
+  const query = async <T>(sql: string, params?: unknown[]) => {
+    calls.push({ sql, params });
+    const normalized = sql.trim().toUpperCase();
+    if (normalized === 'BEGIN' || normalized === 'COMMIT' || normalized === 'ROLLBACK') {
+      return { rows: [] as T[], rowCount: 0 };
+    }
+    const handler = handlers.find((h) => sql.includes(h.match));
+    handler?.onQuery?.(sql, params);
+    return { rows: (handler?.rows ?? []) as T[], rowCount: handler?.rows?.length ?? 0 };
+  };
+
+  const client = {
+    query,
+    release() {},
+  };
+
   const db = {
-    async query<T>(sql: string, params?: unknown[]) {
-      calls.push({ sql, params });
-      const handler = handlers.find((h) => sql.includes(h.match));
-      handler?.onQuery?.(sql, params);
-      return { rows: (handler?.rows ?? []) as T[], rowCount: handler?.rows?.length ?? 0 };
-    },
+    query,
+    ...(options.withConnect
+      ? {
+          async connect() {
+            return client;
+          },
+        }
+      : {}),
   } as Queryable;
+
   return { db, calls };
 }
 
@@ -106,11 +127,51 @@ describe('event editorial membership', () => {
     expect(attached[1]?.[1]).toBe('102');
     expect(attached[0]?.[4]).toBe(true); // first article is primary
     expect(attached[1]?.[4]).toBe(false);
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'BEGIN')).toBe(true);
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'COMMIT')).toBe(true);
   });
 
   it('rejects create when no articles are selected', async () => {
     const { db } = scriptedDb([]);
     await expect(createEventFromArticles(db, { articleIds: [] })).rejects.toThrow(/at least one article/i);
+  });
+
+  it('rolls back create when a later attach fails', async () => {
+    let attachCount = 0;
+    const { db, calls } = scriptedDb(
+      [
+        {
+          match: 'FROM articles',
+          rows: [
+            { ...articleRow, id: '101', title: 'First' },
+            { ...articleRow, id: '102', title: 'Second' },
+          ],
+        },
+        {
+          match: 'INSERT INTO cyber_events',
+          rows: [{ ...draftEventRow, event_title: 'First' }],
+        },
+        {
+          match: 'INSERT INTO event_articles',
+          rows: [],
+          onQuery: () => {
+            attachCount += 1;
+            if (attachCount > 1) {
+              throw new Error('attach boom');
+            }
+          },
+        },
+        { match: 'UPDATE cyber_events', rows: [] },
+      ],
+      { withConnect: true }
+    );
+
+    await expect(createEventFromArticles(db, { articleIds: ['101', '102'] })).rejects.toThrow(
+      'attach boom'
+    );
+
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'ROLLBACK')).toBe(true);
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'COMMIT')).toBe(false);
   });
 
   it('attaches an article to an event', async () => {
@@ -163,6 +224,37 @@ describe('event editorial membership', () => {
     expect(del?.params).toEqual(['50', '101']);
     expect(ins?.params?.[0]).toBe('60');
     expect(ins?.params?.[1]).toBe('101');
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'BEGIN')).toBe(true);
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'COMMIT')).toBe(true);
+  });
+
+  it('rolls back move when attach fails after detach', async () => {
+    const { db, calls } = scriptedDb(
+      [
+        { match: 'DELETE FROM event_articles', rows: [{ id: '1' }] },
+        { match: 'UPDATE cyber_events', rows: [] },
+        {
+          match: 'INSERT INTO event_articles',
+          rows: [],
+          onQuery: () => {
+            throw new Error('attach after detach failed');
+          },
+        },
+      ],
+      { withConnect: true }
+    );
+
+    await expect(
+      moveArticleBetweenEvents(db, {
+        articleId: '101',
+        fromEventId: '50',
+        toEventId: '60',
+      })
+    ).rejects.toThrow('attach after detach failed');
+
+    expect(calls.some((c) => c.sql.includes('DELETE FROM event_articles'))).toBe(true);
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'ROLLBACK')).toBe(true);
+    expect(calls.some((c) => c.sql.trim().toUpperCase() === 'COMMIT')).toBe(false);
   });
 
   it('lists articles needing triage as those not on any approved event', async () => {
