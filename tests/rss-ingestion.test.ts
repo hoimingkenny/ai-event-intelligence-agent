@@ -64,6 +64,14 @@ class FixtureFetcher implements RssFetcher {
   }
 }
 
+class ByUrlFetcher implements RssFetcher {
+  constructor(private readonly itemsByUrl: Record<string, FetchedFeedItem[]>) {}
+
+  async fetch(feedUrl: string): Promise<FetchedFeedItem[]> {
+    return this.itemsByUrl[feedUrl] ?? [];
+  }
+}
+
 describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
   let pool: pg.Pool;
 
@@ -141,5 +149,68 @@ describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
       [`https://example.test/${runId}/article-1`]
     );
     expect(categories.rows[0].rss_categories).toEqual(['Vulnerabilities']);
+  });
+
+  it('assigns smaller article ids to older items across the whole ingest batch', async () => {
+    const feeds = new FeedRepository(pool);
+    // source_name ASC: A Feed before B Feed (matches listActiveFeeds order).
+    const feedA = `https://example.test/${runId}/batch-a.xml`;
+    const feedB = `https://example.test/${runId}/batch-b.xml`;
+    await feeds.upsertFeed({
+      sourceName: `${runId} A Feed`,
+      feedUrl: feedA,
+      sourceType: 'rss',
+    });
+    await feeds.upsertFeed({
+      sourceName: `${runId} B Feed`,
+      feedUrl: feedB,
+      sourceType: 'rss',
+    });
+
+    // Feed A is listed first and only has a newer item. Per-feed insert would
+    // give it the smaller id; global batch sort must put B's older item first.
+    const fetcher = new ByUrlFetcher({
+      [feedA]: [
+        {
+          title: 'Newer from A',
+          link: `https://example.test/${runId}/batch/newer-a`,
+          isoDate: '2026-06-29T12:00:00.000Z',
+        },
+      ],
+      [feedB]: [
+        {
+          title: 'Older from B',
+          link: `https://example.test/${runId}/batch/older-b`,
+          isoDate: '2026-06-27T12:00:00.000Z',
+        },
+        {
+          title: 'Undated from B',
+          link: `https://example.test/${runId}/batch/undated-b`,
+        },
+      ],
+    });
+
+    const run = await ingestRssFeeds(pool, {
+      fetcher,
+      feedUrls: [feedA, feedB],
+    });
+
+    expect(run.created).toBe(3);
+
+    const rows = await pool.query<{ id: string; canonical_url: string }>(
+      `
+        SELECT id, canonical_url
+        FROM articles
+        WHERE canonical_url LIKE $1
+        ORDER BY id ASC
+      `,
+      [`https://example.test/${runId}/batch/%`]
+    );
+
+    expect(rows.rows.map((row) => row.canonical_url)).toEqual([
+      `https://example.test/${runId}/batch/older-b`,
+      `https://example.test/${runId}/batch/newer-a`,
+      `https://example.test/${runId}/batch/undated-b`,
+    ]);
   });
 });
