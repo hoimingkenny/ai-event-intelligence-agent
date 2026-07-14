@@ -5,6 +5,7 @@ import {
   createEventFromArticles,
   detachArticleFromEvent,
   listArticlesNeedingTriage,
+  listArticlesNeedingTriagePage,
   listWorkspaceEventArticles,
   moveArticleBetweenEvents,
 } from '../src/events/event-editorial.js';
@@ -275,6 +276,34 @@ describe('event editorial membership', () => {
     expect(listSql).toMatch(/NOT EXISTS/i);
     expect(items).toHaveLength(1);
     expect(items[0]?.id).toBe('101');
+  });
+
+  it('lists triage articles with offset and total count', async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    let i = 0;
+    const db = {
+      async query<T>(sql: string, params?: unknown[]) {
+        queries.push({ sql, params });
+        i += 1;
+        if (sql.includes('COUNT(*)')) {
+          return { rows: [{ count: '87' }] as T[], rowCount: 1 };
+        }
+        return { rows: [articleRow] as T[], rowCount: 1 };
+      },
+    };
+
+    const page = await listArticlesNeedingTriagePage(db as never, { limit: 25, offset: 50 });
+
+    const list = queries.find((q) => q.sql.includes('LIMIT') && !q.sql.includes('COUNT(*)'));
+    expect(list?.sql).toMatch(/NOT EXISTS/i);
+    expect(list?.params).toEqual([25, 50]);
+    expect(page).toEqual({
+      items: [expect.objectContaining({ id: '101' })],
+      total: 87,
+      limit: 25,
+      offset: 50,
+    });
+    expect(i).toBe(2);
   });
 
   it('lists articles currently attached to a workspace event', async () => {

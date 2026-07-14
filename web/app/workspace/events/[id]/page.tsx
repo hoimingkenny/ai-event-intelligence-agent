@@ -15,6 +15,7 @@ import {
   unpublishEventAction,
 } from '../../../actions/events';
 import { SiteHeader } from '../../../../components/SiteHeader';
+import { WorkspaceNav } from '../../../../components/WorkspaceNav';
 import { getDb } from '../../../../lib/db';
 import { formatWhen } from '../../../../lib/format';
 import { requireAnalyst } from '../../../../lib/require-analyst';
@@ -64,6 +65,7 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
   const attachCandidates = triage.filter((article) => !memberIds.has(article.id));
   const moveTargets = allEvents.filter((item) => item.id !== event.id);
   const isApproved = event.publicationStatus === 'approved';
+  const queueHref = isApproved ? '/workspace/approved' : '/workspace/drafts';
   const canApprove =
     (event.affectedVendors?.length ?? 0) > 0 || (event.affectedProducts?.length ?? 0) > 0;
 
@@ -71,8 +73,8 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
     <>
       <SiteHeader active="workspace" />
       <main className="page">
-        <Link className="back-link" href="/workspace">
-          ← Workspace queue
+        <Link className="back-link" href={queueHref}>
+          ← Back to {isApproved ? 'approved' : 'drafts'}
         </Link>
         <p className="page-kicker">Edit event</p>
         <h1 className="page-title">{event.eventTitle || 'Untitled event'}</h1>
@@ -89,6 +91,8 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
             </>
           ) : null}
         </p>
+
+        <WorkspaceNav active="event" />
 
         {notices.saved ? <p className="flash">Fields saved.</p> : null}
         {notices.created ? <p className="flash">Draft event created with selected articles.</p> : null}

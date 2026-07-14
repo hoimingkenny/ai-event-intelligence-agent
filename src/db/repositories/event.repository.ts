@@ -294,6 +294,43 @@ export class EventRepository {
     }));
   }
 
+  async countForWorkspace(publicationStatus: 'draft' | 'approved'): Promise<number> {
+    const result = await this.db.query<{ count: string | number }>(
+      `
+        SELECT COUNT(*)::text AS count
+        FROM cyber_events
+        WHERE publication_status = $1
+      `,
+      [publicationStatus]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  async listForWorkspacePage(
+    publicationStatus: 'draft' | 'approved',
+    limit = 25,
+    offset = 0
+  ): Promise<Array<EventRecord & { sourceCount: number; lastSeenAt: Date | null }>> {
+    const result = await this.db.query<EventRow & { source_count: string | number; last_seen_at: Date | null }>(
+      `
+        SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, publication_status,
+          severity, urgency, confidence, affected_vendors, affected_products, cves, attack_types, summary_stale,
+          source_count, last_seen_at
+        FROM cyber_events
+        WHERE publication_status = $1
+        ORDER BY last_seen_at DESC NULLS LAST, id DESC
+        LIMIT $2 OFFSET $3
+      `,
+      [publicationStatus, limit, offset]
+    );
+
+    return result.rows.map((row) => ({
+      ...mapEvent(row),
+      sourceCount: Number(row.source_count),
+      lastSeenAt: row.last_seen_at ?? null,
+    }));
+  }
+
   async listAlertCandidates(limit = 20): Promise<EventRecord[]> {
     const result = await this.db.query<EventRow>(
       `
@@ -566,27 +603,8 @@ export class EventRepository {
     );
   }
 
-  async listArticlesNeedingTriage(limit = 50): Promise<ArticleRecord[]> {
-    const result = await this.db.query<EventArticleRow>(
-      `
-        SELECT a.id, a.feed_id, a.source_name, a.title, a.canonical_url, a.url_hash, a.title_hash, a.content_hash,
-          a.rss_summary, a.rss_categories, a.clean_text, a.published_at, a.extraction_status, a.extraction_method,
-          a.extraction_error, a.processing_status
-        FROM articles a
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM event_articles ea
-          JOIN cyber_events e ON e.id = ea.event_id
-          WHERE ea.article_id = a.id
-            AND e.publication_status = 'approved'
-        )
-        ORDER BY a.published_at DESC NULLS LAST, a.id DESC
-        LIMIT $1
-      `,
-      [limit]
-    );
-
-    return result.rows.map((row) => ({
+  private mapTriageArticle(row: EventArticleRow): ArticleRecord {
+    return {
       id: row.id,
       feedId: row.feed_id,
       sourceName: row.source_name,
@@ -603,7 +621,45 @@ export class EventRepository {
       extractionMethod: row.extraction_method,
       extractionError: row.extraction_error,
       processingStatus: row.processing_status,
-    }));
+    };
+  }
+
+  private static readonly TRIAGE_WHERE = `
+    NOT EXISTS (
+      SELECT 1
+      FROM event_articles ea
+      JOIN cyber_events e ON e.id = ea.event_id
+      WHERE ea.article_id = a.id
+        AND e.publication_status = 'approved'
+    )
+  `;
+
+  async countArticlesNeedingTriage(): Promise<number> {
+    const result = await this.db.query<{ count: string | number }>(
+      `
+        SELECT COUNT(*)::text AS count
+        FROM articles a
+        WHERE ${EventRepository.TRIAGE_WHERE}
+      `
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  async listArticlesNeedingTriage(limit = 50, offset = 0): Promise<ArticleRecord[]> {
+    const result = await this.db.query<EventArticleRow>(
+      `
+        SELECT a.id, a.feed_id, a.source_name, a.title, a.canonical_url, a.url_hash, a.title_hash, a.content_hash,
+          a.rss_summary, a.rss_categories, a.clean_text, a.published_at, a.extraction_status, a.extraction_method,
+          a.extraction_error, a.processing_status
+        FROM articles a
+        WHERE ${EventRepository.TRIAGE_WHERE}
+        ORDER BY a.published_at DESC NULLS LAST, a.id DESC
+        LIMIT $1 OFFSET $2
+      `,
+      [limit, offset]
+    );
+
+    return result.rows.map((row) => this.mapTriageArticle(row));
   }
 }
 

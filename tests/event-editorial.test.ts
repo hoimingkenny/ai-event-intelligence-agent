@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { Queryable } from '../src/db/repositories/types.js';
 import {
   approveEvent,
+  getWorkspaceQueueCounts,
   listWorkspaceEvents,
+  listWorkspaceEventsPage,
   unpublishEvent,
   updateEventFields,
 } from '../src/events/event-editorial.js';
@@ -168,5 +170,52 @@ describe('event editorial', () => {
     expect(listSql).not.toContain("publication_status = 'approved'");
     expect(items).toHaveLength(2);
     expect(items.map((item) => item.publicationStatus).sort()).toEqual(['approved', 'draft']);
+  });
+
+  it('lists workspace events paginated by publication status', async () => {
+    const queries: Array<{ sql: string; params?: unknown[] }> = [];
+    const db = {
+      async query<T>(sql: string, params?: unknown[]) {
+        queries.push({ sql, params });
+        if (sql.includes('COUNT(*)')) {
+          return { rows: [{ count: '42' }] as T[], rowCount: 1 };
+        }
+        return {
+          rows: [{ ...baseRow, id: '1', publication_status: 'draft' }] as T[],
+          rowCount: 1,
+        };
+      },
+    };
+
+    const page = await listWorkspaceEventsPage(db as never, {
+      publicationStatus: 'draft',
+      limit: 25,
+      offset: 25,
+    });
+
+    const list = queries.find((q) => q.sql.includes('LIMIT') && !q.sql.includes('COUNT(*)'));
+    expect(list?.sql).toMatch(/publication_status\s*=\s*\$\d/);
+    expect(list?.params).toEqual(expect.arrayContaining(['draft', 25, 25]));
+    expect(page).toEqual({
+      items: [expect.objectContaining({ id: '1', publicationStatus: 'draft' })],
+      total: 42,
+      limit: 25,
+      offset: 25,
+    });
+  });
+
+  it('returns queue counts for the workspace hub', async () => {
+    const values = ['12', '5', '9'];
+    let i = 0;
+    const db = {
+      async query<T>() {
+        const count = values[i++] ?? '0';
+        return { rows: [{ count }] as T[], rowCount: 1 };
+      },
+    };
+
+    const counts = await getWorkspaceQueueCounts(db as never);
+
+    expect(counts).toEqual({ triage: 12, drafts: 5, approved: 9 });
   });
 });
