@@ -1,7 +1,7 @@
 # Code Review: Article peek drawer (#29)
 
 - **Branch:** `feat/article-peek-29` → `main`
-- **Commits:** (pending)
+- **Commits:** `d1f95ce`
 - **Date:** 2026-07-14
 - **Reviewer:** Auto (implement)
 
