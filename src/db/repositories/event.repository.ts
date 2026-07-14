@@ -199,6 +199,101 @@ export class EventRepository {
     );
   }
 
+  async setPublicationStatus(
+    eventId: string,
+    publicationStatus: 'draft' | 'approved'
+  ): Promise<EventRecord> {
+    const result = await this.db.query<EventRow>(
+      `
+        UPDATE cyber_events
+        SET publication_status = $2,
+          updated_at = now()
+        WHERE id = $1
+        RETURNING id, grouping_key, first_seen_at, event_title, event_summary, event_status, publication_status,
+          severity, urgency, confidence, affected_vendors, affected_products, cves, attack_types, summary_stale
+      `,
+      [eventId, publicationStatus]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error(`Canonical event ${eventId} was not found`);
+    }
+    return mapEvent(row);
+  }
+
+  async updateEventFields(
+    eventId: string,
+    fields: {
+      eventTitle: string;
+      eventSummary: string | null;
+      severity: string | null;
+      urgency: string | null;
+      affectedVendors: string[];
+      affectedProducts: string[];
+      cves: string[];
+      attackTypes: string[];
+    }
+  ): Promise<EventRecord> {
+    const result = await this.db.query<EventRow>(
+      `
+        UPDATE cyber_events
+        SET event_title = $2,
+          event_summary = $3,
+          severity = $4,
+          urgency = $5,
+          affected_vendors = $6,
+          affected_products = $7,
+          cves = $8,
+          attack_types = $9,
+          updated_at = now()
+        WHERE id = $1
+        RETURNING id, grouping_key, first_seen_at, event_title, event_summary, event_status, publication_status,
+          severity, urgency, confidence, affected_vendors, affected_products, cves, attack_types, summary_stale
+      `,
+      [
+        eventId,
+        fields.eventTitle,
+        fields.eventSummary,
+        fields.severity,
+        fields.urgency,
+        fields.affectedVendors,
+        fields.affectedProducts,
+        fields.cves,
+        fields.attackTypes,
+      ]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error(`Canonical event ${eventId} was not found`);
+    }
+    return mapEvent(row);
+  }
+
+  async listForWorkspace(limit = 100): Promise<
+    Array<EventRecord & { sourceCount: number; lastSeenAt: Date | null }>
+  > {
+    const result = await this.db.query<EventRow & { source_count: string | number; last_seen_at: Date | null }>(
+      `
+        SELECT id, grouping_key, first_seen_at, event_title, event_summary, event_status, publication_status,
+          severity, urgency, confidence, affected_vendors, affected_products, cves, attack_types, summary_stale,
+          source_count, last_seen_at
+        FROM cyber_events
+        ORDER BY
+          CASE publication_status WHEN 'draft' THEN 0 ELSE 1 END,
+          last_seen_at DESC NULLS LAST,
+          id DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    return result.rows.map((row) => ({
+      ...mapEvent(row),
+      sourceCount: Number(row.source_count),
+      lastSeenAt: row.last_seen_at ?? null,
+    }));
+  }
+
   async listAlertCandidates(limit = 20): Promise<EventRecord[]> {
     const result = await this.db.query<EventRow>(
       `
