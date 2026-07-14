@@ -21,17 +21,17 @@ Vendor Threat Watch is an AI-assisted cyber early-warning and vendor-impact tria
 ```bash
 npm install              # Install dependencies
 cp .env.example .env     # Configure environment (MINIMAX_API_KEY for LLM; OPENROUTER_API_KEY or Ollama for embeddings)
-docker compose up -d     # Postgres (pgvector) + Redis
+docker compose up -d     # Postgres (pgvector); add `--profile queue` for Redis
 npm run db:migrate       # Apply SQL migrations (src/db/migrations/)
 npm run db:seed          # Seed feeds + monitored vendors
 
 npm run pipeline:run     # Full pipeline once (advisory-locked): ingest → filter →
                          #   extract → entities → embed → dedup → events → classify → alerts
 npm run scheduler        # Internal loop: full pipeline every RSS_FETCH_INTERVAL_MINUTES
-npm run worker           # BullMQ worker mode (needs Redis)
+npm run worker           # BullMQ worker mode (needs Redis via `--profile queue`)
 npm run drift:check      # Per-source extraction quality report (exit 2 on drift)
 npm run latency:check    # Publication→alert p50/p90 vs 2h SLO (exit 2 on violation)
-npm run portal           # Legacy public catalogue (:4322; approved-only)
+npm run portal           # Legacy public catalogue (:4322); prefer Next.js web / compose `web`
 npm run web:dev          # Next.js public catalogue + workspace (:3000)
 npm run review:dashboard # Human review dashboard with verdict capture (:4321)
 

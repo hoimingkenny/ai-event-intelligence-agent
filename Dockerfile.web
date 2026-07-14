@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+# Next.js web image (public catalogue + analyst workspace). Build context is the
+# repo root so `web/` can import shared modules from `src/` (externalDir).
+FROM node:22-bookworm-slim AS deps
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm ci
+
+FROM node:22-bookworm-slim AS builder
+WORKDIR /app
+COPY --from=deps /app/web/node_modules ./web/node_modules
+COPY web ./web
+COPY src ./src
+WORKDIR /app/web
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV DOCKER_BUILD=1
+RUN npm run build
+
+FROM node:22-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+COPY --from=builder /app/web/public ./web/public
+COPY --from=builder /app/web/.next/standalone ./
+COPY --from=builder /app/web/.next/static ./web/.next/static
+USER node
+EXPOSE 3000
+CMD ["node", "web/server.js"]

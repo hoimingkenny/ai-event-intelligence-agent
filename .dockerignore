@@ -1,0 +1,27 @@
+# Keep build contexts small. Root Dockerfile and Dockerfile.web share this file.
+.git
+.github
+.next
+**/.next
+node_modules
+**/node_modules
+web/node_modules
+.eval
+eval/reports
+coverage
+*.md
+!web/README.md
+docs
+.scratch
+agent-transcripts
+.cursor
+.codex
+.claude
+fixtures
+review
+tmp
+.env
+.env.*
+!.env.example
+**/*.test.ts
+**/vitest*

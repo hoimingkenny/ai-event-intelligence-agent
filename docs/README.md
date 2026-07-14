@@ -46,6 +46,7 @@ Post-hoc writing about a specific challenge: what broke, how it was debugged, wh
 | [early-warning-redesign.md](engineering-notes/early-warning-redesign.md) | The alert gate that suppressed the product: two-tier alerting, newest-first, latency SLO |
 | [entity-confidence-and-noise-tolerance.md](engineering-notes/entity-confidence-and-noise-tolerance.md) | Tolerating imperfect extraction: confidence-scored entities + event-boundary gate |
 | [deployment-and-scheduling.md](engineering-notes/deployment-and-scheduling.md) | Running every 20 min: advisory-locked scheduling, Docker, compose ordering |
+| [phase1-vps-cloudflare.md](engineering-notes/phase1-vps-cloudflare.md) | Phase-1 VPS Compose stack + Cloudflare TLS/domain (~$20/mo infra) |
 
 ## `code-reviews/` — pre-merge reviews
 

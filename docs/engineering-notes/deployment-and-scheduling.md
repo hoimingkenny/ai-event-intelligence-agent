@@ -39,18 +39,21 @@ SIGTERM during a run must not corrupt state. The scheduler's `stop()` clears the
 
 ```text
 postgres  (pgvector)   ── healthchecked
-redis                   ── healthchecked (queue mode only)
 migrate                 ── runs db:migrate, exits 0; app waits on it
 scheduler               ── internal loop, every RSS_FETCH_INTERVAL_MINUTES
-dashboard  (optional)   ── human review, bound to 127.0.0.1 only
+web                     ── Next.js public + /workspace (127.0.0.1:3000)
+redis / portal / dashboard ── optional Compose profiles (queue / legacy)
 ```
+
+Phase-1 production profile is postgres + migrate + scheduler + web. See
+[phase1-vps-cloudflare.md](./phase1-vps-cloudflare.md) for VPS + TLS/domain.
 
 Two ordering guarantees enforced by compose:
 
-- **Migrate before traffic**: `scheduler`/`dashboard` `depends_on` migrate with `condition: service_completed_successfully`. Code never serves against a half-migrated schema, and a failed migration aborts the deploy (fails closed) rather than starting a broken app.
+- **Migrate before traffic**: `scheduler`/`web` `depends_on` migrate with `condition: service_completed_successfully`. Code never serves against a half-migrated schema, and a failed migration aborts the deploy (fails closed) rather than starting a broken app.
 - **DB healthy before migrate**: migrate waits on the Postgres healthcheck.
 
-The `Dockerfile` is multi-stage, installs with `npm ci` for reproducibility, and runs as the non-root `node` user. The default `CMD` is the scheduler; override to `pipeline:run` (external cron) or `worker` (queue mode) per environment.
+The pipeline `Dockerfile` is multi-stage, installs with `npm ci` for reproducibility, and runs as the non-root `node` user. The default `CMD` is the scheduler; override to `pipeline:run` (external cron) or `worker` (queue mode) per environment. The Next.js app uses `Dockerfile.web` (standalone output).
 
 ## 6. Latency note — why 20 minutes is fine now, and not forever
 
@@ -64,6 +67,8 @@ A 20-minute batch means up to ~20 minutes of scheduling latency before a fresh a
 | `src/pipeline/scheduler.ts` | Internal self-rescheduling loop + graceful stop |
 | `scripts/run-scheduler.ts` | Internal scheduler entrypoint (SIGTERM/SIGINT) |
 | `scripts/run-pipeline.ts` | One-shot entrypoint for external cron/CronJob |
-| `Dockerfile` | Multi-stage, non-root image |
-| `docker-compose.yml` | migrate → scheduler/dashboard with ordering guarantees |
+| `Dockerfile` | Multi-stage pipeline image, non-root |
+| `Dockerfile.web` | Next.js standalone image (public + workspace) |
+| `docker-compose.yml` | migrate → scheduler/web (+ optional profiles) |
 | `tests/scheduled-run.test.ts` | Lock acquire/skip/error-release behaviour |
+| `docs/engineering-notes/phase1-vps-cloudflare.md` | VPS + Cloudflare TLS/domain runbook |

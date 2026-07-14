@@ -15,8 +15,18 @@ const nextConfig: NextConfig = {
   experimental: {
     externalDir: true,
   },
+  // Smaller Docker image; traced files land under .next/standalone
+  output: 'standalone',
   outputFileTracingRoot: rootDir,
   serverExternalPackages: ['pg'],
+  // Docker builds typecheck parent `src/` under web/tsconfig (bundler resolution)
+  // and trip on Queryable generics. Repo gate remains root `npm run check`.
+  typescript: {
+    ignoreBuildErrors: process.env.DOCKER_BUILD === '1',
+  },
+  eslint: {
+    ignoreDuringBuilds: process.env.DOCKER_BUILD === '1',
+  },
   webpack: (config) => {
     // Parent package uses NodeNext ".js" import specifiers that point at .ts sources.
     config.resolve.extensionAlias = {

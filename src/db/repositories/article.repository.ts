@@ -124,7 +124,9 @@ export class ArticleRepository {
       `,
       [articleIds]
     );
-    const byId = new Map(result.rows.map((row) => [row.id, mapArticle(row)]));
+    const byId = new Map<string, ArticleRecord>(
+      result.rows.map((row: ArticleRow) => [row.id, mapArticle(row)])
+    );
     return articleIds.map((id) => {
       const article = byId.get(id);
       if (!article) {
