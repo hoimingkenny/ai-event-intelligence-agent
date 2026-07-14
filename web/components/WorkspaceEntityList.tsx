@@ -15,7 +15,7 @@ export function WorkspaceEntityList({ entities }: Props) {
       {grouped.map((row) => (
         <li key={row.entityType} className="workspace-entity-item">
           <span className="workspace-entity-type">{row.entityType}</span>
-          <span className="workspace-entity-value">{row.values.join(',\n')}</span>
+          <span className="workspace-entity-value">{row.values.join('\n')}</span>
         </li>
       ))}
     </ul>
