@@ -137,12 +137,18 @@ export default async function WorkspaceArticlePage({ params }: PageProps) {
           ) : (
             <ul className="workspace-entity-list">
               {article.extractedEntities.map((entity) => (
-                <li key={`${entity.entityType}:${entity.entityValue}:${entity.role ?? ''}`}>
-                  <strong>{entity.entityType}</strong>: {entity.entityValue}
-                  {entity.role ? ` (${entity.role})` : ''}
-                  {entity.confidence != null
-                    ? ` · ${Math.round(entity.confidence * 100)}%`
-                    : ''}
+                <li
+                  key={`${entity.entityType}:${entity.entityValue}:${entity.role ?? ''}`}
+                  className="workspace-entity-item"
+                >
+                  <span className="workspace-entity-type">{entity.entityType}</span>
+                  <span className="workspace-entity-value">
+                    {entity.entityValue}
+                    {entity.role ? ` (${entity.role})` : ''}
+                    {entity.confidence != null
+                      ? ` · ${Math.round(entity.confidence * 100)}%`
+                      : ''}
+                  </span>
                 </li>
               ))}
             </ul>

@@ -144,9 +144,15 @@ export function ArticlePeekButton({ articleId, articleTitle }: Props) {
                   ) : (
                     <ul className="workspace-entity-list">
                       {peek.extractedEntities.map((entity) => (
-                        <li key={`${entity.entityType}:${entity.entityValue}:${entity.role ?? ''}`}>
-                          <strong>{entity.entityType}</strong>: {entity.entityValue}
-                          {entity.role ? ` (${entity.role})` : ''}
+                        <li
+                          key={`${entity.entityType}:${entity.entityValue}:${entity.role ?? ''}`}
+                          className="workspace-entity-item"
+                        >
+                          <span className="workspace-entity-type">{entity.entityType}</span>
+                          <span className="workspace-entity-value">
+                            {entity.entityValue}
+                            {entity.role ? ` (${entity.role})` : ''}
+                          </span>
                         </li>
                       ))}
                     </ul>

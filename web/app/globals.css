@@ -661,8 +661,37 @@ a:hover {
 }
 
 .workspace-entity-list {
+  list-style: none;
   margin: 0;
-  padding-left: 1.2rem;
+  padding: 0;
+}
+
+.workspace-entity-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+
+.workspace-entity-item:last-child {
+  border-bottom: 0;
+}
+
+.workspace-entity-type {
+  flex: 0 0 7.5rem;
+  font-weight: 650;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.workspace-entity-value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {
