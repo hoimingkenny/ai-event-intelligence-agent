@@ -4,7 +4,9 @@ import { EntityRepository } from '../db/repositories/entity.repository.js';
 import { EventRepository, type EventRecord } from '../db/repositories/event.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
 import {
+  filterSignalsFromMatched,
   summarizeTriageSignals,
+  type FilterSignalBlock,
   type TriageSignalSummary,
 } from './triage-signals.js';
 
@@ -22,6 +24,29 @@ export interface TriageListItem {
     primaryEventId: string;
     eventTitles: string[];
   } | null;
+}
+
+/** Analyst Workspace article detail (not the public catalogue article page). */
+export interface WorkspaceArticleDetail {
+  id: string;
+  title: string | null;
+  sourceName: string | null;
+  canonicalUrl: string | null;
+  publishedAt: Date | null;
+  fetchedAt: Date | null;
+  processingStatus: string;
+  extractionStatus: string;
+  extractionMethod: string | null;
+  bodyText: string | null;
+  bodySource: 'cleanText' | 'rssSummary' | null;
+  llmClassification: unknown;
+  filterSignals: FilterSignalBlock;
+  extractedEntities: Array<{
+    entityType: string;
+    entityValue: string;
+    confidence: number | null;
+    role: string | null;
+  }>;
 }
 
 export interface EventFieldsInput {
@@ -258,6 +283,84 @@ export async function listArticlesNeedingTriagePage(
   });
 
   return { items, total, limit, offset };
+}
+
+export async function getWorkspaceArticle(
+  db: Queryable,
+  articleId: string
+): Promise<WorkspaceArticleDetail | null> {
+  const result = await db.query<{
+    id: string;
+    title: string | null;
+    source_name: string | null;
+    canonical_url: string | null;
+    published_at: Date | null;
+    fetched_at: Date | null;
+    processing_status: string;
+    extraction_status: string;
+    extraction_method: string | null;
+    rss_summary: string | null;
+    clean_text: string | null;
+    llm_classification: unknown;
+    cheap_filter_matched_signals: unknown;
+  }>(
+    `
+      SELECT a.id, a.title, a.source_name, a.canonical_url, a.published_at, a.fetched_at,
+        a.processing_status, a.extraction_status, a.extraction_method,
+        a.rss_summary, a.clean_text, a.llm_classification, a.cheap_filter_matched_signals
+      FROM articles a
+      WHERE a.id = $1
+    `,
+    [articleId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  const entities = await db.query<{
+    entity_type: string;
+    entity_value: string;
+    confidence: string | null;
+    role: string | null;
+  }>(
+    `
+      SELECT entity_type, entity_value, confidence, role
+      FROM article_entities
+      WHERE article_id = $1
+      ORDER BY confidence DESC NULLS LAST, entity_type, entity_value
+    `,
+    [articleId]
+  );
+
+  const clean = row.clean_text?.trim() ? row.clean_text : null;
+  const rss = row.rss_summary?.trim() ? row.rss_summary : null;
+  const bodyText = clean ?? rss;
+  const bodySource: WorkspaceArticleDetail['bodySource'] = clean
+    ? 'cleanText'
+    : rss
+      ? 'rssSummary'
+      : null;
+
+  return {
+    id: row.id,
+    title: row.title,
+    sourceName: row.source_name,
+    canonicalUrl: row.canonical_url,
+    publishedAt: row.published_at,
+    fetchedAt: row.fetched_at,
+    processingStatus: row.processing_status,
+    extractionStatus: row.extraction_status,
+    extractionMethod: row.extraction_method,
+    bodyText,
+    bodySource,
+    llmClassification: row.llm_classification ?? null,
+    filterSignals: filterSignalsFromMatched(row.cheap_filter_matched_signals),
+    extractedEntities: entities.rows.map((e) => ({
+      entityType: e.entity_type,
+      entityValue: e.entity_value,
+      confidence: e.confidence === null ? null : Number(e.confidence),
+      role: e.role,
+    })),
+  };
 }
 
 export async function createEventFromArticles(

@@ -45,19 +45,33 @@ function dedupePreserveOrder(values: string[]): string[] {
   return out;
 }
 
-export function summarizeTriageSignals(
-  matchedSignals: unknown,
-  entities: TriageEntityHit[]
-): TriageSignalSummary {
+/** Named lists from cheap-filter matchedSignals (Filter signals block). */
+export function filterSignalsFromMatched(matchedSignals: unknown): FilterSignalBlock {
   const signals =
     matchedSignals && typeof matchedSignals === 'object'
       ? (matchedSignals as MatchedSignalsLike)
       : {};
 
-  const filterVendors = asStringList(signals.vendors);
-  const filterProducts = asStringList(signals.products);
-  const filterCves = asStringList(signals.cves);
-  const criticalKeywords = dedupePreserveOrder(asStringList(signals.criticalCyberKeywords));
+  return {
+    vendors: dedupePreserveOrder(asStringList(signals.vendors)),
+    products: dedupePreserveOrder(asStringList(signals.products)),
+    cves: dedupePreserveOrder(asStringList(signals.cves)),
+    criticalKeywords: dedupePreserveOrder(asStringList(signals.criticalCyberKeywords)),
+  };
+}
+
+export interface FilterSignalBlock {
+  vendors: string[];
+  products: string[];
+  cves: string[];
+  criticalKeywords: string[];
+}
+
+export function summarizeTriageSignals(
+  matchedSignals: unknown,
+  entities: TriageEntityHit[]
+): TriageSignalSummary {
+  const filter = filterSignalsFromMatched(matchedSignals);
 
   const entityVendors = entities
     .filter((e) => e.entityType === 'vendor')
@@ -68,19 +82,19 @@ export function summarizeTriageSignals(
   const entityCves = entities.filter((e) => e.entityType === 'cve').map((e) => e.entityValue);
 
   const vendorProductNames = dedupePreserveOrder([
-    ...filterVendors,
-    ...filterProducts,
+    ...filter.vendors,
+    ...filter.products,
     ...entityVendors,
     ...entityProducts,
   ]);
-  const cveIds = dedupePreserveOrder([...filterCves, ...entityCves]);
+  const cveIds = dedupePreserveOrder([...filter.cves, ...entityCves]);
 
   return {
     hasVendorOrProduct: vendorProductNames.length > 0,
     hasCve: cveIds.length > 0,
-    hasCriticalKeyword: criticalKeywords.length > 0,
+    hasCriticalKeyword: filter.criticalKeywords.length > 0,
     vendorProductNames,
     cveIds,
-    criticalKeywords,
+    criticalKeywords: filter.criticalKeywords,
   };
 }
