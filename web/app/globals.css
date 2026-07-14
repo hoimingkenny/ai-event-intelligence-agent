@@ -561,7 +561,7 @@ a:hover {
 
 .article-peek-drawer {
   position: relative;
-  width: min(28rem, 100%);
+  width: min(28rem, 100vw);
   height: 100%;
   background: var(--surface, #fff);
   border-left: 1px solid var(--rule);
@@ -691,7 +691,8 @@ a:hover {
   min-width: 0;
   font-family: var(--font-mono);
   font-size: 0.85rem;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 @media (max-width: 720px) {
