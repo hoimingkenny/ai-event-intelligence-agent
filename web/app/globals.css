@@ -569,6 +569,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  text-align: left;
 }
 
 .article-peek-header {
@@ -600,6 +601,7 @@ a:hover {
   padding: 1rem;
   overflow: auto;
   flex: 1;
+  text-align: left;
 }
 
 .article-peek-section {
@@ -650,6 +652,7 @@ a:hover {
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  text-align: left;
   background: var(--surface-soft, #f7f8fa);
   border: 1px solid var(--rule);
   border-radius: 6px;
