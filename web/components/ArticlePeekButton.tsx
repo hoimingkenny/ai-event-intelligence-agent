@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useId, useState, useTransition } from 'react';
 import type { ArticlePeek } from '../../src/events/event-editorial';
+import { WorkspaceEntityList } from './WorkspaceEntityList';
 
 type Props = {
   articleId: string;
@@ -139,24 +140,7 @@ export function ArticlePeekButton({ articleId, articleTitle }: Props) {
                   </dl>
 
                   <h3 className="article-peek-section">Extracted entities</h3>
-                  {peek.extractedEntities.length === 0 ? (
-                    <p className="meta">No entities detected.</p>
-                  ) : (
-                    <ul className="workspace-entity-list">
-                      {peek.extractedEntities.map((entity) => (
-                        <li
-                          key={`${entity.entityType}:${entity.entityValue}:${entity.role ?? ''}`}
-                          className="workspace-entity-item"
-                        >
-                          <span className="workspace-entity-type">{entity.entityType}</span>
-                          <span className="workspace-entity-value">
-                            {entity.entityValue}
-                            {entity.role ? ` (${entity.role})` : ''}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <WorkspaceEntityList entities={peek.extractedEntities} />
 
                   <h3 className="article-peek-section">LLM digest</h3>
                   {peek.llmDigest ? (

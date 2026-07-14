@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getWorkspaceArticle } from '../../../../../src/events/event-editorial';
 import { SiteHeader } from '../../../../components/SiteHeader';
+import { WorkspaceEntityList } from '../../../../components/WorkspaceEntityList';
 import { WorkspaceNav } from '../../../../components/WorkspaceNav';
 import { getDb } from '../../../../lib/db';
 import { formatWhen } from '../../../../lib/format';
@@ -132,27 +133,7 @@ export default async function WorkspaceArticlePage({ params }: PageProps) {
           <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
             Extracted entities
           </h2>
-          {article.extractedEntities.length === 0 ? (
-            <p className="meta">No entities detected.</p>
-          ) : (
-            <ul className="workspace-entity-list">
-              {article.extractedEntities.map((entity) => (
-                <li
-                  key={`${entity.entityType}:${entity.entityValue}:${entity.role ?? ''}`}
-                  className="workspace-entity-item"
-                >
-                  <span className="workspace-entity-type">{entity.entityType}</span>
-                  <span className="workspace-entity-value">
-                    {entity.entityValue}
-                    {entity.role ? ` (${entity.role})` : ''}
-                    {entity.confidence != null
-                      ? ` · ${Math.round(entity.confidence * 100)}%`
-                      : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <WorkspaceEntityList entities={article.extractedEntities} />
 
           <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
             LLM classification
