@@ -63,3 +63,19 @@ _Avoid_: Cluster, canonical event (canonical event is the system's record; a gol
 **Gold incident assist**:
 An eval-only LLM draft that helps a human create a gold incident: per-article body briefs, a same-event recommendation, and a suggested name. It never writes gold without an explicit human Accept.
 _Avoid_: Auto-label, LLM gold, grouping assist (ambiguous with production grouping)
+
+**Needs triage**:
+The analyst queue of articles that are not yet attached to any approved canonical event. An article may already sit on a draft and still need triage until publication status is approved.
+_Avoid_: Unprocessed, pending extraction, human review queue
+
+**Article peek**:
+A slide-over drawer on the needs-triage list that shows a short excerpt, cheap-filter signals, extracted entities, and a compact LLM digest so the analyst can decide whether to open the workspace article.
+_Avoid_: Human review, quick review, workspace human review
+
+**Workspace article**:
+The analyst-only full article page under the workspace (`/workspace/articles/[id]`) with extracted text, full LLM classification, signal blocks, and pipeline meta — separate from the public catalogue article page.
+_Avoid_: Public article page, human review case
+
+**Human review**:
+Post-hoc analyst judgements on pipeline output (relevance, vendor impact, grouping, alerts, etc.) captured in the review dashboard for quality and eval — not the act of putting an article onto a canonical event.
+_Avoid_: Event approval, article peek, needs triage

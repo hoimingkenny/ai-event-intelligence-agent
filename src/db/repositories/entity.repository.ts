@@ -63,6 +63,32 @@ export class EntityRepository {
     }));
   }
 
+  /** Vendor/product/CVE hits for Needs-triage list icons (batch). */
+  async listVendorProductCvesForArticles(
+    articleIds: string[]
+  ): Promise<Array<{ articleId: string; entityType: string; entityValue: string }>> {
+    if (articleIds.length === 0) return [];
+    const result = await this.db.query<{
+      article_id: string;
+      entity_type: string;
+      entity_value: string;
+    }>(
+      `
+        SELECT article_id, entity_type, entity_value
+        FROM article_entities
+        WHERE article_id = ANY($1::bigint[])
+          AND entity_type IN ('vendor', 'product', 'cve')
+        ORDER BY article_id, entity_type, entity_value
+      `,
+      [articleIds]
+    );
+    return result.rows.map((row) => ({
+      articleId: row.article_id,
+      entityType: row.entity_type,
+      entityValue: row.entity_value,
+    }));
+  }
+
   /** Reconcile a vendor entity's confidence/role after the LLM cross-check. */
   async updateVendorConfidence(
     articleId: string,
