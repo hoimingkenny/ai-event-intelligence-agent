@@ -1,7 +1,7 @@
 # Code Review: Workspace article page (#28)
 
 - **Branch:** `feat/workspace-article-28` → `main`
-- **Commits:** (pending)
+- **Commits:** `308b584`
 - **Date:** 2026-07-14
 - **Reviewer:** Auto (implement)
 
