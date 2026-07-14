@@ -1,7 +1,7 @@
 # Code Review: Needs triage signal icons + draft membership (#27)
 
 - **Branch:** `feat/triage-signal-skim-27` → `main`
-- **Commits:** (pending on branch)
+- **Commits:** `7f9f490` (`feat/triage-signal-skim-27`)
 - **Date:** 2026-07-14
 - **Reviewer:** Auto (implement + two-axis review)
 
