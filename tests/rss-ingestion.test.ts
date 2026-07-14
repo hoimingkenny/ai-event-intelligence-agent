@@ -64,6 +64,14 @@ class FixtureFetcher implements RssFetcher {
   }
 }
 
+class ByUrlFetcher implements RssFetcher {
+  constructor(private readonly itemsByUrl: Record<string, FetchedFeedItem[]>) {}
+
+  async fetch(feedUrl: string): Promise<FetchedFeedItem[]> {
+    return this.itemsByUrl[feedUrl] ?? [];
+  }
+}
+
 describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
   let pool: pg.Pool;
 
@@ -143,43 +151,51 @@ describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
     expect(categories.rows[0].rss_categories).toEqual(['Vulnerabilities']);
   });
 
-  it('assigns smaller article ids to older items within a feed batch', async () => {
+  it('assigns smaller article ids to older items across the whole ingest batch', async () => {
     const feeds = new FeedRepository(pool);
+    // source_name ASC: A Feed before B Feed (matches listActiveFeeds order).
+    const feedA = `https://example.test/${runId}/batch-a.xml`;
+    const feedB = `https://example.test/${runId}/batch-b.xml`;
     await feeds.upsertFeed({
-      sourceName: `${runId} Order Feed`,
-      feedUrl: `https://example.test/${runId}/order-feed.xml`,
+      sourceName: `${runId} A Feed`,
+      feedUrl: feedA,
+      sourceType: 'rss',
+    });
+    await feeds.upsertFeed({
+      sourceName: `${runId} B Feed`,
+      feedUrl: feedB,
       sourceType: 'rss',
     });
 
-    // Newest-first feed order (typical RSS), plus one undated item.
-    const fetcher = new FixtureFetcher([
-      {
-        title: 'Newest',
-        link: `https://example.test/${runId}/order/newest`,
-        isoDate: '2026-06-29T12:00:00.000Z',
-      },
-      {
-        title: 'Oldest',
-        link: `https://example.test/${runId}/order/oldest`,
-        isoDate: '2026-06-27T12:00:00.000Z',
-      },
-      {
-        title: 'Undated',
-        link: `https://example.test/${runId}/order/undated`,
-      },
-      {
-        title: 'Middle',
-        link: `https://example.test/${runId}/order/middle`,
-        isoDate: '2026-06-28T12:00:00.000Z',
-      },
-    ]);
+    // Feed A is listed first and only has a newer item. Per-feed insert would
+    // give it the smaller id; global batch sort must put B's older item first.
+    const fetcher = new ByUrlFetcher({
+      [feedA]: [
+        {
+          title: 'Newer from A',
+          link: `https://example.test/${runId}/batch/newer-a`,
+          isoDate: '2026-06-29T12:00:00.000Z',
+        },
+      ],
+      [feedB]: [
+        {
+          title: 'Older from B',
+          link: `https://example.test/${runId}/batch/older-b`,
+          isoDate: '2026-06-27T12:00:00.000Z',
+        },
+        {
+          title: 'Undated from B',
+          link: `https://example.test/${runId}/batch/undated-b`,
+        },
+      ],
+    });
 
     const run = await ingestRssFeeds(pool, {
       fetcher,
-      feedUrls: [`https://example.test/${runId}/order-feed.xml`],
+      feedUrls: [feedA, feedB],
     });
 
-    expect(run.created).toBe(4);
+    expect(run.created).toBe(3);
 
     const rows = await pool.query<{ id: string; canonical_url: string }>(
       `
@@ -188,14 +204,13 @@ describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
         WHERE canonical_url LIKE $1
         ORDER BY id ASC
       `,
-      [`https://example.test/${runId}/order/%`]
+      [`https://example.test/${runId}/batch/%`]
     );
 
     expect(rows.rows.map((row) => row.canonical_url)).toEqual([
-      `https://example.test/${runId}/order/oldest`,
-      `https://example.test/${runId}/order/middle`,
-      `https://example.test/${runId}/order/newest`,
-      `https://example.test/${runId}/order/undated`,
+      `https://example.test/${runId}/batch/older-b`,
+      `https://example.test/${runId}/batch/newer-a`,
+      `https://example.test/${runId}/batch/undated-b`,
     ]);
   });
 });
