@@ -73,11 +73,11 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
                 </Link>
                 <span className="triage-end">
                   <span className="triage-icons-row">
+                    <TriageSignalIcons article={article} />
                     <ArticlePeekButton
                       articleId={article.id}
                       articleTitle={article.title || article.canonicalUrl || 'Untitled article'}
                     />
-                    <TriageSignalIcons article={article} />
                   </span>
                   <span>{article.sourceName || 'Unknown source'}</span>
                   <span className="triage-mono">#{article.id}</span>
