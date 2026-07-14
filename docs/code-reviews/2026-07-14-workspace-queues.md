@@ -35,6 +35,7 @@ Splits the monolithic `/workspace` events queue into a **hub** plus three dedica
 - Share a single page-size constant across web + editorial
 - Optional empty-state pagination row
 
+**Layout decision (2026-07-14):** Triage list uses the dense three-zone grid (prototype variant C): time | title | source+#id. Prototypes A/B discarded.
 ## Verdict
 
 **Approve-with-notes** — Spec Option A is implemented; revalidation for new routes is covered; create-page size change and selection-across-pages limitation are accepted PoC trade-offs.

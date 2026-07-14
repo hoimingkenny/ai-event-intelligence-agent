@@ -19,8 +19,15 @@ export function WorkspacePagination({
   const totalPages = workspaceTotalPages(total, limit);
   const from = (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
-  const prevHref = page > 1 ? `${basePath}?page=${page - 1}` : null;
-  const nextHref = page < totalPages ? `${basePath}?page=${page + 1}` : null;
+
+  function hrefFor(targetPage: number): string {
+    const url = new URL(basePath, 'http://prototype.local');
+    url.searchParams.set('page', String(targetPage));
+    return `${url.pathname}${url.search}`;
+  }
+
+  const prevHref = page > 1 ? hrefFor(page - 1) : null;
+  const nextHref = page < totalPages ? hrefFor(page + 1) : null;
 
   return (
     <div className="workspace-pagination">

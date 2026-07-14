@@ -55,17 +55,24 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
         {result.items.length === 0 ? (
           <p className="meta">No untriaged articles right now.</p>
         ) : (
-          <ul className="sources">
+          <ul className="triage-grid">
             {result.items.map((article) => (
               <li key={article.id}>
-                <div className="when">{formatWhen(article.publishedAt)}</div>
-                <div>
-                  <strong>{article.sourceName || 'Unknown source'}</strong>
-                  <span className="meta" style={{ marginLeft: '0.75rem' }}>
-                    #{article.id}
-                  </span>
-                </div>
-                <div>{article.title || article.canonicalUrl || 'Untitled article'}</div>
+                <time
+                  className="triage-mono"
+                  dateTime={
+                    article.publishedAt ? new Date(article.publishedAt).toISOString() : undefined
+                  }
+                >
+                  {formatWhen(article.publishedAt)}
+                </time>
+                <span className="triage-title">
+                  {article.title || article.canonicalUrl || 'Untitled article'}
+                </span>
+                <span className="triage-end">
+                  <span>{article.sourceName || 'Unknown source'}</span>
+                  <span className="triage-mono">#{article.id}</span>
+                </span>
               </li>
             ))}
           </ul>
