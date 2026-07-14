@@ -1,6 +1,6 @@
 # Public web app (Next.js)
 
-Phase-1 public catalogue. Runs on the same VPS as Postgres and the pipeline scheduler (see ADR-0003). Do **not** deploy this to Vercel — the long-running pipeline and `pg` access belong on the VPS compose stack.
+Phase-1 public catalogue. Runs on the same VPS as Postgres and the pipeline scheduler (see ADR-0003 and `docs/engineering-notes/phase1-vps-cloudflare.md`). Do **not** deploy this to Vercel — the long-running pipeline and `pg` access belong on the VPS compose stack.
 
 ## Local
 
@@ -13,6 +13,16 @@ npm run web:start
 ```
 
 Dev uses webpack (not Turbopack) so parent-package NodeNext `.js` import specifiers resolve to `.ts` via `extensionAlias` in `next.config.ts`. Turbopack does not honor that alias yet, which breaks workspace routes that import `src/events/event-editorial.ts`.
+
+## Compose (production-shaped)
+
+From the repo root (after filling `.env`):
+
+```bash
+docker compose up -d --build   # postgres + migrate + scheduler + web (:3000 on localhost)
+```
+
+`Dockerfile.web` builds a Next.js standalone image. The pipeline uses the root `Dockerfile` and stays a separate container.
 
 Public routes use the shared catalogue seam (`src/portal/events-portal.ts`, `src/portal/articles-portal.ts`): only **approved** canonical events (with vendor/product impact) and articles attached to them.
 

@@ -21,9 +21,11 @@ services:
       timeout: 5s
       retries: 5
 
+  # Optional: only needed for BullMQ worker mode (not the phase-1 batch scheduler).
   redis:
     image: redis:8
     container_name: vendor_threat_watch_redis
+    profiles: ["queue"]
     ports:
       - "6379:6379"
     volumes:
@@ -37,7 +39,9 @@ services:
   # Runs migrations, then exits 0. App services wait for it to complete so code
   # never serves against a half-migrated schema. Fails closed on migration error.
   migrate:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: vendor-threat-watch
     command: ["npm", "run", "db:migrate"]
     environment:
@@ -51,14 +55,15 @@ services:
   # RSS_FETCH_INTERVAL_MINUTES. Swap `command` to ["npm","run","pipeline:run"]
   # and drive from host cron for the external-scheduler pattern instead.
   scheduler:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: vendor-threat-watch
     command: ["npm", "run", "scheduler"]
     env_file: .env
     environment:
       DATABASE_URL: *app_database_url
-      REDIS_HOST: redis
-      RSS_FETCH_INTERVAL_MINUTES: "20"
+      RSS_FETCH_INTERVAL_MINUTES: ${RSS_FETCH_INTERVAL_MINUTES:-20}
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,9 +72,39 @@ services:
     restart: unless-stopped
     stop_grace_period: 60s # give an in-flight run time to finish on SIGTERM
 
-  # Optional: article monitoring portal (read-only). Bind to localhost only.
+  # Phase-1 hosted web: public Events/Articles + analyst /workspace (ADR-0003).
+  # Bound to localhost by default; put Cloudflare Tunnel or a host reverse proxy
+  # in front for TLS/domain (see docs/engineering-notes/phase1-vps-cloudflare.md).
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: vendor-threat-watch-web
+    env_file: .env
+    environment:
+      DATABASE_URL: *app_database_url
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_GITHUB_ID: ${AUTH_GITHUB_ID}
+      AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET}
+      ANALYST_GITHUB_USERS: ${ANALYST_GITHUB_USERS}
+      # Public origin for Auth.js callbacks when behind Cloudflare (recommended).
+      AUTH_URL: ${AUTH_URL:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Legacy local UIs (not part of the phase-1 prod profile). Enable with:
+  #   docker compose --profile legacy up -d
   portal:
-    build: .
+    profiles: ["legacy"]
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: vendor-threat-watch
     command: ["npm", "run", "portal"]
     env_file: .env
@@ -85,9 +120,11 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # Optional: human review dashboard. Bind to localhost only.
   dashboard:
-    build: .
+    profiles: ["legacy"]
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: vendor-threat-watch
     command: ["npm", "run", "review:dashboard"]
     env_file: .env

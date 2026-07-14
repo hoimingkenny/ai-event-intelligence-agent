@@ -62,13 +62,17 @@ describe('loadEventsOverview', () => {
     expect(listSql).not.toContain("e.llm_summary ->> 'title' AS event_title");
     expect(listSql).not.toContain('e.llm_summary IS NOT NULL AND');
     expect(listSql).toContain("ORDER BY e.llm_summary IS NOT NULL DESC, array_position(ARRAY['critical','high','medium','low'], severity), confidence DESC NULLS LAST");
-    expect(listSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(listSql).toContain("e.publication_status = 'approved'");
+    expect(listSql).not.toContain('cardinality(coalesce(e.affected_vendors');
     expect(filteredSql).not.toContain('e.llm_summary IS NOT NULL AND');
-    expect(filteredSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(filteredSql).toContain("e.publication_status = 'approved'");
+    expect(filteredSql).not.toContain('cardinality(coalesce(e.affected_vendors');
     expect(totalSql).not.toContain('e.llm_summary IS NOT NULL AND');
-    expect(totalSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(totalSql).toContain("e.publication_status = 'approved'");
+    expect(totalSql).not.toContain('cardinality(coalesce(e.affected_vendors');
     expect(severitySql).not.toContain('e.llm_summary IS NOT NULL AND');
-    expect(severitySql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(severitySql).toContain("e.publication_status = 'approved'");
+    expect(severitySql).not.toContain('cardinality(coalesce(e.affected_vendors');
     expect(overview.summary).toMatchObject({ total: 5, multiSource: 2 });
     expect(overview.summary.bySeverity).toEqual({ high: 3, low: 2 });
   });
@@ -200,6 +204,6 @@ describe('loadEventDetail', () => {
 
     expect(await loadEventDetail(db, '10')).toBeNull();
     expect(detailSql).toContain("e.publication_status = 'approved'");
-    expect(detailSql).toContain('cardinality(coalesce(e.affected_vendors');
+    expect(detailSql).not.toContain('cardinality(coalesce(e.affected_vendors');
   });
 });

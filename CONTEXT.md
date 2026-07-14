@@ -17,7 +17,7 @@ Whether a canonical event is visible on the public portal: `draft` (not public) 
 _Avoid_: event status, published (when used as a synonym for the event itself), visibility flag
 
 **Event approval**:
-The human action that sets a canonical event's publication status to `approved`.
+The human action that sets a canonical event's publication status to `approved`. Requires at least one affected vendor or product. Makes the event (and eligible articles) visible on the public catalogue.
 _Avoid_: Human review verdict (post-hoc correct/incorrect scoring of pipeline output), eval label
 
 **Event unpublish**:

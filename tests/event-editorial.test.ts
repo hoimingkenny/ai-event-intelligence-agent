@@ -43,6 +43,10 @@ describe('event editorial', () => {
     let updateParams: unknown[] = [];
     const db = scriptedDb([
       {
+        match: 'SELECT id, grouping_key',
+        rows: [baseRow],
+      },
+      {
         match: 'UPDATE cyber_events',
         rows: [{ ...baseRow, publication_status: 'approved' }],
         onQuery: (sql, params) => {
@@ -58,6 +62,17 @@ describe('event editorial', () => {
     expect(updateParams).toContain('approved');
     expect(updateParams).toContain('10');
     expect(event.publicationStatus).toBe('approved');
+  });
+
+  it('rejects approve when the event has no vendor or product', async () => {
+    const db = scriptedDb([
+      {
+        match: 'SELECT id, grouping_key',
+        rows: [{ ...baseRow, affected_vendors: [], affected_products: [] }],
+      },
+    ]);
+
+    await expect(approveEvent(db, '10')).rejects.toThrow(/vendor or product/i);
   });
 
   it('unpublishes an approved event back to draft', async () => {

@@ -51,13 +51,14 @@ Orchestration is a LangGraph StateGraph (`src/pipeline/runner.ts`) that owns seq
 npm install
 cp .env.example .env          # set MINIMAX_API_KEY (needed for embeddings + LLM stages)
 
-docker compose up -d postgres redis
+docker compose up -d postgres
 npm run db:migrate            # apply SQL migrations (src/db/migrations/)
 npm run db:seed               # seed RSS feeds + monitored vendor inventory
 
 npm run pipeline:run          # run the full pipeline once (advisory-locked)
 ```
 
+For Redis (BullMQ worker mode only): `docker compose --profile queue up -d redis`.
 Without `MINIMAX_API_KEY` the pipeline still runs, but the embedding and classification stages are skipped/degraded (dedup loses its semantic tier).
 
 ### Manual articles only
@@ -95,11 +96,12 @@ Two deployment patterns share one advisory-locked core, so overlapping runs are 
 # Internal scheduler (self-contained loop)
 npm run scheduler             # runs the pipeline every RSS_FETCH_INTERVAL_MINUTES (default 20)
 
-# Full stack in Docker (postgres → migrate → scheduler → optional dashboard)
-docker compose up -d
+# Full stack in Docker (postgres → migrate → scheduler → Next.js web)
+docker compose up -d --build
+# Legacy portal/dashboard: docker compose --profile legacy up -d
 ```
 
-For an external scheduler (system cron / Kubernetes CronJob), invoke the one-shot `npm run pipeline:run` on your own cadence. Design details: [`docs/engineering-notes/deployment-and-scheduling.md`](docs/engineering-notes/deployment-and-scheduling.md).
+For an external scheduler (system cron / Kubernetes CronJob), invoke the one-shot `npm run pipeline:run` on your own cadence. Design details: [`docs/engineering-notes/deployment-and-scheduling.md`](docs/engineering-notes/deployment-and-scheduling.md). VPS + Cloudflare: [`docs/engineering-notes/phase1-vps-cloudflare.md`](docs/engineering-notes/phase1-vps-cloudflare.md).
 
 ## Testing and evaluation
 

@@ -64,6 +64,8 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
   const attachCandidates = triage.filter((article) => !memberIds.has(article.id));
   const moveTargets = allEvents.filter((item) => item.id !== event.id);
   const isApproved = event.publicationStatus === 'approved';
+  const canApprove =
+    (event.affectedVendors?.length ?? 0) > 0 || (event.affectedProducts?.length ?? 0) > 0;
 
   return (
     <>
@@ -170,13 +172,18 @@ export default async function WorkspaceEventPage({ params, searchParams }: PageP
                   Unpublish
                 </button>
               </form>
-            ) : (
+            ) : canApprove ? (
               <form action={approveEventAction}>
                 <input type="hidden" name="eventId" value={event.id} />
                 <button className="auth-button" type="submit">
                   Approve for public catalogue
                 </button>
               </form>
+            ) : (
+              <p className="meta" style={{ margin: 0 }}>
+                Add at least one vendor or product, save fields, then approve. Approval is blocked
+                until impact is identified.
+              </p>
             )}
           </div>
         </div>
