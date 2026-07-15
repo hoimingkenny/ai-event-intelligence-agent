@@ -27,6 +27,33 @@ export interface SeedVendorProductInput {
   newsVolume?: VendorProduct['newsVolume'];
 }
 
+export interface CreateProductInput {
+  vendor: string;
+  product: string;
+  aliases: string[];
+  criticality: Criticality;
+  newsVolume: VendorProduct['newsVolume'];
+  isActive: boolean;
+}
+
+export interface UpdateProductInput {
+  productId: string;
+  productName: string;
+  criticality: Criticality;
+  newsVolume: VendorProduct['newsVolume'];
+}
+
+export interface WorkspaceProductRecord {
+  id: string;
+  vendorId: string;
+  vendor: string;
+  productName: string;
+  criticality: Criticality;
+  newsVolume: VendorProduct['newsVolume'];
+  isActive: boolean;
+  aliases: string[];
+}
+
 interface VendorRow {
   id: string;
   name: string;
@@ -40,6 +67,17 @@ interface ProductRow {
   vendor_id: string;
   product_name: string;
   criticality: Criticality;
+}
+
+interface WorkspaceProductRow {
+  id: string;
+  vendor_id: string;
+  vendor: string;
+  product_name: string;
+  criticality: Criticality;
+  news_volume: VendorProduct['newsVolume'];
+  is_active: boolean;
+  aliases: string[] | null;
 }
 
 export class VendorRepository {
@@ -115,6 +153,158 @@ export class VendorRepository {
     );
 
     return result.rows.map(mapVendor);
+  }
+
+  /** Look up a vendor by exact (case-insensitive) name. Does not require active. */
+  async findVendorByName(name: string): Promise<VendorRecord | null> {
+    const result = await this.db.query<VendorRow>(
+      `
+        SELECT id, name, criticality, category, is_active
+        FROM vendors
+        WHERE lower(name) = lower($1)
+        LIMIT 1
+      `,
+      [name]
+    );
+
+    return result.rows[0] ? mapVendor(result.rows[0]) : null;
+  }
+
+  /** Insert a new vendor with the given criticality. Throws on duplicate name. */
+  async createVendor(input: {
+    name: string;
+    criticality: Criticality;
+    isActive: boolean;
+  }): Promise<VendorRecord> {
+    const result = await this.db.query<VendorRow>(
+      `
+        INSERT INTO vendors (name, criticality, is_active, updated_at)
+        VALUES ($1, $2, $3, now())
+        RETURNING id, name, criticality, category, is_active
+      `,
+      [input.name, input.criticality, input.isActive]
+    );
+
+    return mapVendor(result.rows[0]);
+  }
+
+  /** Insert a new product under the given vendor id. Throws on duplicate vendor+product. */
+  async createProduct(input: {
+    vendorId: string;
+    productName: string;
+    criticality: Criticality;
+    newsVolume: VendorProduct['newsVolume'];
+    isActive: boolean;
+  }): Promise<VendorProductRecord> {
+    const result = await this.db.query<ProductRow>(
+      `
+        INSERT INTO vendor_products (vendor_id, product_name, criticality, news_volume, is_active, updated_at)
+        VALUES ($1, $2, $3, $4, $5, now())
+        RETURNING id, vendor_id, product_name, criticality
+      `,
+      [input.vendorId, input.productName, input.criticality, input.newsVolume, input.isActive]
+    );
+
+    return mapProduct(result.rows[0]);
+  }
+
+  /** Find a product by id (no active filter). */
+  async findProductById(productId: string): Promise<WorkspaceProductRecord | null> {
+    const result = await this.db.query<WorkspaceProductRow>(
+      `
+        SELECT
+          vp.id,
+          vp.vendor_id,
+          v.name AS vendor,
+          vp.product_name,
+          vp.criticality,
+          vp.news_volume,
+          vp.is_active,
+          COALESCE(
+            array_agg(DISTINCT vpa.alias) FILTER (WHERE vpa.alias IS NOT NULL),
+            '{}'
+          ) AS aliases
+        FROM vendor_products vp
+        JOIN vendors v ON v.id = vp.vendor_id
+        LEFT JOIN vendor_product_aliases vpa ON vpa.product_id = vp.id
+        WHERE vp.id = $1
+        GROUP BY vp.id, vp.vendor_id, v.name, vp.product_name, vp.criticality, vp.news_volume, vp.is_active
+      `,
+      [productId]
+    );
+
+    return result.rows[0] ? mapWorkspaceProduct(result.rows[0]) : null;
+  }
+
+  /** Update editable fields on a product. Throws when the product is missing. */
+  async updateProduct(input: UpdateProductInput): Promise<VendorProductRecord> {
+    const result = await this.db.query<ProductRow>(
+      `
+        UPDATE vendor_products
+        SET
+          product_name = $2,
+          criticality = $3,
+          news_volume = $4,
+          updated_at = now()
+        WHERE id = $1
+        RETURNING id, vendor_id, product_name, criticality
+      `,
+      [input.productId, input.productName, input.criticality, input.newsVolume]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(`vendor product ${input.productId} not found`);
+    }
+
+    return mapProduct(result.rows[0]);
+  }
+
+  /** Set the product-level active flag. Throws when the product is missing. */
+  async setProductActive(productId: string, isActive: boolean): Promise<VendorProductRecord> {
+    const result = await this.db.query<ProductRow>(
+      `
+        UPDATE vendor_products
+        SET is_active = $2, updated_at = now()
+        WHERE id = $1
+        RETURNING id, vendor_id, product_name, criticality
+      `,
+      [productId, isActive]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error(`vendor product ${productId} not found`);
+    }
+
+    return mapProduct(result.rows[0]);
+  }
+
+  /** Count active monitored products (vendor active AND product active). */
+  async countActiveMonitoredProducts(): Promise<number> {
+    const result = await this.db.query<{ count: string }>(
+      `
+        SELECT count(*)::text AS count
+        FROM vendor_products vp
+        JOIN vendors v ON v.id = vp.vendor_id
+        WHERE v.is_active = true AND vp.is_active = true
+      `
+    );
+    return Number.parseInt(result.rows[0]?.count ?? '0', 10);
+  }
+
+  /** Replace the alias set for a product. Product name is always included as a canonical alias. */
+  async replaceProductAliases(productId: string, aliases: string[]): Promise<void> {
+    const unique = Array.from(new Set([...aliases].map((a) => a.trim()).filter(Boolean)));
+    await this.db.query('DELETE FROM vendor_product_aliases WHERE product_id = $1', [productId]);
+    for (const alias of unique) {
+      await this.db.query(
+        `
+          INSERT INTO vendor_product_aliases (product_id, alias)
+          VALUES ($1, $2)
+          ON CONFLICT (product_id, alias) DO NOTHING
+        `,
+        [productId, alias]
+      );
+    }
   }
 
   private async upsertVendor(input: {
@@ -217,5 +407,18 @@ function mapProduct(row: ProductRow): VendorProductRecord {
     vendorId: row.vendor_id,
     productName: row.product_name,
     criticality: row.criticality,
+  };
+}
+
+function mapWorkspaceProduct(row: WorkspaceProductRow): WorkspaceProductRecord {
+  return {
+    id: row.id,
+    vendorId: row.vendor_id,
+    vendor: row.vendor,
+    productName: row.product_name,
+    criticality: row.criticality,
+    newsVolume: row.news_volume,
+    isActive: row.is_active,
+    aliases: row.aliases ?? [],
   };
 }
