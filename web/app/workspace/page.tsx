@@ -32,7 +32,8 @@ export default async function WorkspacePage() {
             <h1 className="page-title">Overview</h1>
             <p className="page-lede">
               Signed in as <strong>{login}</strong>. Open a queue to triage articles, review drafts,
-              or manage approved events.
+              or manage approved events. Ops settings live under{' '}
+              <Link href="/workspace/config">Config</Link>.
             </p>
           </div>
           <div className="form-actions">
