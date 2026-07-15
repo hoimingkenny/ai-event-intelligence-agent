@@ -63,7 +63,7 @@ describe('workspace config', () => {
     expect(feeds[1].lastFetchedAt).toBeNull();
   });
 
-  it('counts active feeds and active monitored vendor products', async () => {
+  it('counts active feeds and active monitored vendor products (product-level active)', async () => {
     const db = scriptedDb([
       {
         match: 'AS active_feeds',
@@ -76,7 +76,7 @@ describe('workspace config', () => {
     expect(counts).toEqual({ activeFeeds: 3, activeProducts: 5 });
   });
 
-  it('lists inventory products with aliases and vendor active state', async () => {
+  it('lists inventory products with aliases, news volume, and product active state', async () => {
     const db = scriptedDb([
       {
         match: 'FROM vendor_products',
@@ -86,6 +86,7 @@ describe('workspace config', () => {
             vendor: 'CyberArk',
             product: 'Privileged Access Security',
             criticality: 'critical',
+            news_volume: 'quiet',
             is_active: true,
             aliases: ['CyberArk PAS', 'PAS'],
           },
@@ -94,6 +95,7 @@ describe('workspace config', () => {
             vendor: 'Okta',
             product: 'Workforce Identity',
             criticality: 'high',
+            news_volume: 'noisy',
             is_active: false,
             aliases: ['Okta'],
           },
@@ -109,9 +111,18 @@ describe('workspace config', () => {
       vendor: 'CyberArk',
       product: 'Privileged Access Security',
       criticality: 'critical',
+      newsVolume: 'quiet',
       isActive: true,
       aliases: ['CyberArk PAS', 'PAS'],
     });
-    expect(items[1].isActive).toBe(false);
+    expect(items[1]).toEqual({
+      id: '11',
+      vendor: 'Okta',
+      product: 'Workforce Identity',
+      criticality: 'high',
+      newsVolume: 'noisy',
+      isActive: false,
+      aliases: ['Okta'],
+    });
   });
 });

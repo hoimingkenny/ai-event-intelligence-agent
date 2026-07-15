@@ -31,9 +31,9 @@ export default async function WorkspaceConfigInventoryPage() {
         <p className="page-kicker">Workspace Config</p>
         <h1 className="page-title">Inventory</h1>
         <p className="page-lede">
-          Monitored vendor products from Postgres (current schema). “Vendor active” is
-          vendor-level today; news volume and product-level active land later. Read-only in
-          this release.
+          Monitored vendor products from Postgres. “Active” is product-level (vendor
+          must also be active to appear). Read-only in this release; inventory writes
+          land later.
         </p>
 
         <WorkspaceNav active="config" />
@@ -54,18 +54,20 @@ export default async function WorkspaceConfigInventoryPage() {
                   <th scope="col">Product</th>
                   <th scope="col">Aliases</th>
                   <th scope="col">Criticality</th>
-                  <th scope="col">Vendor active</th>
+                  <th scope="col">News volume</th>
+                  <th scope="col">Active</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} className={item.isActive ? undefined : 'inactive'}>
-                    <td>{item.vendor}</td>
-                    <td>{item.product}</td>
-                    <td>{item.aliases.length > 0 ? item.aliases.join(', ') : '—'}</td>
-                    <td>{item.criticality}</td>
-                    <td>{item.isActive ? 'yes' : 'no'}</td>
-                  </tr>
+                  <td>{item.vendor}</td>
+                  <td>{item.product}</td>
+                  <td>{item.aliases.length > 0 ? item.aliases.join(', ') : '—'}</td>
+                  <td>{item.criticality}</td>
+                  <td>{item.newsVolume}</td>
+                  <td>{item.isActive ? 'yes' : 'no'}</td>
+                </tr>
                 ))}
               </tbody>
             </table>

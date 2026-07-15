@@ -24,6 +24,7 @@ export interface SeedVendorProductInput {
   aliases: string[];
   criticality: Criticality;
   inProduction: boolean;
+  newsVolume?: VendorProduct['newsVolume'];
 }
 
 interface VendorRow {
@@ -57,6 +58,8 @@ export class VendorRepository {
       vendorId: vendor.id,
       productName: input.product,
       criticality: input.criticality,
+      newsVolume: input.newsVolume ?? 'quiet',
+      isActive: input.inProduction,
     });
 
     const aliases = Array.from(new Set([input.product, ...input.aliases]));
@@ -160,11 +163,13 @@ export class VendorRepository {
     vendorId: string;
     productName: string;
     criticality: Criticality;
+    newsVolume: VendorProduct['newsVolume'];
+    isActive: boolean;
   }): Promise<VendorProductRecord> {
     const result = await this.db.query<ProductRow>(
       `
-        INSERT INTO vendor_products (vendor_id, product_name, criticality, updated_at)
-        VALUES ($1, $2, $3, now())
+        INSERT INTO vendor_products (vendor_id, product_name, criticality, news_volume, is_active, updated_at)
+        VALUES ($1, $2, $3, $4, $5, now())
         ON CONFLICT (vendor_id, product_name)
         DO UPDATE SET
           criticality = CASE
@@ -173,10 +178,12 @@ export class VendorRepository {
             THEN EXCLUDED.criticality
             ELSE vendor_products.criticality
           END,
+          news_volume = EXCLUDED.news_volume,
+          is_active = vendor_products.is_active OR EXCLUDED.is_active,
           updated_at = now()
         RETURNING id, vendor_id, product_name, criticality
       `,
-      [input.vendorId, input.productName, input.criticality]
+      [input.vendorId, input.productName, input.criticality, input.newsVolume, input.isActive]
     );
 
     return mapProduct(result.rows[0]);

@@ -1,4 +1,5 @@
 import { decideCheapFilter } from '../../src/pipeline/filter-stage.js';
+import { loadMonitoredVendors } from '../../src/storage/vendorInventory.js';
 import { buildConfusionMatrix } from './confusionMatrix.js';
 import { inferFailureBucket, suggestFix } from './failureBuckets.js';
 import {
@@ -30,7 +31,7 @@ export function runCheapFilterOnSample(sample: CheapFilterEvaluationSample): Che
     sourceName: sample.sourceName,
     sourceTier: sample.sourceTier,
     publishedAt: sample.publishedAt ? new Date(sample.publishedAt) : null,
-  });
+  }, loadMonitoredVendors());
   const failureType = determineFailureType(sample.humanLabel, decision.decision);
   const severity = failureType ? severityForFailureType(failureType) : null;
   const preliminary = {

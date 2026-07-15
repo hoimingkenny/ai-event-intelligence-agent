@@ -1,10 +1,10 @@
 import type { ArticleEntityInput } from '../db/repositories/entity.repository.js';
-import { monitoredVendors } from '../storage/vendorInventory.js';
 import { detectCyberKeywords } from './cyber-keyword-detector.js';
 import { extractCves } from './cve-extractor.js';
 import { buildZonedText, locatePhrase, scoreEntity } from './entity-confidence.js';
 import { extractIocs } from './ioc-extractor.js';
 import { detectVendorsFromInventory } from './vendor-detector.js';
+import type { VendorProduct } from '../types/domain.js';
 
 export interface ArticleEntityFields {
   title?: string | null;
@@ -20,12 +20,13 @@ export interface ArticleEntityFields {
  */
 export function extractArticleEntities(
   articleId: string,
-  fields: ArticleEntityFields
+  fields: ArticleEntityFields,
+  inventory: VendorProduct[]
 ): ArticleEntityInput[] {
   const zones = buildZonedText(fields);
   const fullText = Object.values(zones).join('\n');
 
-  const vendors = detectVendorsFromInventory(fullText, monitoredVendors);
+  const vendors = detectVendorsFromInventory(fullText, inventory);
   const cves = extractCves(fullText);
   const iocs = extractIocs(fullText);
   const keywords = detectCyberKeywords(fullText);

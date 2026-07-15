@@ -7,6 +7,9 @@ import {
   scoreEntity,
 } from '../src/detection/entity-confidence.js';
 import { extractArticleEntities } from '../src/detection/entity-extractor.js';
+import { loadMonitoredVendors } from '../src/storage/vendorInventory.js';
+
+const inventory = loadMonitoredVendors();
 
 describe('scoreEntity', () => {
   it('scores a corroborated vendor in the title high', () => {
@@ -87,7 +90,7 @@ describe('extractArticleEntities (zoned, end-to-end)', () => {
       body:
         'Attackers are exploiting a critical vulnerability in CyberArk. '.repeat(20) +
         'Related: Zscaler announces new feature.',
-    });
+    }, inventory);
 
     const cyberark = entities.find((e) => e.entityValue === 'CyberArk');
     const zscaler = entities.find((e) => e.entityValue === 'Zscaler');

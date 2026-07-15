@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { extractArticleEntities } from '../src/detection/entity-extractor.js';
 import { extractIocs } from '../src/detection/ioc-extractor.js';
+import { loadMonitoredVendors } from '../src/storage/vendorInventory.js';
+
+const inventory = loadMonitoredVendors();
 
 describe('extractIocs', () => {
   it('extracts IPs, domains, and hashes', () => {
@@ -16,9 +19,13 @@ describe('extractIocs', () => {
 
 describe('extractArticleEntities', () => {
   it('extracts vendor, product, CVE, IOC, and attack indicator entities', () => {
-    const entities = extractArticleEntities('article-1', {
-      title: 'Zscaler Internet Access CVE-2026-12345 vulnerability exploited from 203.0.113.4.',
-    });
+    const entities = extractArticleEntities(
+      'article-1',
+      {
+        title: 'Zscaler Internet Access CVE-2026-12345 vulnerability exploited from 203.0.113.4.',
+      },
+      inventory
+    );
 
     expect(entities).toContainEqual(
       expect.objectContaining({ entityType: 'vendor', entityValue: 'Zscaler' })
