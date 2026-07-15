@@ -34,6 +34,7 @@ The current-state reference: how the system is shaped and why. These documents a
 | [ui-and-dashboards.md](design/ui-and-dashboards.md) | Dashboard surfaces: articles portal plus merged review/eval dashboard routes, data flow, shared patterns, deployment considerations |
 | [tradeoffs.md](design/tradeoffs.md) | Deliberate trade-offs and their rationale |
 | [limitations.md](design/limitations.md) | Known limits of the current approach |
+| [workspace-config-update-flow.md](design/workspace-config-update-flow.md) | Config hub Feeds/Inventory: before/after for add/edit/soft-deactivate vs next pipeline run (#34) |
 
 ## `engineering-notes/` — technical write-ups
 
