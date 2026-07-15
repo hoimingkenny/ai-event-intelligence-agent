@@ -80,16 +80,24 @@ Workspace-created feeds remain `rss` only; `source_type` and `last_fetched_at` a
 
 Hub reflects **DB truth**, not pipeline lag. On-page copy states that pipeline behaviour catches up on the next run and that `IGNORED` history is not bulk re-scanned.
 
-## Escape hatch (not Config Save)
+## Escape hatch: filter re-queue after inventory edit (locked)
 
-If inventory was fixed and a **recent** miss must be recovered:
+**Primary case:** cheap filter DROPped an article to `IGNORED` because of a missing or wrong alias (or similar inventory gap). The analyst fixes inventory, then gives **selected** articles a second chance.
 
-1. Add/edit inventory → Save.
-2. Open that Workspace article (`IGNORED`).
-3. **Filter re-queue** → `NEW`.
-4. **Next filter** run decides again against current inventory.
+**Locked flow:**
 
-No bulk rescan of old news (low value for incident detection). Manual-articles imports are eval-only and out of scope.
+1. Edit inventory (e.g. add aliases) → Save → DB updates immediately.
+2. Open each Workspace article still `IGNORED` that should be reconsidered.
+3. **Filter re-queue** → status `NEW` (clear ignore reason).
+4. **Next filter** sweep re-runs cheap filter against current inventory; if KEEP, extraction and later stages run as a normal forward pass.
+
+**Locked constraints:**
+
+- Selective only — analyst picks which `IGNORED` articles to revive.
+- Inventory Save does **not** auto-requeue matching or all `IGNORED` rows (avoids flooding the queue with old noise).
+- No bulk historical rescan. Manual-articles imports remain eval-only / out of scope.
+
+This is the inventory catch-up path; Feeds have no equivalent article re-queue in this effort (forward ingest only).
 
 ## Ticket phase note
 
