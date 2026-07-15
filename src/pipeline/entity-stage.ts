@@ -2,6 +2,7 @@ import { ArticleRepository } from '../db/repositories/article.repository.js';
 import { EntityRepository } from '../db/repositories/entity.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
 import { extractArticleEntities } from '../detection/entity-extractor.js';
+import { loadMonitoredInventoryFromDb } from '../storage/monitoredInventoryStore.js';
 
 export interface EntityStageResult {
   reviewed: number;
@@ -14,6 +15,7 @@ export async function runEntityStage(
 ): Promise<EntityStageResult> {
   const articles = new ArticleRepository(db);
   const entities = new EntityRepository(db);
+  const inventory = await loadMonitoredInventoryFromDb(db);
   const candidates = await articles.listByProcessingStatus('EXTRACTION_SUCCESS', options.limit ?? 50);
   let entityRows = 0;
 
@@ -24,7 +26,7 @@ export async function runEntityStage(
       title: article.title,
       summary: article.rssSummary,
       body: article.cleanText,
-    });
+    }, inventory);
 
     for (const entity of extracted) {
       await entities.addArticleEntity(entity);

@@ -14,6 +14,7 @@ async function main(): Promise<void> {
         aliases: vendorProduct.aliases,
         criticality: vendorProduct.criticality,
         inProduction: vendorProduct.inProduction,
+        newsVolume: vendorProduct.newsVolume,
       });
     }
 

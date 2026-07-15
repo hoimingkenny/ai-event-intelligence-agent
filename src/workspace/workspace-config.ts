@@ -14,7 +14,8 @@ export interface WorkspaceInventoryItem {
   vendor: string;
   product: string;
   criticality: VendorProduct['criticality'];
-  /** Vendor-level active today (`vendors.is_active`); product-level active arrives in a later ticket. */
+  newsVolume: VendorProduct['newsVolume'];
+  /** Product-level active; product also requires an active vendor to appear in this list. */
   isActive: boolean;
   aliases: string[];
 }
@@ -29,6 +30,7 @@ interface InventoryRow {
   vendor: string;
   product: string;
   criticality: VendorProduct['criticality'];
+  news_volume: VendorProduct['newsVolume'];
   is_active: boolean;
   aliases: string[] | null;
 }
@@ -51,7 +53,7 @@ export async function getWorkspaceConfigCounts(db: Queryable): Promise<Workspace
           SELECT COUNT(*)::int
           FROM vendor_products vp
           JOIN vendors v ON v.id = vp.vendor_id
-          WHERE v.is_active = true
+          WHERE v.is_active = true AND vp.is_active = true
         ) AS active_products
     `
   );
@@ -71,7 +73,8 @@ export async function listWorkspaceInventory(db: Queryable): Promise<WorkspaceIn
         v.name AS vendor,
         vp.product_name AS product,
         vp.criticality,
-        v.is_active,
+        vp.news_volume,
+        vp.is_active,
         COALESCE(
           array_agg(DISTINCT vpa.alias) FILTER (
             WHERE vpa.alias IS NOT NULL AND lower(vpa.alias) <> lower(vp.product_name)
@@ -81,7 +84,7 @@ export async function listWorkspaceInventory(db: Queryable): Promise<WorkspaceIn
       FROM vendor_products vp
       JOIN vendors v ON v.id = vp.vendor_id
       LEFT JOIN vendor_product_aliases vpa ON vpa.product_id = vp.id
-      GROUP BY vp.id, v.name, vp.product_name, vp.criticality, v.is_active
+      GROUP BY vp.id, v.name, vp.product_name, vp.criticality, vp.news_volume, vp.is_active
       ORDER BY v.name ASC, vp.product_name ASC
     `
   );
@@ -91,6 +94,7 @@ export async function listWorkspaceInventory(db: Queryable): Promise<WorkspaceIn
     vendor: row.vendor,
     product: row.product,
     criticality: row.criticality,
+    newsVolume: row.news_volume,
     isActive: row.is_active,
     aliases: row.aliases ?? [],
   }));

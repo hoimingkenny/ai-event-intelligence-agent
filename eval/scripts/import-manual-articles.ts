@@ -4,6 +4,7 @@ import { getDatabasePool } from '../../src/db/pool.js';
 import { FeedRepository } from '../../src/db/repositories/feed.repository.js';
 import { ArticleRepository } from '../../src/db/repositories/article.repository.js';
 import { decideCheapFilter } from '../../src/pipeline/filter-stage.js';
+import { loadMonitoredVendors } from '../../src/storage/vendorInventory.js';
 import { normalizeTitle, normalizeUrl } from '../../src/extraction/url-normalizer.js';
 import { hashNormalizedValue } from '../../src/utils/hash.js';
 import type { Queryable } from '../../src/db/repositories/types.js';
@@ -74,7 +75,7 @@ export async function importManualArticles(
         rssCategories: article.rssCategories,
         sourceName: article.sourceName,
         publishedAt: article.publishedAt ? new Date(article.publishedAt) : null,
-      });
+      }, loadMonitoredVendors());
       await articleRepository.saveCheapFilterResult(saved.article.id, decision);
       await articleRepository.updateProcessingStatus(
         saved.article.id,

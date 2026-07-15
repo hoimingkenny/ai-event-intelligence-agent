@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runCheapFilterStage } from '../src/pipeline/filter-stage.js';
 import { runExtractionStage } from '../src/pipeline/extraction-stage.js';
+import { loadMonitoredVendors } from '../src/storage/vendorInventory.js';
 import type { Queryable } from '../src/db/repositories/types.js';
 
 class CheapFilterDb implements Queryable {
@@ -86,7 +87,10 @@ describe('cheap filter stage', () => {
   it('maps KEEP, MAYBE_KEEP, and DROP to article statuses and persists decisions', async () => {
     const db = new CheapFilterDb();
 
-    const result = await runCheapFilterStage(db, { limit: 3 });
+    const result = await runCheapFilterStage(db, {
+      limit: 3,
+      inventory: loadMonitoredVendors(),
+    });
 
     expect(result).toEqual({
       reviewed: 3,

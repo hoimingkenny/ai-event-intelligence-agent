@@ -2,7 +2,7 @@ import { ArticleRepository, type ArticleRecord } from '../db/repositories/articl
 import { detectCategorizedCyberKeywords } from '../detection/cyber-keyword-classifier.js';
 import { extractCves } from '../detection/cve-extractor.js';
 import { detectVendorsFromInventory } from '../detection/vendor-detector.js';
-import { monitoredVendors } from '../storage/vendorInventory.js';
+import { loadMonitoredInventoryFromDb } from '../storage/monitoredInventoryStore.js';
 import type { Queryable } from '../db/repositories/types.js';
 import type { VendorProduct } from '../types/domain.js';
 
@@ -78,18 +78,18 @@ interface CheapFilterSignals {
   matchedInventory: VendorProduct[];
 }
 
-export function decideCheapFilter(article: CheapFilterInput): FilterDecision {
-  const signals = collectCheapFilterSignals(article);
+export function decideCheapFilter(article: CheapFilterInput, inventory: VendorProduct[]): FilterDecision {
+  const signals = collectCheapFilterSignals(article, inventory);
   return runCheapFilterCascade(article, signals);
 }
 
-function collectCheapFilterSignals(article: CheapFilterInput): CheapFilterSignals {
+function collectCheapFilterSignals(article: CheapFilterInput, inventory: VendorProduct[]): CheapFilterSignals {
   const text = [article.title, article.rssSummary, ...(article.rssCategories ?? [])]
     .filter(Boolean)
     .join('\n');
   const keywords = detectCategorizedCyberKeywords(text);
   const cves = extractCves(text);
-  const vendors = detectVendorsFromInventory(text, monitoredVendors);
+  const vendors = detectVendorsFromInventory(text, inventory);
   const sourceTier = article.sourceTier ?? inferSourceTier(article.sourceName);
   const securityCategories = securityRssCategories(article.rssCategories ?? []);
   return {
@@ -99,7 +99,7 @@ function collectCheapFilterSignals(article: CheapFilterInput): CheapFilterSignal
     vendors,
     sourceTier,
     securityCategories,
-    matchedInventory: findMatchedInventory(vendors.vendors, vendors.products, monitoredVendors),
+    matchedInventory: findMatchedInventory(vendors.vendors, vendors.products, inventory),
   };
 }
 
@@ -250,16 +250,17 @@ function calculatePriorityScore(article: CheapFilterInput, signals: CheapFilterS
 
 export async function runCheapFilterStage(
   db: Queryable,
-  options: { limit?: number } = {}
+  options: { limit?: number; inventory?: VendorProduct[] } = {}
 ): Promise<FilterStageResult> {
   const articles = new ArticleRepository(db);
+  const inventory = options.inventory ?? (await loadMonitoredInventoryFromDb(db));
   const candidates = await articles.listByProcessingStatus('NEW', options.limit ?? 50);
   let extractionPending = 0;
   let extractionPendingLowPriority = 0;
   let ignored = 0;
 
   for (const article of candidates) {
-    const decision = decideCheapFilter(article);
+    const decision = decideCheapFilter(article, inventory);
     await articles.saveCheapFilterResult(article.id, decision);
 
     if (decision.decision === 'KEEP') {
