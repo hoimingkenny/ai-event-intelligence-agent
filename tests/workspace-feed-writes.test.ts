@@ -110,8 +110,10 @@ describe('workspace feed writes', () => {
     const feed = await setFeedActive(db, '10', false);
 
     expect(feed.isActive).toBe(false);
-    const update = calls.find((call) => call.sql.includes('UPDATE feeds'));
-    expect(update?.sql).toContain('EXISTS');
+    const advisoryLock = calls.find((call) => call.sql.includes('pg_advisory_xact_lock'));
+    expect(advisoryLock).toBeDefined();
+    expect(calls.some((call) => call.sql.trim().toUpperCase() === 'BEGIN')).toBe(true);
+    expect(calls.some((call) => call.sql.trim().toUpperCase() === 'COMMIT')).toBe(true);
     expect(calls.every((call) => !call.sql.includes('DELETE'))).toBe(true);
 
     const reactivation = scriptedDb([
@@ -133,6 +135,7 @@ describe('workspace feed writes', () => {
     await expect(setFeedActive(db, '10', false)).rejects.toMatchObject({
       code: 'last_active_feed',
     });
+    expect(calls.some((call) => call.sql.trim().toUpperCase() === 'ROLLBACK')).toBe(true);
     expect(calls.some((call) => /\b(?:INSERT|UPDATE|DELETE)\b/.test(call.sql))).toBe(false);
   });
 

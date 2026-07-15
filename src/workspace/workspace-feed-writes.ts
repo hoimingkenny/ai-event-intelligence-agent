@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import {
   FeedRepository,
   type FeedRecord,
@@ -91,25 +92,33 @@ export async function setFeedActive(
   isActive: boolean
 ): Promise<FeedRecord> {
   const id = requireFeedId(feedId);
-  const current = await getFeedActiveState(db, id);
-  if (!current) {
-    throw new WorkspaceFeedWriteError('feed_not_found', 'Feed not found.');
-  }
-  if (!isActive && current.is_active && (await countActiveFeeds(db)) <= 1) {
-    throw new WorkspaceFeedWriteError(
-      'last_active_feed',
-      'At least one feed must remain active.'
-    );
+  if (isActive) {
+    return setActiveState(db, id, true);
   }
 
-  const feed = await new FeedRepository(db).setFeedActive(id, isActive);
-  if (!feed) {
-    if (!isActive && current.is_active) {
+  return withTransaction(db, async (tx) => {
+    await tx.query("SELECT pg_advisory_xact_lock(hashtext('workspace-config-active-feeds'))");
+    const current = await getFeedActiveState(tx, id);
+    if (!current) {
+      throw new WorkspaceFeedWriteError('feed_not_found', 'Feed not found.');
+    }
+    if (current.is_active && (await countActiveFeeds(tx)) <= 1) {
       throw new WorkspaceFeedWriteError(
         'last_active_feed',
         'At least one feed must remain active.'
       );
     }
+    return setActiveState(tx, id, false);
+  });
+}
+
+async function setActiveState(
+  db: Queryable,
+  feedId: string,
+  isActive: boolean
+): Promise<FeedRecord> {
+  const feed = await new FeedRepository(db).setFeedActive(feedId, isActive);
+  if (!feed) {
     throw new WorkspaceFeedWriteError('feed_not_found', 'Feed not found.');
   }
   return feed;
@@ -168,6 +177,39 @@ async function countActiveFeeds(db: Queryable): Promise<number> {
 async function getFeedActiveState(db: Queryable, feedId: string): Promise<FeedActiveRow | null> {
   const result = await db.query<FeedActiveRow>('SELECT is_active FROM feeds WHERE id = $1', [feedId]);
   return result.rows[0] ?? null;
+}
+
+type Connectable = Queryable & { connect(): Promise<PoolClient> };
+
+function isConnectable(db: Queryable): db is Connectable {
+  return typeof (db as Connectable).connect === 'function';
+}
+
+async function withTransaction<T>(db: Queryable, work: (tx: Queryable) => Promise<T>): Promise<T> {
+  if (isConnectable(db)) {
+    const client = (await db.connect()) as PoolClient;
+    try {
+      await client.query('BEGIN');
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  await db.query('BEGIN');
+  try {
+    const result = await work(db);
+    await db.query('COMMIT');
+    return result;
+  } catch (error) {
+    await db.query('ROLLBACK');
+    throw error;
+  }
 }
 
 function throwMappedWriteError(error: unknown): never {

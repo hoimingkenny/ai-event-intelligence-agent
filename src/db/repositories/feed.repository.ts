@@ -104,13 +104,6 @@ export class FeedRepository {
         UPDATE feeds
         SET is_active = $2, updated_at = now()
         WHERE id = $1
-          AND (
-            $2 = true
-            OR is_active = false
-            OR EXISTS (
-              SELECT 1 FROM feeds other WHERE other.is_active = true AND other.id <> feeds.id
-            )
-          )
         RETURNING id, source_name, feed_url, source_type, trust_level, is_active, last_fetched_at
       `,
       [feedId, isActive]

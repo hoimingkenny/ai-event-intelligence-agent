@@ -23,7 +23,7 @@ The read-only feed table is replaced by add/edit forms with read-only ID, source
 
 ## Risks and concerns
 
-- **Concurrent last-feed deactivation:** a count preflight provides a typed error without writes; the repository update also has an `EXISTS` predicate so a concurrent request cannot deactivate the final active row between the check and update. A zero-row guarded update is mapped back to `last_active_feed`.
+- **Concurrent last-feed deactivation:** deactivation runs in a transaction on one connection, acquires a transaction-scoped advisory lock before reading active state/count, and only then updates. Concurrent deactivations therefore serialize; the preflight still provides a typed no-data-write rejection when one active feed remains.
 - **Trust-level database constraint:** validation is enforced in the Workspace seam, not by a new SQL constraint, because seed/upsert paths predate this ticket and must remain unchanged. Direct SQL or other repository callers could still store another value; accepted for this ticket's scoped Workspace seam.
 - **Form error recovery:** Server Actions redirect with a typed error code, so invalid submitted values are not retained after the redirect. The affected form and clear error are shown, but analysts must re-enter changes. Accepted to keep the implementation aligned with existing redirect/revalidation patterns rather than introducing action-state infrastructure solely for this page.
 - **Legacy rows with non-RSS or null source type:** they remain visible and read-only; edits do not coerce historical source types. Only newly created Workspace feeds are forced to RSS.
@@ -31,10 +31,10 @@ The read-only feed table is replaced by add/edit forms with read-only ID, source
 
 ## Test evidence
 
-Verification was run against the isolated committed snapshot at `11ed2e0`, excluding concurrent uncommitted #37 inventory work:
+Verification was run from the dedicated `feat/workspace-config-38` worktree with the network-dependent LLM helper test excluded:
 
 - `npm run check` — passes.
-- `npx vitest run --exclude tests/llmHelpers.test.ts` — 66 test files passed, 2 skipped; 337 tests passed, 5 skipped, 0 failed.
+- `npx vitest run --exclude tests/llmHelpers.test.ts` — 64 test files passed, 2 skipped; 322 tests passed, 8 skipped, 0 failed.
 - `npx vitest run tests/workspace-config.test.ts tests/workspace-feed-writes.test.ts` — 2 test files passed; 10 tests passed.
 - `npm run web:build` — Next.js 15.5.9 production build compiled, type-checked, generated routes, and completed successfully; `/workspace/config/feeds` included.
 - Feed-scoped ESLint — exits 0 (with the repository's pre-existing Next pages-directory advisory).
