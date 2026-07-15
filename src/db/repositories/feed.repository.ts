@@ -70,6 +70,18 @@ export class FeedRepository {
     return result.rows.map(mapFeed);
   }
 
+  async listAllFeeds(): Promise<FeedRecord[]> {
+    const result = await this.db.query<FeedRow>(
+      `
+        SELECT id, source_name, feed_url, source_type, trust_level, is_active, last_fetched_at
+        FROM feeds
+        ORDER BY source_name ASC, feed_url ASC
+      `
+    );
+
+    return result.rows.map(mapFeed);
+  }
+
   async updateLastFetchedAt(feedId: string, fetchedAt: Date = new Date()): Promise<void> {
     await this.db.query('UPDATE feeds SET last_fetched_at = $2, updated_at = now() WHERE id = $1', [
       feedId,

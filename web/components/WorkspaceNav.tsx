@@ -5,6 +5,7 @@ const LINKS = [
   { href: '/workspace/triage', label: 'Triage', id: 'triage' as const },
   { href: '/workspace/drafts', label: 'Drafts', id: 'drafts' as const },
   { href: '/workspace/approved', label: 'Approved', id: 'approved' as const },
+  { href: '/workspace/config', label: 'Config', id: 'config' as const },
 ];
 
 export type WorkspaceNavActive = (typeof LINKS)[number]['id'] | 'new' | 'event';
