@@ -79,3 +79,23 @@ _Avoid_: Public article page, human review case
 **Human review**:
 Post-hoc analyst judgements on pipeline output (relevance, vendor impact, grouping, alerts, etc.) captured in the review dashboard for quality and eval — not the act of putting an article onto a canonical event.
 _Avoid_: Event approval, article peek, needs triage
+
+**Feed**:
+A configured RSS source the pipeline may ingest from, with active/inactive state and source metadata.
+_Avoid_: Source (ambiguous with article provenance), RSS config file
+
+**Monitored vendor product**:
+A vendor+product pair (with aliases, criticality, and news volume) the system watches for impact; the live set is the monitored inventory.
+_Avoid_: Vendor (vendor alone), inventory item (vague), seed vendor
+
+**News volume**:
+How chatty a monitored vendor product is in security coverage for cheap-filter strictness: `quiet` or `noisy`. Not RSS fetch volume.
+_Avoid_: Feed volume, article count, traffic
+
+**Workspace Config**:
+The analyst Workspace area for live operational settings (feeds and monitored inventory), separate from editorial queues.
+_Avoid_: Settings, admin, eval inventory tab
+
+**Filter re-queue**:
+The analyst action that returns a specific ignored article to `NEW` so the cheap filter can run again against the current inventory. Not a bulk historical rescan.
+_Avoid_: Reprocess, rescan, re-filter all, manual articles (eval-only imports)
