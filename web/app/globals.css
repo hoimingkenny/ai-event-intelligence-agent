@@ -822,6 +822,47 @@ a:hover {
   font: 0.85rem/1.45 var(--font-mono);
 }
 
+.requeue-form {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed var(--rule);
+}
+
+.requeue-button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  padding: 0.55rem 1rem;
+  font: 600 0.9rem/1 var(--font-body);
+  cursor: pointer;
+}
+
+.requeue-button:hover,
+.requeue-button:focus {
+  background: var(--accent-ink);
+}
+
+.flash {
+  margin: 1rem 0 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+}
+
+.flash-success {
+  background: rgba(15, 110, 106, 0.08);
+  border-color: rgba(15, 110, 106, 0.35);
+  color: var(--accent-ink);
+}
+
+.flash-error {
+  background: rgba(155, 44, 44, 0.06);
+  border-color: rgba(155, 44, 44, 0.4);
+  color: var(--critical);
+}
+
 .workspace-entity-list {
   list-style: none;
   margin: 0;
