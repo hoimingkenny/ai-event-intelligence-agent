@@ -18,6 +18,19 @@ export interface UpsertFeedInput {
   isActive?: boolean;
 }
 
+export interface CreateFeedInput {
+  sourceName: string;
+  feedUrl: string;
+  trustLevel: string;
+  isActive: boolean;
+}
+
+export interface UpdateFeedInput {
+  sourceName: string;
+  feedUrl: string;
+  trustLevel: string;
+}
+
 interface FeedRow {
   id: string;
   source_name: string;
@@ -55,6 +68,49 @@ export class FeedRepository {
     );
 
     return mapFeed(result.rows[0]);
+  }
+
+  async createFeed(input: CreateFeedInput): Promise<FeedRecord> {
+    const result = await this.db.query<FeedRow>(
+      `
+        INSERT INTO feeds (source_name, feed_url, source_type, trust_level, is_active, updated_at)
+        VALUES ($1, $2, 'rss', $3, $4, now())
+        RETURNING id, source_name, feed_url, source_type, trust_level, is_active, last_fetched_at
+      `,
+      [input.sourceName, input.feedUrl, input.trustLevel, input.isActive]
+    );
+
+    return mapFeed(result.rows[0]);
+  }
+
+  async updateFeed(feedId: string, input: UpdateFeedInput): Promise<FeedRecord | null> {
+    const result = await this.db.query<FeedRow>(
+      `
+        UPDATE feeds
+        SET source_name = $2, feed_url = $3, trust_level = $4, updated_at = now()
+        WHERE id = $1
+        RETURNING id, source_name, feed_url, source_type, trust_level, is_active, last_fetched_at
+      `,
+      [feedId, input.sourceName, input.feedUrl, input.trustLevel]
+    );
+
+    const row = result.rows[0];
+    return row ? mapFeed(row) : null;
+  }
+
+  async setFeedActive(feedId: string, isActive: boolean): Promise<FeedRecord | null> {
+    const result = await this.db.query<FeedRow>(
+      `
+        UPDATE feeds
+        SET is_active = $2, updated_at = now()
+        WHERE id = $1
+        RETURNING id, source_name, feed_url, source_type, trust_level, is_active, last_fetched_at
+      `,
+      [feedId, isActive]
+    );
+
+    const row = result.rows[0];
+    return row ? mapFeed(row) : null;
   }
 
   async listActiveFeeds(): Promise<FeedRecord[]> {
