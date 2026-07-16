@@ -1,17 +1,20 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getWorkspaceArticle } from '../../../../../src/events/event-editorial';
+import { ConfirmSubmitScript } from '../../../../components/ConfirmSubmitScript';
 import { SiteHeader } from '../../../../components/SiteHeader';
 import { WorkspaceEntityList } from '../../../../components/WorkspaceEntityList';
 import { WorkspaceNav } from '../../../../components/WorkspaceNav';
 import { getDb } from '../../../../lib/db';
 import { formatWhen } from '../../../../lib/format';
 import { requireAnalyst } from '../../../../lib/require-analyst';
+import { requeueArticleForFilterAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ requeued?: string; error?: string }>;
 };
 
 export async function generateMetadata({ params }: PageProps) {
@@ -30,8 +33,9 @@ function formatSignalList(values: string[]): string {
   return values.length > 0 ? values.join(', ') : '—';
 }
 
-export default async function WorkspaceArticlePage({ params }: PageProps) {
+export default async function WorkspaceArticlePage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { requeued, error } = await searchParams;
   const gate = await requireAnalyst();
   if (!gate.ok) {
     redirect(
@@ -147,8 +151,33 @@ export default async function WorkspaceArticlePage({ params }: PageProps) {
               {JSON.stringify(article.llmClassification, null, 2)}
             </pre>
           )}
+
+          {article.processingStatus === 'IGNORED' ? (
+            <form action={requeueArticleForFilterAction} className="requeue-form">
+              <input type="hidden" name="articleId" value={article.id} />
+              <button
+                type="submit"
+                className="requeue-button"
+                data-confirm="Send this article back through the cheap filter with the current inventory? The previous filter decision will be cleared, and the next scheduled sweep will re-evaluate it."
+              >
+                Re-queue for filter
+              </button>
+            </form>
+          ) : null}
+
+          {requeued ? (
+            <p className="flash flash-success">
+              Re-queued. The next filter sweep will re-evaluate this article.
+            </p>
+          ) : null}
+          {error === 'article_not_ignorable' ? (
+            <p className="flash flash-error">
+              This article is no longer in IGNORED status and cannot be re-queued.
+            </p>
+          ) : null}
         </div>
       </main>
+      <ConfirmSubmitScript />
     </>
   );
 }
