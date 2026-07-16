@@ -19,6 +19,7 @@ export interface TriageListItem {
   canonicalUrl: string | null;
   sourceName: string | null;
   publishedAt: Date | null;
+  processingStatus: string;
   signals: TriageSignalSummary;
   draft: {
     primaryEventId: string;
@@ -374,6 +375,7 @@ export async function listArticlesNeedingTriagePage(
       canonicalUrl: row.canonicalUrl,
       sourceName: row.sourceName,
       publishedAt: row.publishedAt,
+      processingStatus: row.processingStatus,
       signals: summarizeTriageSignals(row.matchedSignals, entitiesByArticle.get(row.id) ?? []),
       draft:
         articleDrafts.length === 0

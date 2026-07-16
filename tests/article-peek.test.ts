@@ -164,6 +164,7 @@ describe('Needs triage list stays slim vs peek', () => {
             canonical_url: null,
             source_name: 'CISA',
             published_at: null,
+            processing_status: 'DIGESTING',
             cheap_filter_matched_signals: null,
           },
         ],

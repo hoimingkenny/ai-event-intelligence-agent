@@ -670,7 +670,7 @@ export class EventRepository {
     const result = await this.db.query<TriageSlimArticleSqlRow>(
       `
         SELECT a.id, a.source_name, a.title, a.canonical_url, a.published_at,
-          a.cheap_filter_matched_signals
+          a.processing_status, a.cheap_filter_matched_signals
         FROM articles a
         WHERE ${EventRepository.TRIAGE_WHERE}
         ORDER BY a.published_at DESC NULLS LAST, a.id DESC
@@ -685,6 +685,7 @@ export class EventRepository {
       title: row.title,
       canonicalUrl: row.canonical_url,
       publishedAt: row.published_at,
+      processingStatus: row.processing_status,
       matchedSignals: row.cheap_filter_matched_signals ?? null,
     }));
   }
@@ -726,6 +727,7 @@ export interface TriageSlimArticleRow {
   title: string | null;
   canonicalUrl: string | null;
   publishedAt: Date | null;
+  processingStatus: string;
   matchedSignals: unknown;
 }
 
@@ -735,6 +737,7 @@ interface TriageSlimArticleSqlRow {
   title: string | null;
   canonical_url: string | null;
   published_at: Date | null;
+  processing_status: string;
   cheap_filter_matched_signals: unknown;
 }
 

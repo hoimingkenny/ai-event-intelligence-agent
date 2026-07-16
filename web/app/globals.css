@@ -792,6 +792,17 @@ a:hover {
   color: var(--ink-soft);
 }
 
+.triage-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.triage-title-row .chip {
+  flex-shrink: 0;
+}
+
 .triage-title {
   color: var(--ink);
   font-weight: 600;
@@ -801,6 +812,7 @@ a:hover {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   text-decoration: none;
+  min-width: 0;
 }
 
 .triage-title:hover {

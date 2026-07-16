@@ -81,7 +81,7 @@ Named orchestration mode for `runPipeline`: `analyst-eval` (default) stops after
 _Avoid_: Env flag soup, stage deletion
 
 **LLM article digest**:
-Structured per-article LLM signal extraction (`articles.llm_article_digest`) produced after extraction/entities, before embeddings. Distinct from post-grouping `llm_classification`.
+Structured per-article LLM signal extraction (`articles.llm_article_digest`) produced after extraction/entities, before embeddings. Distinct from post-grouping `llm_classification`. While the LLM call is in flight the article is `DIGESTING`; success in `analyst-eval` ends at `DIGESTED`. Stuck `DIGESTING` rows (crash) are reclaimed on the next digest pass.
 _Avoid_: LLM classification, event summary
 
 **Advisory cheap filter**:

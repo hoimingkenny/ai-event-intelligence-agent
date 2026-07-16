@@ -4,6 +4,7 @@ import { ArticleRepository } from '../db/repositories/article.repository.js';
 import { LlmAuditRepository } from '../db/repositories/llm-audit.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
 import { classifyCyberArticle } from '../llm/cyber-classifier.js';
+import { runWithConcurrency } from '../utils/concurrency.js';
 import type { PipelineProfile } from './profile.js';
 
 export interface DigestStageResult {
@@ -15,12 +16,18 @@ export interface DigestStageResult {
 
 export async function runArticleDigestStage(
   db: Queryable,
-  options: { limit?: number; profile?: PipelineProfile; includeLlm?: boolean } = {}
+  options: {
+    limit?: number;
+    profile?: PipelineProfile;
+    includeLlm?: boolean;
+    concurrency?: number;
+  } = {}
 ): Promise<DigestStageResult> {
   const articles = new ArticleRepository(db);
   const audit = new LlmAuditRepository(db);
   const profile = options.profile ?? 'analyst-eval';
   const includeLlm = options.includeLlm ?? Boolean(env.minimaxApiKey);
+  const concurrency = options.concurrency ?? env.llmConcurrency;
   const candidates = await articles.listArticlesNeedingDigest(options.limit ?? 20);
 
   let digested = 0;
@@ -31,7 +38,8 @@ export async function runArticleDigestStage(
     return { reviewed: candidates.length, digested: 0, skipped: candidates.length, failed: 0 };
   }
 
-  for (const article of candidates) {
+  await runWithConcurrency(candidates, concurrency, async (article) => {
+    await articles.claimArticleForDigest(article.id);
     try {
       const digest = await classifyCyberArticle(article);
       await articles.saveArticleDigest(article.id, digest, {
@@ -49,6 +57,7 @@ export async function runArticleDigestStage(
       });
       digested += 1;
     } catch (error) {
+      await articles.updateProcessingStatus(article.id, 'ENTITY_EXTRACTED');
       await audit.insert({
         targetType: 'article',
         targetId: article.id,
@@ -61,7 +70,7 @@ export async function runArticleDigestStage(
       });
       failed += 1;
     }
-  }
+  });
 
   return { reviewed: candidates.length, digested, skipped, failed };
 }

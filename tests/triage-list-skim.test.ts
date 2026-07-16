@@ -85,6 +85,7 @@ describe('listArticlesNeedingTriagePage skim enrichment', () => {
             canonical_url: 'https://example.com/a',
             source_name: 'CISA',
             published_at: new Date('2026-07-14T01:00:00Z'),
+            processing_status: 'DIGESTED',
             cheap_filter_matched_signals: {
               vendors: ['CyberArk'],
               products: [],
@@ -132,6 +133,7 @@ describe('listArticlesNeedingTriagePage skim enrichment', () => {
     const item = page.items[0]!;
     expect(item.id).toBe('101');
     expect(item.title).toBe('PAS ransomware advisory');
+    expect(item.processingStatus).toBe('DIGESTED');
     expect(item.signals).toEqual({
       hasVendorOrProduct: true,
       hasCve: true,
@@ -161,6 +163,7 @@ describe('listArticlesNeedingTriagePage skim enrichment', () => {
             canonical_url: null,
             source_name: 'MSRC',
             published_at: null,
+            processing_status: 'ENTITY_EXTRACTED',
             cheap_filter_matched_signals: null,
           },
         ],

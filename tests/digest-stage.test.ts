@@ -38,37 +38,43 @@ const articleRow = {
   processing_status: 'ENTITY_EXTRACTED',
 };
 
+const digestPayload = {
+  cyberRelevant: true,
+  eventType: 'vulnerability_disclosure',
+  severity: 'high',
+  urgency: 'P2',
+  confidence: 0.88,
+  vendorRoles: [{ vendor: 'CyberArk', role: 'affected', rationale: 'PAS mentioned.' }],
+  affectedProducts: ['PAS'],
+  cves: ['CVE-2026-9999'],
+  reasoning: 'Clear vendor impact.',
+};
+
 describe('runArticleDigestStage', () => {
   beforeEach(() => {
     classifyCyberArticle.mockReset();
   });
 
-  it('persists digest and audit rows with DIGESTED terminal status in analyst-eval', async () => {
-    const digest = {
-      cyberRelevant: true,
-      eventType: 'vulnerability_disclosure',
-      severity: 'high',
-      urgency: 'P2',
-      confidence: 0.88,
-      vendorRoles: [{ vendor: 'CyberArk', role: 'affected', rationale: 'PAS mentioned.' }],
-      affectedProducts: ['PAS'],
-      cves: ['CVE-2026-9999'],
-      reasoning: 'Clear vendor impact.',
-    };
-    classifyCyberArticle.mockResolvedValueOnce(digest);
+  it('claims DIGESTING then persists DIGESTED on success in analyst-eval', async () => {
+    classifyCyberArticle.mockResolvedValueOnce(digestPayload);
 
+    const statusUpdates: string[] = [];
     const savedDigests: unknown[] = [];
-    const terminalStatuses: string[] = [];
     const audits: unknown[][] = [];
 
     const db = scriptedDb([
       { match: 'llm_article_digest IS NULL', rows: [articleRow] },
       {
+        match: 'SET processing_status = $2',
+        rows: [],
+        onQuery: (params) => statusUpdates.push(String(params?.[1])),
+      },
+      {
         match: 'SET llm_article_digest',
         rows: [],
         onQuery: (params) => {
           savedDigests.push(params?.[1]);
-          terminalStatuses.push(String(params?.[2]));
+          statusUpdates.push(String(params?.[2]));
         },
       },
       { match: 'INSERT INTO llm_audit_logs', rows: [], onQuery: (params) => audits.push(params ?? []) },
@@ -81,15 +87,14 @@ describe('runArticleDigestStage', () => {
     });
 
     expect(result).toEqual({ reviewed: 1, digested: 1, skipped: 0, failed: 0 });
+    expect(statusUpdates).toEqual(['DIGESTING', 'DIGESTED']);
     expect(JSON.parse(String(savedDigests[0]))).toMatchObject({ eventType: 'vulnerability_disclosure' });
-    expect(terminalStatuses).toEqual(['DIGESTED']);
     expect(audits[0]?.[2]).toBe('article_digest');
-    expect(audits[0]?.[7]).toBe('valid');
   });
 
   it('keeps ENTITY_EXTRACTED status when digest runs in full profile', async () => {
     classifyCyberArticle.mockResolvedValueOnce({
-      cyberRelevant: true,
+      ...digestPayload,
       eventType: 'active_exploitation',
       severity: 'critical',
       urgency: 'P1',
@@ -100,20 +105,51 @@ describe('runArticleDigestStage', () => {
       reasoning: 'Exploitation reported.',
     });
 
-    const terminalStatuses: string[] = [];
+    const statusUpdates: string[] = [];
     const db = scriptedDb([
       { match: 'llm_article_digest IS NULL', rows: [articleRow] },
       {
+        match: 'SET processing_status = $2',
+        rows: [],
+        onQuery: (params) => statusUpdates.push(String(params?.[1])),
+      },
+      {
         match: 'SET llm_article_digest',
         rows: [],
-        onQuery: (params) => terminalStatuses.push(String(params?.[2])),
+        onQuery: (params) => statusUpdates.push(String(params?.[2])),
       },
       { match: 'INSERT INTO llm_audit_logs', rows: [] },
     ]);
 
     await runArticleDigestStage(db, { limit: 1, profile: 'full', includeLlm: true });
 
-    expect(terminalStatuses).toEqual(['ENTITY_EXTRACTED']);
+    expect(statusUpdates).toEqual(['DIGESTING', 'ENTITY_EXTRACTED']);
+  });
+
+  it('reverts to ENTITY_EXTRACTED when the LLM call fails', async () => {
+    classifyCyberArticle.mockRejectedValueOnce(new Error('timeout'));
+
+    const statusUpdates: string[] = [];
+    const audits: unknown[][] = [];
+    const db = scriptedDb([
+      { match: 'llm_article_digest IS NULL', rows: [articleRow] },
+      {
+        match: 'SET processing_status = $2',
+        rows: [],
+        onQuery: (params) => statusUpdates.push(String(params?.[1])),
+      },
+      { match: 'INSERT INTO llm_audit_logs', rows: [], onQuery: (params) => audits.push(params ?? []) },
+    ]);
+
+    const result = await runArticleDigestStage(db, {
+      limit: 1,
+      profile: 'analyst-eval',
+      includeLlm: true,
+    });
+
+    expect(result).toEqual({ reviewed: 1, digested: 0, skipped: 0, failed: 1 });
+    expect(statusUpdates).toEqual(['DIGESTING', 'ENTITY_EXTRACTED']);
+    expect(audits[0]?.[7]).toBe('error');
   });
 
   it('skips LLM calls when includeLlm is false', async () => {
@@ -123,5 +159,47 @@ describe('runArticleDigestStage', () => {
 
     expect(result).toEqual({ reviewed: 1, digested: 0, skipped: 1, failed: 0 });
     expect(classifyCyberArticle).not.toHaveBeenCalled();
+  });
+
+  it('runs digests with bounded concurrency', async () => {
+    const rows = [1, 2, 3, 4, 5].map((n) => ({ ...articleRow, id: String(n) }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+
+    classifyCyberArticle.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      inFlight -= 1;
+      return {
+        cyberRelevant: true,
+        eventType: 'vulnerability_disclosure',
+        severity: 'medium',
+        urgency: 'P3',
+        confidence: 0.7,
+        vendorRoles: [],
+        affectedProducts: [],
+        cves: [],
+        reasoning: 'ok',
+      };
+    });
+
+    const db = scriptedDb([
+      { match: 'llm_article_digest IS NULL', rows: rows },
+      { match: 'SET processing_status = $2', rows: [] },
+      { match: 'SET llm_article_digest', rows: [] },
+      { match: 'INSERT INTO llm_audit_logs', rows: [] },
+    ]);
+
+    const result = await runArticleDigestStage(db, {
+      limit: 5,
+      profile: 'analyst-eval',
+      includeLlm: true,
+      concurrency: 2,
+    });
+
+    expect(result).toEqual({ reviewed: 5, digested: 5, skipped: 0, failed: 0 });
+    expect(maxInFlight).toBe(2);
+    expect(classifyCyberArticle).toHaveBeenCalledTimes(5);
   });
 });

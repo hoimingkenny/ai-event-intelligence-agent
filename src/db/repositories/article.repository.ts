@@ -157,15 +157,19 @@ export class ArticleRepository {
           rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method,
           extraction_error, processing_status
         FROM articles
-        WHERE processing_status = 'ENTITY_EXTRACTED'
+        WHERE processing_status = ANY($1::text[])
           AND llm_article_digest IS NULL
         ORDER BY published_at DESC NULLS LAST, fetched_at ASC, id ASC
-        LIMIT $1
+        LIMIT $2
       `,
-      [limit]
+      [['ENTITY_EXTRACTED', 'DIGESTING'], limit]
     );
 
     return result.rows.map(mapArticle);
+  }
+
+  async claimArticleForDigest(articleId: string): Promise<void> {
+    await this.updateProcessingStatus(articleId, 'DIGESTING');
   }
 
   async saveArticleDigest(

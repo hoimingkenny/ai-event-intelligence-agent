@@ -57,6 +57,9 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
         </Link>
         <p className="page-kicker">Workspace article</p>
         <h1 className="page-title">{article.title || 'Untitled article'}</h1>
+        <p className="page-lede">
+          <span className="chip">{article.processingStatus}</span>
+        </p>
 
         <WorkspaceNav active="triage" />
 
