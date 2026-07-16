@@ -114,23 +114,28 @@ export function compactLlmDigest(
   if (classification === null || classification === undefined) {
     return {
       digest: null,
-      emptyReason: `No LLM classification yet (status: ${processingStatus}).`,
+      emptyReason: `No LLM digest yet (status: ${processingStatus}).`,
     };
   }
 
   if (typeof classification === 'object' && !Array.isArray(classification)) {
     const record = classification as Record<string, unknown>;
     const preferredKeys = [
+      'relatedToMonitoredInventory',
+      'incidentSummary',
+      'matchedVendors',
+      'matchedProducts',
+      'cves',
+      'confidence',
+      'reasoning',
       'summary',
       'eventSummary',
       'headline',
       'relevance',
       'severity',
       'urgency',
-      'confidence',
       'affectedVendors',
       'affectedProducts',
-      'cves',
     ];
     const compact: Record<string, unknown> = {};
     for (const key of preferredKeys) {
@@ -488,7 +493,7 @@ export async function getArticlePeek(
         : truncateArticleExcerpt(null, null);
 
   const { digest, emptyReason } = compactLlmDigest(
-    detail.llmClassification,
+    detail.llmArticleDigest ?? detail.llmClassification,
     detail.processingStatus
   );
 

@@ -3,7 +3,12 @@ import { model } from '../config/llm.js';
 import { ArticleRepository } from '../db/repositories/article.repository.js';
 import { LlmAuditRepository } from '../db/repositories/llm-audit.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
-import { classifyCyberArticle } from '../llm/cyber-classifier.js';
+import {
+  ARTICLE_DIGEST_PROMPT_VERSION,
+  digestArticleAgainstInventory,
+} from '../llm/article-digest.js';
+import { loadMonitoredInventoryFromDb } from '../storage/monitoredInventoryStore.js';
+import type { VendorProduct } from '../types/domain.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import type { PipelineProfile } from './profile.js';
 
@@ -21,6 +26,7 @@ export async function runArticleDigestStage(
     profile?: PipelineProfile;
     includeLlm?: boolean;
     concurrency?: number;
+    inventory?: VendorProduct[];
   } = {}
 ): Promise<DigestStageResult> {
   const articles = new ArticleRepository(db);
@@ -29,6 +35,8 @@ export async function runArticleDigestStage(
   const includeLlm = options.includeLlm ?? Boolean(env.minimaxApiKey);
   const concurrency = options.concurrency ?? env.llmConcurrency;
   const candidates = await articles.listArticlesNeedingDigest(options.limit ?? 20);
+  const inventory =
+    options.inventory ?? (await loadMonitoredInventoryFromDb(db));
 
   let digested = 0;
   let skipped = 0;
@@ -41,7 +49,7 @@ export async function runArticleDigestStage(
   await runWithConcurrency(candidates, concurrency, async (article) => {
     await articles.claimArticleForDigest(article.id);
     try {
-      const digest = await classifyCyberArticle(article);
+      const digest = await digestArticleAgainstInventory(article, inventory);
       await articles.saveArticleDigest(article.id, digest, {
         terminal: profile === 'analyst-eval',
       });
@@ -50,8 +58,8 @@ export async function runArticleDigestStage(
         targetId: article.id,
         taskName: 'article_digest',
         model,
-        promptVersion: 'cyber-classifier-v1',
-        requestJson: { articleId: article.id },
+        promptVersion: ARTICLE_DIGEST_PROMPT_VERSION,
+        requestJson: { articleId: article.id, inventorySize: inventory.length },
         responseJson: digest,
         validationStatus: 'valid',
       });
@@ -63,8 +71,8 @@ export async function runArticleDigestStage(
         targetId: article.id,
         taskName: 'article_digest',
         model,
-        promptVersion: 'cyber-classifier-v1',
-        requestJson: { articleId: article.id },
+        promptVersion: ARTICLE_DIGEST_PROMPT_VERSION,
+        requestJson: { articleId: article.id, inventorySize: inventory.length },
         validationStatus: 'error',
         errorMessage: error instanceof Error ? error.message : String(error),
       });

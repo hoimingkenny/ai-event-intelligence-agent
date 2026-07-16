@@ -31,6 +31,17 @@ export const CyberClassificationSchema = z.object({
   reasoning: z.string().min(1),
 });
 
+/** Per-article LLM digest vs monitored inventory (analyst-eval). */
+export const ArticleDigestSchema = z.object({
+  relatedToMonitoredInventory: z.boolean(),
+  incidentSummary: z.string().min(1).nullable(),
+  cves: z.array(z.string()),
+  matchedVendors: z.array(z.string()),
+  matchedProducts: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+  reasoning: z.string().min(1),
+});
+
 export const EventComparisonSchema = z.object({
   relationship: z.enum(['same_event', 'related_but_different_event', 'unrelated']),
   confidence: z.number().min(0).max(1),
@@ -136,6 +147,7 @@ export const GoldIncidentAssistSchema = z.object({
 });
 
 export type CyberClassification = z.infer<typeof CyberClassificationSchema>;
+export type ArticleDigest = z.infer<typeof ArticleDigestSchema>;
 export type EventComparison = z.infer<typeof EventComparisonSchema>;
 export type EventSummary = z.infer<typeof EventSummarySchema>;
 export type GoldIncidentAssist = z.infer<typeof GoldIncidentAssistSchema>;

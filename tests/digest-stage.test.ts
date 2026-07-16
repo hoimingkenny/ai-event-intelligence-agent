@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Queryable } from '../src/db/repositories/types.js';
+import type { VendorProduct } from '../src/types/domain.js';
 
-const classifyCyberArticle = vi.fn();
+const digestArticleAgainstInventory = vi.fn();
 
-vi.mock('../src/llm/cyber-classifier.js', () => ({ classifyCyberArticle }));
+vi.mock('../src/llm/article-digest.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/llm/article-digest.js')>();
+  return {
+    ...actual,
+    digestArticleAgainstInventory,
+  };
+});
 
 const { runArticleDigestStage } = await import('../src/pipeline/digest-stage.js');
 
@@ -38,25 +45,35 @@ const articleRow = {
   processing_status: 'ENTITY_EXTRACTED',
 };
 
+const inventory: VendorProduct[] = [
+  {
+    id: 'vp_cyberark_pas',
+    vendor: 'CyberArk',
+    product: 'Privileged Access Security',
+    aliases: ['PAS'],
+    criticality: 'critical',
+    inProduction: true,
+    newsVolume: 'quiet',
+  },
+];
+
 const digestPayload = {
-  cyberRelevant: true,
-  eventType: 'vulnerability_disclosure',
-  severity: 'high',
-  urgency: 'P2',
-  confidence: 0.88,
-  vendorRoles: [{ vendor: 'CyberArk', role: 'affected', rationale: 'PAS mentioned.' }],
-  affectedProducts: ['PAS'],
+  relatedToMonitoredInventory: true,
+  incidentSummary: 'PAS vulnerability disclosure.',
   cves: ['CVE-2026-9999'],
-  reasoning: 'Clear vendor impact.',
+  matchedVendors: ['CyberArk'],
+  matchedProducts: ['Privileged Access Security'],
+  confidence: 0.88,
+  reasoning: 'Clear product advisory.',
 };
 
 describe('runArticleDigestStage', () => {
   beforeEach(() => {
-    classifyCyberArticle.mockReset();
+    digestArticleAgainstInventory.mockReset();
   });
 
   it('claims DIGESTING then persists DIGESTED on success in analyst-eval', async () => {
-    classifyCyberArticle.mockResolvedValueOnce(digestPayload);
+    digestArticleAgainstInventory.mockResolvedValueOnce(digestPayload);
 
     const statusUpdates: string[] = [];
     const savedDigests: unknown[] = [];
@@ -84,26 +101,25 @@ describe('runArticleDigestStage', () => {
       limit: 1,
       profile: 'analyst-eval',
       includeLlm: true,
+      inventory,
     });
 
     expect(result).toEqual({ reviewed: 1, digested: 1, skipped: 0, failed: 0 });
     expect(statusUpdates).toEqual(['DIGESTING', 'DIGESTED']);
-    expect(JSON.parse(String(savedDigests[0]))).toMatchObject({ eventType: 'vulnerability_disclosure' });
+    expect(JSON.parse(String(savedDigests[0]))).toMatchObject({
+      relatedToMonitoredInventory: true,
+      incidentSummary: 'PAS vulnerability disclosure.',
+    });
+    expect(digestArticleAgainstInventory).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '42' }),
+      inventory
+    );
     expect(audits[0]?.[2]).toBe('article_digest');
+    expect(audits[0]?.[4]).toBe('article-digest-v1');
   });
 
   it('keeps ENTITY_EXTRACTED status when digest runs in full profile', async () => {
-    classifyCyberArticle.mockResolvedValueOnce({
-      ...digestPayload,
-      eventType: 'active_exploitation',
-      severity: 'critical',
-      urgency: 'P1',
-      confidence: 0.9,
-      vendorRoles: [],
-      affectedProducts: [],
-      cves: [],
-      reasoning: 'Exploitation reported.',
-    });
+    digestArticleAgainstInventory.mockResolvedValueOnce(digestPayload);
 
     const statusUpdates: string[] = [];
     const db = scriptedDb([
@@ -121,13 +137,18 @@ describe('runArticleDigestStage', () => {
       { match: 'INSERT INTO llm_audit_logs', rows: [] },
     ]);
 
-    await runArticleDigestStage(db, { limit: 1, profile: 'full', includeLlm: true });
+    await runArticleDigestStage(db, {
+      limit: 1,
+      profile: 'full',
+      includeLlm: true,
+      inventory,
+    });
 
     expect(statusUpdates).toEqual(['DIGESTING', 'ENTITY_EXTRACTED']);
   });
 
   it('reverts to ENTITY_EXTRACTED when the LLM call fails', async () => {
-    classifyCyberArticle.mockRejectedValueOnce(new Error('timeout'));
+    digestArticleAgainstInventory.mockRejectedValueOnce(new Error('timeout'));
 
     const statusUpdates: string[] = [];
     const audits: unknown[][] = [];
@@ -145,6 +166,7 @@ describe('runArticleDigestStage', () => {
       limit: 1,
       profile: 'analyst-eval',
       includeLlm: true,
+      inventory,
     });
 
     expect(result).toEqual({ reviewed: 1, digested: 0, skipped: 0, failed: 1 });
@@ -155,10 +177,14 @@ describe('runArticleDigestStage', () => {
   it('skips LLM calls when includeLlm is false', async () => {
     const db = scriptedDb([{ match: 'llm_article_digest IS NULL', rows: [articleRow] }]);
 
-    const result = await runArticleDigestStage(db, { limit: 1, includeLlm: false });
+    const result = await runArticleDigestStage(db, {
+      limit: 1,
+      includeLlm: false,
+      inventory,
+    });
 
     expect(result).toEqual({ reviewed: 1, digested: 0, skipped: 1, failed: 0 });
-    expect(classifyCyberArticle).not.toHaveBeenCalled();
+    expect(digestArticleAgainstInventory).not.toHaveBeenCalled();
   });
 
   it('runs digests with bounded concurrency', async () => {
@@ -166,22 +192,12 @@ describe('runArticleDigestStage', () => {
     let inFlight = 0;
     let maxInFlight = 0;
 
-    classifyCyberArticle.mockImplementation(async () => {
+    digestArticleAgainstInventory.mockImplementation(async () => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 20));
       inFlight -= 1;
-      return {
-        cyberRelevant: true,
-        eventType: 'vulnerability_disclosure',
-        severity: 'medium',
-        urgency: 'P3',
-        confidence: 0.7,
-        vendorRoles: [],
-        affectedProducts: [],
-        cves: [],
-        reasoning: 'ok',
-      };
+      return digestPayload;
     });
 
     const db = scriptedDb([
@@ -196,10 +212,11 @@ describe('runArticleDigestStage', () => {
       profile: 'analyst-eval',
       includeLlm: true,
       concurrency: 2,
+      inventory,
     });
 
     expect(result).toEqual({ reviewed: 5, digested: 5, skipped: 0, failed: 0 });
     expect(maxInFlight).toBe(2);
-    expect(classifyCyberArticle).toHaveBeenCalledTimes(5);
+    expect(digestArticleAgainstInventory).toHaveBeenCalledTimes(5);
   });
 });

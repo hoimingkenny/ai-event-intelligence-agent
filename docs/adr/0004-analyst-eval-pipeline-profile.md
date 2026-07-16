@@ -77,6 +77,8 @@ Profile selection is explicit in code (`runPipeline({ profile: 'analyst-eval' | 
 
 **Independence from entities:** Deterministic entity extraction and LLM digest are parallel signal layers for analyst comparison. No entity→LLM prompt injection and no post-digest entity reconciliation in `analyst-eval`.
 
+**Inventory-aware digest (v1):** Digest uses a dedicated prompt/schema (`article-digest-v1`), not `CyberClassificationSchema`. The prompt receives the live active monitored inventory (`vendor`, `product`, `aliases`) as a closed list. Output is slim: `relatedToMonitoredInventory`, `incidentSummary`, `cves`, `matchedVendors`, `matchedProducts`, `confidence`, `reasoning`. Relevance definition B: vulnerability / incident / attack / product advisory related to inventory (exploitation not required). Unrelated → empty summary/CVEs/matches. Matches are post-filtered to inventory names. Old digest JSON rows are left as-is.
+
 **Audit:** Log LLM calls to `llm_audit_logs` with a distinct `task_name` (e.g. `article_digest`).
 
 ## Workspace UI

@@ -30,7 +30,7 @@ describe('compactLlmDigest', () => {
   it('returns null when classification is missing', () => {
     expect(compactLlmDigest(null, 'CLASSIFIED')).toEqual({
       digest: null,
-      emptyReason: 'No LLM classification yet (status: CLASSIFIED).',
+      emptyReason: 'No LLM digest yet (status: CLASSIFIED).',
     });
   });
 
@@ -80,7 +80,16 @@ describe('getArticlePeek', () => {
             extraction_status: 'ok',
             rss_summary: 'Short RSS',
             clean_text: clean,
-            llm_classification: { summary: 'Actively exploited PAS issue', severity: 'high' },
+            llm_article_digest: {
+              relatedToMonitoredInventory: true,
+              incidentSummary: 'Actively exploited PAS issue',
+              cves: ['CVE-2026-1'],
+              matchedVendors: ['CyberArk'],
+              matchedProducts: ['Privileged Access Security'],
+              confidence: 0.9,
+              reasoning: 'PAS exploitation.',
+            },
+            llm_classification: null,
             cheap_filter_matched_signals: {
               vendors: ['CyberArk'],
               products: [],
@@ -134,6 +143,7 @@ describe('getArticlePeek', () => {
             extraction_status: 'ok',
             rss_summary: 'RSS',
             clean_text: null,
+            llm_article_digest: null,
             llm_classification: null,
             cheap_filter_matched_signals: null,
           },
@@ -146,7 +156,7 @@ describe('getArticlePeek', () => {
     expect(peek?.excerpt).toBe('RSS');
     expect(peek?.bodySource).toBe('rssSummary');
     expect(peek?.llmDigest).toBeNull();
-    expect(peek?.llmEmptyReason).toMatch(/No LLM classification yet/);
+    expect(peek?.llmEmptyReason).toMatch(/No LLM digest yet/);
   });
 });
 
