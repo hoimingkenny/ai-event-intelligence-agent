@@ -39,6 +39,8 @@ export interface WorkspaceArticleDetail {
   extractionMethod: string | null;
   bodyText: string | null;
   bodySource: 'cleanText' | 'rssSummary' | null;
+  cheapFilterDecision: string | null;
+  llmArticleDigest: unknown;
   llmClassification: unknown;
   filterSignals: FilterSignalBlock;
   extractedEntities: Array<{
@@ -402,13 +404,16 @@ export async function getWorkspaceArticle(
     extraction_method: string | null;
     rss_summary: string | null;
     clean_text: string | null;
+    llm_article_digest: unknown;
     llm_classification: unknown;
+    cheap_filter_decision: string | null;
     cheap_filter_matched_signals: unknown;
   }>(
     `
       SELECT a.id, a.title, a.source_name, a.canonical_url, a.published_at, a.fetched_at,
         a.processing_status, a.extraction_status, a.extraction_method,
-        a.rss_summary, a.clean_text, a.llm_classification, a.cheap_filter_matched_signals
+        a.rss_summary, a.clean_text, a.llm_article_digest, a.llm_classification,
+        a.cheap_filter_decision, a.cheap_filter_matched_signals
       FROM articles a
       WHERE a.id = $1
     `,
@@ -453,6 +458,8 @@ export async function getWorkspaceArticle(
     extractionMethod: row.extraction_method,
     bodyText,
     bodySource,
+    cheapFilterDecision: row.cheap_filter_decision,
+    llmArticleDigest: row.llm_article_digest ?? null,
     llmClassification: row.llm_classification ?? null,
     filterSignals: filterSignalsFromMatched(row.cheap_filter_matched_signals),
     extractedEntities: entities.rows.map((e) => ({

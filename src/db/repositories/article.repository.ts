@@ -150,6 +150,42 @@ export class ArticleRepository {
     return result.rows[0] ? mapArticle(result.rows[0]) : null;
   }
 
+  async listArticlesNeedingDigest(limit = 50): Promise<ArticleRecord[]> {
+    const result = await this.db.query<ArticleRow>(
+      `
+        SELECT id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
+          rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method,
+          extraction_error, processing_status
+        FROM articles
+        WHERE processing_status = 'ENTITY_EXTRACTED'
+          AND llm_article_digest IS NULL
+        ORDER BY published_at DESC NULLS LAST, fetched_at ASC, id ASC
+        LIMIT $1
+      `,
+      [limit]
+    );
+
+    return result.rows.map(mapArticle);
+  }
+
+  async saveArticleDigest(
+    articleId: string,
+    digest: unknown,
+    options: { terminal: boolean }
+  ): Promise<void> {
+    await this.db.query(
+      `
+        UPDATE articles
+        SET llm_article_digest = $2::jsonb,
+          processing_status = $3,
+          last_processed_at = now(),
+          updated_at = now()
+        WHERE id = $1
+      `,
+      [articleId, JSON.stringify(digest), options.terminal ? 'DIGESTED' : 'ENTITY_EXTRACTED']
+    );
+  }
+
   async listByProcessingStatus(status: string, limit = 50): Promise<ArticleRecord[]> {
     const result = await this.db.query<ArticleRow>(
       `

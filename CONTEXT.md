@@ -73,8 +73,20 @@ A slide-over drawer on the needs-triage list that shows a short excerpt, cheap-f
 _Avoid_: Human review, quick review, workspace human review
 
 **Workspace article**:
-The analyst-only full article page under the workspace (`/workspace/articles/[id]`) with extracted text, full LLM classification, signal blocks, and pipeline meta — separate from the public catalogue article page.
+The analyst-only full article page under the workspace (`/workspace/articles/[id]`) with extracted text, cheap-filter decision, filter signals, extracted entities, per-article LLM digest, full LLM classification (when grouped), and pipeline meta — separate from the public catalogue article page.
 _Avoid_: Public article page, human review case
+
+**Pipeline profile**:
+Named orchestration mode for `runPipeline`: `analyst-eval` (default) stops after per-article LLM digest with advisory cheap filter; `full` runs embeddings, dedup, event grouping, classification, summaries, and alerts.
+_Avoid_: Env flag soup, stage deletion
+
+**LLM article digest**:
+Structured per-article LLM signal extraction (`articles.llm_article_digest`) produced after extraction/entities, before embeddings. Distinct from post-grouping `llm_classification`.
+_Avoid_: LLM classification, event summary
+
+**Advisory cheap filter**:
+Cheap-filter mode that persists `cheap_filter_*` fields but never sets `IGNORED`; DROP articles still route to extraction for analyst comparison.
+_Avoid_: Gating filter, IGNORED
 
 **Human review**:
 Post-hoc analyst judgements on pipeline output (relevance, vendor impact, grouping, alerts, etc.) captured in the review dashboard for quality and eval — not the act of putting an article onto a canonical event.

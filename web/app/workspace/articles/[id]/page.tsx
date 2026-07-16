@@ -117,6 +117,10 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
           </h2>
           <dl className="kv-grid">
             <div>
+              <dt>Cheap filter</dt>
+              <dd>{article.cheapFilterDecision ?? '—'}</dd>
+            </div>
+            <div>
               <dt>Vendors</dt>
               <dd>{formatSignalList(article.filterSignals.vendors)}</dd>
             </div>
@@ -138,6 +142,19 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
             Extracted entities
           </h2>
           <WorkspaceEntityList entities={article.extractedEntities} />
+
+          <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
+            LLM digest (post-extraction)
+          </h2>
+          {article.llmArticleDigest == null ? (
+            <p className="meta">
+              No LLM digest yet (status: {article.processingStatus}).
+            </p>
+          ) : (
+            <pre className="workspace-article-body">
+              {JSON.stringify(article.llmArticleDigest, null, 2)}
+            </pre>
+          )}
 
           <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
             LLM classification

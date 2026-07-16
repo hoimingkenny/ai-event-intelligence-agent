@@ -106,6 +106,30 @@ describe('cheap filter stage', () => {
     ]);
     expect(db.statusUpdates[2].error).toContain('cheap_filter_insufficient_rss_signal');
   });
+
+  it('routes DROP to low-priority extraction in advisory mode without IGNORED', async () => {
+    const db = new CheapFilterDb();
+
+    const result = await runCheapFilterStage(db, {
+      limit: 3,
+      inventory: loadMonitoredVendors(),
+      mode: 'advisory',
+    });
+
+    expect(result).toEqual({
+      reviewed: 3,
+      extractionPending: 1,
+      extractionPendingLowPriority: 2,
+      ignored: 0,
+    });
+    expect(db.cheapFilterDecisions).toEqual(['KEEP', 'MAYBE_KEEP', 'DROP']);
+    expect(db.statusUpdates.map((update) => update.status)).toEqual([
+      'EXTRACTION_PENDING',
+      'EXTRACTION_PENDING_LOW_PRIORITY',
+      'EXTRACTION_PENDING_LOW_PRIORITY',
+    ]);
+    expect(db.statusUpdates.some((update) => update.status === 'IGNORED')).toBe(false);
+  });
 });
 
 describe('extraction priority', () => {
