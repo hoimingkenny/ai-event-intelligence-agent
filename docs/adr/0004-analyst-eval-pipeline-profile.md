@@ -69,9 +69,9 @@ Profile selection is explicit in code (`runPipeline({ profile: 'analyst-eval' | 
 
 **In-flight status:** Claim sets `processing_status = 'DIGESTING'` before the LLM call. Success in `analyst-eval` → `DIGESTED`; success in `full` → back to `ENTITY_EXTRACTED` for embeddings. Failure reverts to `ENTITY_EXTRACTED`. Candidates include both `ENTITY_EXTRACTED` and `DIGESTING` with null digest so crashed claims are retried.
 
-**Input:** Article record text — `title`, `sourceName`, `rssSummary`, `cleanText` (same payload as `classifyCyberArticle` today). **No** `article_entities` rows in the prompt.
+**Input:** Article record text — `title`, `sourceName`, `rssSummary`, `cleanText` — plus the live active monitored inventory (`vendor`, `product`, `aliases`). **No** `article_entities` rows in the prompt.
 
-**Output schema:** Reuse existing `CyberClassificationSchema` / `classifyCyberArticle` (`eventType`, `vendorRoles`, `affectedProducts`, `cves`, `severity`, `urgency`, `confidence`, `reasoning`, etc.).
+**Output schema:** Dedicated `ArticleDigestSchema` / `article-digest-v2` (not `CyberClassificationSchema`). See **Inventory-aware digest (v2)** below. Post-grouping `classifyCyberArticle` remains for the `full` profile only.
 
 **Storage:** New `articles.llm_article_digest JSONB` column. Separate from `articles.llm_classification`, which remains reserved for the post-grouping event-assessment path in `full` profile.
 
