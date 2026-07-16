@@ -67,6 +67,11 @@ export class ArticleRepository {
   constructor(private readonly db: Queryable) {}
 
   async insertDiscoveredArticle(input: ArticleMetadataInput): Promise<ArticleUpsertResult> {
+    const existing = await this.findByCanonicalUrl(input.canonicalUrl);
+    if (existing) {
+      return { article: existing, created: false };
+    }
+
     const inserted = await this.db.query<ArticleRow>(
       `
         INSERT INTO articles (
@@ -82,7 +87,6 @@ export class ArticleRepository {
           processing_status
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'NEW')
-        ON CONFLICT (canonical_url) DO NOTHING
         RETURNING id, feed_id, source_name, title, canonical_url, url_hash, title_hash, content_hash,
           rss_summary, rss_categories, clean_text, published_at, extraction_status, extraction_method, extraction_error,
           processing_status
@@ -104,12 +108,7 @@ export class ArticleRepository {
       return { article: mapArticle(inserted.rows[0]), created: true };
     }
 
-    const existing = await this.findByCanonicalUrl(input.canonicalUrl);
-    if (!existing) {
-      throw new Error(`Article conflict not found for canonical URL: ${input.canonicalUrl}`);
-    }
-
-    return { article: existing, created: false };
+    throw new Error(`Article insert failed for canonical URL: ${input.canonicalUrl}`);
   }
 
   async findByIds(articleIds: string[]): Promise<ArticleRecord[]> {
