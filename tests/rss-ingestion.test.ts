@@ -151,6 +151,65 @@ describe.skipIf(!databaseUrl)('ingestRssFeeds', () => {
     expect(categories.rows[0].rss_categories).toEqual(['Vulnerabilities']);
   });
 
+  it('does not advance the next stored article id when duplicate feed items are re-seen', async () => {
+    const feeds = new FeedRepository(pool);
+    const feedUrl = `https://example.test/${runId}/sequence-check.xml`;
+    await feeds.upsertFeed({
+      sourceName: `${runId} Sequence Feed`,
+      feedUrl,
+      sourceType: 'rss',
+    });
+
+    const duplicateFetcher = new FixtureFetcher([
+      {
+        title: 'Seed article',
+        link: `https://example.test/${runId}/sequence/article-1`,
+        contentSnippet: 'First version.',
+        isoDate: '2026-06-27T12:00:00.000Z',
+      },
+    ]);
+
+    const firstRun = await ingestRssFeeds(pool, {
+      fetcher: duplicateFetcher,
+      feedUrls: [feedUrl],
+    });
+    const secondRun = await ingestRssFeeds(pool, {
+      fetcher: duplicateFetcher,
+      feedUrls: [feedUrl],
+    });
+
+    expect(firstRun.created).toBe(1);
+    expect(secondRun.created).toBe(0);
+    expect(secondRun.duplicates).toBe(1);
+
+    const newArticleRun = await ingestRssFeeds(pool, {
+      fetcher: new FixtureFetcher([
+        {
+          title: 'Second article',
+          link: `https://example.test/${runId}/sequence/article-2`,
+          contentSnippet: 'Second version.',
+          isoDate: '2026-06-27T13:00:00.000Z',
+        },
+      ]),
+      feedUrls: [feedUrl],
+    });
+
+    expect(newArticleRun.created).toBe(1);
+
+    const rows = await pool.query<{ id: string; canonical_url: string }>(
+      `
+        SELECT id, canonical_url
+        FROM articles
+        WHERE canonical_url LIKE $1
+        ORDER BY id ASC
+      `,
+      [`https://example.test/${runId}/sequence/%`]
+    );
+
+    expect(rows.rows).toHaveLength(2);
+    expect(Number(rows.rows[1]!.id)).toBe(Number(rows.rows[0]!.id) + 1);
+  });
+
   it('assigns smaller article ids to older items across the whole ingest batch', async () => {
     const feeds = new FeedRepository(pool);
     // source_name ASC: A Feed before B Feed (matches listActiveFeeds order).
