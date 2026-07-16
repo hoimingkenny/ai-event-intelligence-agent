@@ -63,6 +63,9 @@ const digestPayload = {
   cves: ['CVE-2026-9999'],
   matchedVendors: ['CyberArk'],
   matchedProducts: ['Privileged Access Security'],
+  mentionedVendors: ['CyberArk'],
+  mentionedProducts: ['Privileged Access Security'],
+  affectedOrganizations: [],
   confidence: 0.88,
   reasoning: 'Clear product advisory.',
 };
@@ -115,7 +118,7 @@ describe('runArticleDigestStage', () => {
       inventory
     );
     expect(audits[0]?.[2]).toBe('article_digest');
-    expect(audits[0]?.[4]).toBe('article-digest-v1');
+    expect(audits[0]?.[4]).toBe('article-digest-v2');
   });
 
   it('keeps ENTITY_EXTRACTED status when digest runs in full profile', async () => {

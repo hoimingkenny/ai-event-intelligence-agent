@@ -38,6 +38,9 @@ export const ArticleDigestSchema = z.object({
   cves: z.array(z.string()),
   matchedVendors: z.array(z.string()),
   matchedProducts: z.array(z.string()),
+  mentionedVendors: z.array(z.string()),
+  mentionedProducts: z.array(z.string()),
+  affectedOrganizations: z.array(z.string()),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1),
 });

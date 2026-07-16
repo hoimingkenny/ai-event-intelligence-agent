@@ -46,8 +46,21 @@ const article: ArticleRecord = {
   processingStatus: 'ENTITY_EXTRACTED',
 };
 
+const relatedPayload = {
+  relatedToMonitoredInventory: true,
+  incidentSummary: 'PAS vulnerability disclosure.',
+  cves: ['CVE-2026-1234'],
+  matchedVendors: ['CyberArk'],
+  matchedProducts: ['Privileged Access Security'],
+  mentionedVendors: ['CyberArk'],
+  mentionedProducts: ['Privileged Access Security'],
+  affectedOrganizations: [],
+  confidence: 0.9,
+  reasoning: 'Product advisory for monitored PAS.',
+};
+
 describe('digestArticleAgainstInventory', () => {
-  it('includes inventory and asks for slim related/summary/CVE fields', async () => {
+  it('includes inventory and asks for open-world actor fields', async () => {
     let systemPrompt = '';
     let userPrompt = '';
 
@@ -55,52 +68,50 @@ describe('digestArticleAgainstInventory', () => {
       call: async (system, user) => {
         systemPrompt = system;
         userPrompt = user;
-        return {
-          relatedToMonitoredInventory: true,
-          incidentSummary: 'PAS vulnerability disclosure.',
-          cves: ['CVE-2026-1234'],
-          matchedVendors: ['CyberArk'],
-          matchedProducts: ['Privileged Access Security'],
-          confidence: 0.9,
-          reasoning: 'Product advisory for monitored PAS.',
-        };
+        return relatedPayload;
       },
     });
 
     expect(systemPrompt).toContain('relatedToMonitoredInventory');
-    expect(systemPrompt).toContain('incidentSummary');
+    expect(systemPrompt).toContain('mentionedVendors');
+    expect(systemPrompt).toContain('affectedOrganizations');
     expect(systemPrompt).toContain('closed monitored inventory');
     expect(userPrompt).toContain('CyberArk');
     expect(userPrompt).toContain('Privileged Access Security');
-    expect(userPrompt).toContain('CyberArk PAS');
   });
 
-  it('normalizes unrelated digests to empty match fields', () => {
+  it('keeps summary/CVEs/open-world actors when unrelated; clears inventory matches', () => {
     const normalized = normalizeArticleDigest(
       {
         relatedToMonitoredInventory: false,
-        incidentSummary: 'should clear',
-        cves: ['CVE-2026-1'],
+        incidentSummary: 'AcmeCorp VPN zero-day exploited.',
+        cves: ['CVE-2026-1111'],
         matchedVendors: ['CyberArk'],
         matchedProducts: ['PAS'],
-        confidence: 0.4,
-        reasoning: 'Trend piece only.',
+        mentionedVendors: ['AcmeCorp'],
+        mentionedProducts: ['Acme VPN'],
+        affectedOrganizations: ['Contoso'],
+        confidence: 0.7,
+        reasoning: 'Not in our monitored inventory.',
       },
       inventory
     );
 
     expect(normalized).toEqual({
       relatedToMonitoredInventory: false,
-      incidentSummary: null,
-      cves: [],
+      incidentSummary: 'AcmeCorp VPN zero-day exploited.',
+      cves: ['CVE-2026-1111'],
       matchedVendors: [],
       matchedProducts: [],
-      confidence: 0.4,
-      reasoning: 'Trend piece only.',
+      mentionedVendors: ['AcmeCorp'],
+      mentionedProducts: ['Acme VPN'],
+      affectedOrganizations: ['Contoso'],
+      confidence: 0.7,
+      reasoning: 'Not in our monitored inventory.',
     });
   });
 
-  it('maps aliases to canonical inventory product names and drops unknowns', () => {
+  it('maps aliases to canonical inventory product names and drops unknowns from matched*', () => {
     const normalized = normalizeArticleDigest(
       {
         relatedToMonitoredInventory: true,
@@ -108,6 +119,9 @@ describe('digestArticleAgainstInventory', () => {
         cves: ['cve-2026-1234', 'not-a-cve'],
         matchedVendors: ['cyberark', 'Contoso'],
         matchedProducts: ['PAS', 'Unknown Product'],
+        mentionedVendors: ['CyberArk', 'Contoso'],
+        mentionedProducts: ['PAS'],
+        affectedOrganizations: [],
         confidence: 0.8,
         reasoning: 'Alias match.',
       },
@@ -117,25 +131,33 @@ describe('digestArticleAgainstInventory', () => {
     expect(normalized.relatedToMonitoredInventory).toBe(true);
     expect(normalized.matchedVendors).toEqual(['CyberArk']);
     expect(normalized.matchedProducts).toEqual(['Privileged Access Security']);
+    expect(normalized.mentionedVendors).toEqual(['CyberArk', 'Contoso']);
     expect(normalized.cves).toEqual(['CVE-2026-1234']);
   });
 
-  it('forces unrelated when no inventory matches survive filtering', () => {
+  it('forces unrelated when no inventory matches survive filtering but keeps open-world fields', () => {
     const normalized = normalizeArticleDigest(
       {
         relatedToMonitoredInventory: true,
-        incidentSummary: 'Something',
-        cves: ['CVE-2026-1'],
+        incidentSummary: 'Widget zero-day at Contoso',
+        cves: ['CVE-2026-0001'],
         matchedVendors: ['Contoso'],
         matchedProducts: ['Widget'],
+        mentionedVendors: ['Contoso Soft'],
+        mentionedProducts: ['Widget'],
+        affectedOrganizations: ['Contoso'],
         confidence: 0.7,
-        reasoning: 'Hallucinated vendor.',
+        reasoning: 'Hallucinated inventory match.',
       },
       inventory
     );
 
     expect(normalized.relatedToMonitoredInventory).toBe(false);
-    expect(normalized.incidentSummary).toBeNull();
-    expect(normalized.cves).toEqual([]);
+    expect(normalized.incidentSummary).toBe('Widget zero-day at Contoso');
+    expect(normalized.cves).toEqual(['CVE-2026-0001']);
+    expect(normalized.matchedVendors).toEqual([]);
+    expect(normalized.matchedProducts).toEqual([]);
+    expect(normalized.mentionedVendors).toEqual(['Contoso Soft']);
+    expect(normalized.affectedOrganizations).toEqual(['Contoso']);
   });
 });
