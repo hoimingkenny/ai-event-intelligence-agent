@@ -139,6 +139,23 @@ export class DigestEvalRepository {
     return row ? mapRun(row) : null;
   }
 
+  async listFinishedRuns(options: { limit?: number } = {}): Promise<DigestEvalRunRecord[]> {
+    const limit = options.limit ?? 50;
+    const result = await this.db.query<RunRow>(
+      `
+        SELECT id, mode, prompt_version, model_name, gold_count, cli_args,
+          comparison_baseline_run_id, started_at, finished_at,
+          total_predictions_saved, total_predictions_failed
+        FROM digest_eval_runs
+        WHERE finished_at IS NOT NULL
+        ORDER BY finished_at DESC
+        LIMIT $1
+      `,
+      [limit]
+    );
+    return result.rows.map(mapRun);
+  }
+
   async savePrediction(input: {
     runId: string;
     articleId: string;
