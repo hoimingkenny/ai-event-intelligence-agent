@@ -371,6 +371,66 @@ a:hover {
   margin-top: 0.5rem;
 }
 
+.digest-gold-form fieldset.field {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.digest-gold-radio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.digest-gold-radio-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.digest-gold-check {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.digest-gold-cve-list {
+  list-style: none;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.digest-gold-cve-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.digest-gold-cve-row input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0.55rem 0.7rem;
+}
+
+.digest-gold-cve-row input.digest-gold-cve-invalid {
+  border-color: color-mix(in srgb, var(--danger, #b42318) 65%, var(--rule));
+}
+
+.digest-gold-cve-remove {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+}
+
 .publication-actions {
   margin-top: 1.5rem;
   padding-top: 1.25rem;

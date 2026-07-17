@@ -39,6 +39,7 @@
     "scheduler": "tsx scripts/run-scheduler.ts",
     "eval": "tsx scripts/run-eval.ts",
     "eval:cheap-filter": "tsx eval/scripts/run-cheap-filter-eval.ts",
+    "eval:digest": "tsx eval/scripts/run-digest-eval.ts",
     "eval:candidates": "tsx eval/scripts/harvest-candidates.ts",
     "articles:manual": "tsx eval/scripts/import-manual-articles.ts",
     "articles:manual:drop": "tsx eval/scripts/import-manual-articles.ts --file=eval/datasets/manual-drop-articles.jsonl",

@@ -84,6 +84,30 @@ _Avoid_: Env flag soup, stage deletion
 Structured per-article LLM assessment (`articles.llm_article_digest`) of whether the article is a vulnerability/incident/advisory related to the live monitored inventory, plus summary and CVEs. Distinct from post-grouping `llm_classification`. While the LLM call is in flight the article is `DIGESTING`; success in `analyst-eval` ends at `DIGESTED`. Stuck `DIGESTING` rows (crash) are reclaimed on the next digest pass.
 _Avoid_: LLM classification, event summary
 
+**Digest gold label**:
+A human ground-truth record for one article’s digest fields used as the eval scorecard: related-to-inventory, matched vendors, matched products, and CVEs. Includes a frozen copy of the article text and monitored inventory used at label time so later prompt comparisons stay reproducible. Stored in Postgres (not the cheap-filter JSONL datasets). Distinct from cheap-filter human labels and from grouping pair / gold-incident labels.
+_Avoid_: Classification label (ambiguous with post-grouping classification), digest verdict, LLM judge label
+
+**Digest relatedness**:
+The binary digest judgement whether the article is a vulnerability, incident, attack, or product advisory related to the monitored inventory (`relatedToMonitoredInventory`). Gate “classification F1” for digest eval is F1 on this bit versus the digest gold label.
+_Avoid_: Classification (post-grouping), cheap-filter decision, relevance (cheap-filter humanLabel scale)
+
+**Digest eval run**:
+A scored comparison of digest outputs against digest gold labels for a fixed article set — either the stored production digests (baseline) or a regenerated offline pass after a prompt change (comparison). Regenerated predictions are stored in Postgres eval-run tables keyed by prompt version; they do not overwrite `articles.llm_article_digest` unless an explicit production re-digest is run separately.
+_Avoid_: Pipeline run, prompt version alone, LLM judge report
+
+**Workspace digest eval**:
+The Workspace surfaces for digest gold labeling and reports: a dedicated eval queue plus save/edit on the workspace article page. Same gold store backs both; distinct from the legacy review-dashboard cheap-filter / grouping panes.
+_Avoid_: Human review dashboard eval tab (unless explicitly the :4321 surface), triage queue
+
+**Digest label assist**:
+An optional LLM (or stored-digest) draft of digest gold fields that a human Accepts or Edits before save. Never writes gold without explicit human confirmation.
+_Avoid_: Auto-label, LLM gold, agreement judge
+
+**Digest agreement report**:
+An on-demand LLM judge pass that compares a digest prediction (stored or regen run) to digest gold labels and summarizes per-field agreement. Diagnostic only — not a gate metric and never writes gold.
+_Avoid_: Gate metrics, digest eval run (regen predictions), label assist
+
 **Advisory cheap filter**:
 Cheap-filter mode that persists `cheap_filter_*` fields but never sets `IGNORED`; DROP articles still route to extraction for analyst comparison.
 _Avoid_: Gating filter, IGNORED

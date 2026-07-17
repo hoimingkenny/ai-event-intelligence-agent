@@ -46,6 +46,7 @@ npm test                 # Run test suite (vitest)
 npm run eval             # Run labelled evaluation set
 
 npm run eval:cheap-filter   # Cheap-filter eval against labelled dataset (reports in eval/reports/)
+npm run eval:digest         # Digest eval baseline (stored digests vs gold); pass --regen for offline prompt comparison
 npm run eval:candidates     # Harvest labeling candidates from pipeline DB into eval/datasets/
 npm run articles:manual     # Import hand-authored test articles (eval/datasets/manual-articles.jsonl) into the DB + filter them
 npm run eval:review         # Labeling + report review UI for the cheap-filter dataset (:4323)
