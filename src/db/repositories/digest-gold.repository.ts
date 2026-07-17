@@ -202,4 +202,17 @@ export class DigestGoldRepository {
       labeledAt: row.updated_at,
     }));
   }
+
+  async listAllForEval(): Promise<DigestGoldLabelRecord[]> {
+    const result = await this.db.query<DigestGoldRow>(
+      `
+        SELECT id, article_id, related_to_monitored_inventory, matched_vendors,
+          matched_products, cves, human_reason, article_snapshot, inventory_snapshot,
+          labeled_by, created_at, updated_at
+        FROM digest_gold_labels
+        ORDER BY updated_at ASC, article_id ASC
+      `
+    );
+    return result.rows.map(mapRow);
+  }
 }
