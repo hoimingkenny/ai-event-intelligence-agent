@@ -4,6 +4,8 @@ import type { Queryable } from '../db/repositories/types.js';
 import type { VendorProduct } from '../types/domain.js';
 import {
   DIGEST_GOLD_CLEAN_TEXT_SLICE,
+  findInvalidCveEntries,
+  normalizeCveList,
   type DigestGoldArticleSnapshot,
   type DigestGoldFields,
 } from '../evaluation/digest/digest-gold-types.js';
@@ -13,7 +15,8 @@ export type DigestGoldWriteError =
   | 'article_not_eligible'
   | 'related_requires_inventory_match'
   | 'invalid_inventory_vendor'
-  | 'invalid_inventory_product';
+  | 'invalid_inventory_product'
+  | 'invalid_cve';
 
 export class DigestGoldWriteFailedError extends Error {
   constructor(public readonly code: DigestGoldWriteError, message?: string) {
@@ -32,16 +35,14 @@ function trimList(values: string[]): string[] {
 }
 
 function normalizeCves(values: string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const value of values) {
-    const match = value.trim().toUpperCase().match(/CVE-\d{4}-\d{4,}/);
-    if (!match) continue;
-    if (seen.has(match[0])) continue;
-    seen.add(match[0]);
-    out.push(match[0]);
+  const invalid = findInvalidCveEntries(values);
+  if (invalid.length > 0) {
+    throw new DigestGoldWriteFailedError(
+      'invalid_cve',
+      `Invalid CVE id(s): ${invalid.join(', ')}. Use CVE-YYYY-NNNNN.`
+    );
   }
-  return out;
+  return normalizeCveList(values);
 }
 
 function buildInventoryMaps(inventory: VendorProduct[]): {

@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { listActiveMonitoredInventory } from '../../../../../src/db/monitored-inventory';
-import { DIGEST_GOLD_CLEAN_TEXT_SLICE } from '../../../../../src/evaluation/digest/digest-gold-types';
+import {
+  DIGEST_GOLD_CLEAN_TEXT_SLICE,
+  findInvalidCveEntries,
+  normalizeCveList,
+} from '../../../../../src/evaluation/digest/digest-gold-types';
 import { proposeDigestGoldAssist } from '../../../../../src/evaluation/digest/digest-label-assist';
 import {
   DigestGoldWriteFailedError,
@@ -27,10 +31,15 @@ function parseList(value: FormDataEntryValue | null): string[] {
 
 function parseCves(value: FormDataEntryValue | null): string[] {
   if (typeof value !== 'string' || !value.trim()) return [];
-  return value
-    .split(/[\n,]+/)
+  const raw = value
+    .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+  const invalid = findInvalidCveEntries(raw);
+  if (invalid.length > 0) {
+    throw new DigestGoldWriteFailedError('invalid_cve');
+  }
+  return normalizeCveList(raw);
 }
 
 async function gateAnalyst(articleId: string) {

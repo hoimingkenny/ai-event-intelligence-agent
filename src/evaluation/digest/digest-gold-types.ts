@@ -32,3 +32,32 @@ export interface DigestGoldLabelRecord extends DigestGoldFields {
 export const DIGEST_GOLD_TARGET_COUNT = 50;
 
 export const DIGEST_GOLD_CLEAN_TEXT_SLICE = 12_000;
+
+/** Canonical CVE id: CVE-YYYY-NNNNN (4+ digits in the sequence). */
+export const CVE_ID_PATTERN = /^CVE-\d{4}-\d{4,}$/;
+
+export function normalizeCveId(value: string): string | null {
+  const trimmed = value.trim().toUpperCase();
+  if (!trimmed) return null;
+  return CVE_ID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+export function normalizeCveList(values: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = normalizeCveId(value);
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+export function findInvalidCveEntries(values: string[]): string[] {
+  return values
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .filter((value) => normalizeCveId(value) === null);
+}

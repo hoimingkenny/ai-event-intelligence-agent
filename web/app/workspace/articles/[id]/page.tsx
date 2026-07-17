@@ -35,6 +35,7 @@ const GOLD_ERROR_MESSAGES: Record<string, string> = {
     'Related gold must name at least one monitored vendor or product.',
   invalid_inventory_vendor: 'One or more vendors are not in the monitored inventory.',
   invalid_inventory_product: 'One or more products are not in the monitored inventory.',
+  invalid_cve: 'One or more CVE ids are invalid. Use CVE-YYYY-NNNNN.',
 };
 
 function initialDigestGoldFields(

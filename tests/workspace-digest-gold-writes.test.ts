@@ -166,6 +166,27 @@ describe('upsertDigestGold', () => {
     ).rejects.toMatchObject({ code: 'related_requires_inventory_match' });
   });
 
+  it('rejects invalid CVE ids', async () => {
+    db = makeScriptedDb([
+      { match: 'FROM articles', rows: [ARTICLE_ROW] },
+      { match: 'FROM vendor_products', rows: INVENTORY_ROWS },
+    ]);
+
+    await expect(
+      upsertDigestGold(
+        {
+          articleId: '42',
+          relatedToMonitoredInventory: false,
+          matchedVendors: [],
+          matchedProducts: [],
+          cves: ['not-a-cve'],
+          humanReason: null,
+        },
+        db
+      )
+    ).rejects.toMatchObject({ code: 'invalid_cve' });
+  });
+
   it('rejects unknown vendors when related', async () => {
     db = makeScriptedDb([
       { match: 'FROM articles', rows: [ARTICLE_ROW], repeat: true },
