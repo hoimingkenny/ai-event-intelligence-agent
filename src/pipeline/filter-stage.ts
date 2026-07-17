@@ -5,6 +5,7 @@ import { detectVendorsFromInventory } from '../detection/vendor-detector.js';
 import { loadMonitoredInventoryFromDb } from '../storage/monitoredInventoryStore.js';
 import type { Queryable } from '../db/repositories/types.js';
 import type { VendorProduct } from '../types/domain.js';
+import type { CheapFilterMode } from './profile.js';
 
 export type CheapFilterDecision = 'KEEP' | 'MAYBE_KEEP' | 'DROP';
 export type SourceTier =
@@ -250,10 +251,11 @@ function calculatePriorityScore(article: CheapFilterInput, signals: CheapFilterS
 
 export async function runCheapFilterStage(
   db: Queryable,
-  options: { limit?: number; inventory?: VendorProduct[] } = {}
+  options: { limit?: number; inventory?: VendorProduct[]; mode?: CheapFilterMode } = {}
 ): Promise<FilterStageResult> {
   const articles = new ArticleRepository(db);
   const inventory = options.inventory ?? (await loadMonitoredInventoryFromDb(db));
+  const mode = options.mode ?? 'gating';
   const candidates = await articles.listByProcessingStatus('NEW', options.limit ?? 50);
   let extractionPending = 0;
   let extractionPendingLowPriority = 0;
@@ -267,6 +269,9 @@ export async function runCheapFilterStage(
       await articles.updateProcessingStatus(article.id, 'EXTRACTION_PENDING');
       extractionPending += 1;
     } else if (decision.decision === 'MAYBE_KEEP') {
+      await articles.updateProcessingStatus(article.id, 'EXTRACTION_PENDING_LOW_PRIORITY');
+      extractionPendingLowPriority += 1;
+    } else if (mode === 'advisory') {
       await articles.updateProcessingStatus(article.id, 'EXTRACTION_PENDING_LOW_PRIORITY');
       extractionPendingLowPriority += 1;
     } else {

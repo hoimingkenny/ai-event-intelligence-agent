@@ -5,6 +5,7 @@ import { logInfo } from '../utils/logger.js';
 import { recordStageResult } from '../utils/metrics.js';
 import { runAlertStage } from './alert-stage.js';
 import { runClassificationStage } from './classification-stage.js';
+import { runArticleDigestStage } from './digest-stage.js';
 import { runDedupStage } from './dedup-stage.js';
 import { runEmbeddingStage } from './embedding-stage.js';
 import { runEntityStage } from './entity-stage.js';
@@ -16,11 +17,17 @@ import { runSummaryStage } from './summary-stage.js';
 import { ingestRssFeeds } from './ingest-stage.js';
 import { checkExtractionDrift } from '../monitoring/extraction-drift.js';
 import { checkAlertLatency } from '../monitoring/alert-latency.js';
+import {
+  cheapFilterModeForProfile,
+  DEFAULT_PIPELINE_PROFILE,
+  type PipelineProfile,
+} from './profile.js';
 
 export interface PipelineRunOptions {
   limit?: number;
   includeIngest?: boolean;
   includeLlm?: boolean;
+  profile?: PipelineProfile;
 }
 
 export interface PipelineRunResult {
@@ -28,13 +35,14 @@ export interface PipelineRunResult {
   filter: Awaited<ReturnType<typeof runCheapFilterStage>>;
   extraction: Awaited<ReturnType<typeof runExtractionStage>>;
   entities: Awaited<ReturnType<typeof runEntityStage>>;
-  articleEmbeddings: Awaited<ReturnType<typeof runEmbeddingStage>>;
-  dedup: Awaited<ReturnType<typeof runDedupStage>>;
-  events: Awaited<ReturnType<typeof runEventStage>>;
-  eventEmbeddings: Awaited<ReturnType<typeof runEventEmbeddingStage>>;
+  digest: Awaited<ReturnType<typeof runArticleDigestStage>>;
+  articleEmbeddings?: Awaited<ReturnType<typeof runEmbeddingStage>>;
+  dedup?: Awaited<ReturnType<typeof runDedupStage>>;
+  events?: Awaited<ReturnType<typeof runEventStage>>;
+  eventEmbeddings?: Awaited<ReturnType<typeof runEventEmbeddingStage>>;
   classification?: Awaited<ReturnType<typeof runClassificationStage>>;
   summaries?: Awaited<ReturnType<typeof runSummaryStage>>;
-  alerts: Awaited<ReturnType<typeof runAlertStage>>;
+  alerts?: Awaited<ReturnType<typeof runAlertStage>>;
 }
 
 /**
@@ -52,6 +60,7 @@ const PipelineStateAnnotation = Annotation.Root({
   filter: Annotation<PipelineRunResult['filter']>(),
   extraction: Annotation<PipelineRunResult['extraction']>(),
   entities: Annotation<PipelineRunResult['entities']>(),
+  digest: Annotation<PipelineRunResult['digest']>(),
   articleEmbeddings: Annotation<PipelineRunResult['articleEmbeddings']>(),
   dedup: Annotation<PipelineRunResult['dedup']>(),
   events: Annotation<PipelineRunResult['events']>(),
@@ -63,11 +72,16 @@ const PipelineStateAnnotation = Annotation.Root({
 
 type PipelineState = typeof PipelineStateAnnotation.State;
 
-export function buildPipelineGraph(
-  db: Queryable,
-  options: { limit: number; includeIngest: boolean; includeLlm: boolean }
-) {
-  const { limit, includeIngest, includeLlm } = options;
+interface GraphBuildOptions {
+  limit: number;
+  includeIngest: boolean;
+  includeLlm: boolean;
+  profile: PipelineProfile;
+}
+
+export function buildPipelineGraph(db: Queryable, options: GraphBuildOptions) {
+  const { limit, includeIngest, includeLlm, profile } = options;
+  const filterMode = cheapFilterModeForProfile(profile);
 
   const node =
     <K extends keyof PipelineState>(key: K, stageName: string, run: () => Promise<PipelineState[K]>) =>
@@ -81,15 +95,32 @@ export function buildPipelineGraph(
     .addNode('ingest_stage', node('ingest', 'ingest', async () =>
       includeIngest ? ingestRssFeeds(db, { limitFeeds: limit }) : undefined
     ))
-    .addNode('filter_stage', node('filter', 'filter', () => runCheapFilterStage(db, { limit })))
+    .addNode('filter_stage', node('filter', 'filter', () =>
+      runCheapFilterStage(db, { limit, mode: filterMode })
+    ))
     .addNode('extraction_stage', node('extraction', 'extraction', () => runExtractionStage(db, { limit })))
     .addNode('extraction_drift', async () => {
-      // Quality watchdog: a broken selector/site redesign is visible same-day.
       const drift = await checkExtractionDrift(db);
       recordAndLog('extraction_drift', { driftedSources: drift.driftedSources });
       return {};
     })
     .addNode('entities_stage', node('entities', 'entities', () => runEntityStage(db, { limit })))
+    .addNode('digest_stage', node('digest', 'article_digest', () =>
+      runArticleDigestStage(db, { limit, profile, includeLlm })
+    ))
+    .addEdge(START, 'ingest_stage')
+    .addEdge('ingest_stage', 'filter_stage')
+    .addEdge('filter_stage', 'extraction_stage')
+    .addEdge('extraction_stage', 'extraction_drift')
+    .addEdge('extraction_drift', 'entities_stage')
+    .addEdge('entities_stage', 'digest_stage');
+
+  if (profile === 'analyst-eval') {
+    graph.addEdge('digest_stage', END);
+    return graph.compile();
+  }
+
+  graph
     .addNode('article_embeddings', node('articleEmbeddings', 'article_embeddings', () =>
       runEmbeddingStage(db, { limit })
     ))
@@ -104,7 +135,6 @@ export function buildPipelineGraph(
     .addNode('summary_stage', node('summaries', 'summaries', () => runSummaryStage(db, { limit })))
     .addNode('alerts_stage', node('alerts', 'alerts', () => runAlertStage(db, { limit })))
     .addNode('alert_latency', async () => {
-      // Speed watchdog: publication → alert p50/p90 vs the 2h SLO.
       const latency = await checkAlertLatency(db);
       recordAndLog('alert_latency', {
         p50Hours: latency.p50Hours,
@@ -113,12 +143,7 @@ export function buildPipelineGraph(
       });
       return {};
     })
-    .addEdge(START, 'ingest_stage')
-    .addEdge('ingest_stage', 'filter_stage')
-    .addEdge('filter_stage', 'extraction_stage')
-    .addEdge('extraction_stage', 'extraction_drift')
-    .addEdge('extraction_drift', 'entities_stage')
-    .addEdge('entities_stage', 'article_embeddings')
+    .addEdge('digest_stage', 'article_embeddings')
     .addEdge('article_embeddings', 'dedup_stage')
     .addEdge('dedup_stage', 'events_stage')
     .addEdge('events_stage', 'event_embeddings')
@@ -138,10 +163,12 @@ export async function runPipeline(
   db: Queryable,
   options: PipelineRunOptions = {}
 ): Promise<PipelineRunResult> {
+  const profile = options.profile ?? DEFAULT_PIPELINE_PROFILE;
   const graph = buildPipelineGraph(db, {
     limit: options.limit ?? 20,
     includeIngest: options.includeIngest !== false,
     includeLlm: options.includeLlm ?? Boolean(env.minimaxApiKey),
+    profile,
   });
 
   const state = await graph.invoke({});
@@ -151,6 +178,7 @@ export async function runPipeline(
     filter: state.filter,
     extraction: state.extraction,
     entities: state.entities,
+    digest: state.digest,
     articleEmbeddings: state.articleEmbeddings,
     dedup: state.dedup,
     events: state.events,

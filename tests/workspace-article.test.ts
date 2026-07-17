@@ -35,6 +35,18 @@ describe('getWorkspaceArticle', () => {
             rss_summary: 'Short RSS',
             clean_text: 'Full extracted body about CyberArk PAS.',
             llm_classification: { relevance: 'high', summary: 'Ransomware on PAS' },
+            llm_article_digest: {
+              cyberRelevant: true,
+              eventType: 'ransomware',
+              severity: 'high',
+              urgency: 'P1',
+              confidence: 0.9,
+              vendorRoles: [{ vendor: 'CyberArk', role: 'affected', rationale: 'PAS targeted.' }],
+              affectedProducts: ['PAS'],
+              cves: ['CVE-2024-1'],
+              reasoning: 'Ransomware on PAS.',
+            },
+            cheap_filter_decision: 'KEEP',
             cheap_filter_matched_signals: {
               vendors: ['CyberArk'],
               products: [],
@@ -76,6 +88,18 @@ describe('getWorkspaceArticle', () => {
       extractionMethod: 'http',
       bodyText: 'Full extracted body about CyberArk PAS.',
       bodySource: 'cleanText',
+      cheapFilterDecision: 'KEEP',
+      llmArticleDigest: {
+        cyberRelevant: true,
+        eventType: 'ransomware',
+        severity: 'high',
+        urgency: 'P1',
+        confidence: 0.9,
+        vendorRoles: [{ vendor: 'CyberArk', role: 'affected', rationale: 'PAS targeted.' }],
+        affectedProducts: ['PAS'],
+        cves: ['CVE-2024-1'],
+        reasoning: 'Ransomware on PAS.',
+      },
       llmClassification: { relevance: 'high', summary: 'Ransomware on PAS' },
       filterSignals: {
         vendors: ['CyberArk'],
@@ -118,6 +142,8 @@ describe('getWorkspaceArticle', () => {
             rss_summary: 'RSS body only',
             clean_text: null,
             llm_classification: null,
+            llm_article_digest: null,
+            cheap_filter_decision: 'DROP',
             cheap_filter_matched_signals: null,
           },
         ],
@@ -132,6 +158,8 @@ describe('getWorkspaceArticle', () => {
 
     expect(article?.bodyText).toBe('RSS body only');
     expect(article?.bodySource).toBe('rssSummary');
+    expect(article?.cheapFilterDecision).toBe('DROP');
+    expect(article?.llmArticleDigest).toBeNull();
     expect(article?.llmClassification).toBeNull();
     expect(article?.filterSignals).toEqual({
       vendors: [],

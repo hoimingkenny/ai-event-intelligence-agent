@@ -19,6 +19,7 @@ export interface TriageListItem {
   canonicalUrl: string | null;
   sourceName: string | null;
   publishedAt: Date | null;
+  processingStatus: string;
   signals: TriageSignalSummary;
   draft: {
     primaryEventId: string;
@@ -39,6 +40,8 @@ export interface WorkspaceArticleDetail {
   extractionMethod: string | null;
   bodyText: string | null;
   bodySource: 'cleanText' | 'rssSummary' | null;
+  cheapFilterDecision: string | null;
+  llmArticleDigest: unknown;
   llmClassification: unknown;
   filterSignals: FilterSignalBlock;
   extractedEntities: Array<{
@@ -111,23 +114,31 @@ export function compactLlmDigest(
   if (classification === null || classification === undefined) {
     return {
       digest: null,
-      emptyReason: `No LLM classification yet (status: ${processingStatus}).`,
+      emptyReason: `No LLM digest yet (status: ${processingStatus}).`,
     };
   }
 
   if (typeof classification === 'object' && !Array.isArray(classification)) {
     const record = classification as Record<string, unknown>;
     const preferredKeys = [
+      'relatedToMonitoredInventory',
+      'incidentSummary',
+      'matchedVendors',
+      'matchedProducts',
+      'mentionedVendors',
+      'mentionedProducts',
+      'affectedOrganizations',
+      'cves',
+      'confidence',
+      'reasoning',
       'summary',
       'eventSummary',
       'headline',
       'relevance',
       'severity',
       'urgency',
-      'confidence',
       'affectedVendors',
       'affectedProducts',
-      'cves',
     ];
     const compact: Record<string, unknown> = {};
     for (const key of preferredKeys) {
@@ -372,6 +383,7 @@ export async function listArticlesNeedingTriagePage(
       canonicalUrl: row.canonicalUrl,
       sourceName: row.sourceName,
       publishedAt: row.publishedAt,
+      processingStatus: row.processingStatus,
       signals: summarizeTriageSignals(row.matchedSignals, entitiesByArticle.get(row.id) ?? []),
       draft:
         articleDrafts.length === 0
@@ -402,13 +414,16 @@ export async function getWorkspaceArticle(
     extraction_method: string | null;
     rss_summary: string | null;
     clean_text: string | null;
+    llm_article_digest: unknown;
     llm_classification: unknown;
+    cheap_filter_decision: string | null;
     cheap_filter_matched_signals: unknown;
   }>(
     `
       SELECT a.id, a.title, a.source_name, a.canonical_url, a.published_at, a.fetched_at,
         a.processing_status, a.extraction_status, a.extraction_method,
-        a.rss_summary, a.clean_text, a.llm_classification, a.cheap_filter_matched_signals
+        a.rss_summary, a.clean_text, a.llm_article_digest, a.llm_classification,
+        a.cheap_filter_decision, a.cheap_filter_matched_signals
       FROM articles a
       WHERE a.id = $1
     `,
@@ -453,6 +468,8 @@ export async function getWorkspaceArticle(
     extractionMethod: row.extraction_method,
     bodyText,
     bodySource,
+    cheapFilterDecision: row.cheap_filter_decision,
+    llmArticleDigest: row.llm_article_digest ?? null,
     llmClassification: row.llm_classification ?? null,
     filterSignals: filterSignalsFromMatched(row.cheap_filter_matched_signals),
     extractedEntities: entities.rows.map((e) => ({
@@ -479,7 +496,7 @@ export async function getArticlePeek(
         : truncateArticleExcerpt(null, null);
 
   const { digest, emptyReason } = compactLlmDigest(
-    detail.llmClassification,
+    detail.llmArticleDigest ?? detail.llmClassification,
     detail.processingStatus
   );
 

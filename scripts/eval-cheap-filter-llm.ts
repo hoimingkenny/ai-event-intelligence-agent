@@ -15,6 +15,7 @@ import {
   type CheapFilterEvalInput,
   type SourceTier,
 } from '../src/evaluation/cheap-filter/index.js';
+import { runWithConcurrency } from '../src/utils/concurrency.js';
 
 interface CliOptions {
   sampleSize: number;
@@ -60,7 +61,7 @@ function parseArgs(argv: string[]): CliOptions {
 
   const sampleSize = sampleSizeRaw ? Number(sampleSizeRaw) : 200;
   const sinceDays = sinceDaysRaw ? Number(sinceDaysRaw) : 30;
-  const concurrency = concurrencyRaw ? Number(concurrencyRaw) : env.llmConcurrency ?? 3;
+  const concurrency = concurrencyRaw ? Number(concurrencyRaw) : env.llmConcurrency ?? 5;
 
   if (!Number.isFinite(sampleSize) || sampleSize <= 0) {
     throw new Error(`--sample-size must be a positive integer (got ${sampleSizeRaw})`);
@@ -117,21 +118,6 @@ function toCliArgsRecord(options: CliOptions): Record<string, unknown> {
   };
 }
 
-async function runWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<void>
-): Promise<void> {
-  let cursor = 0;
-  async function next(): Promise<void> {
-    while (cursor < items.length) {
-      const idx = cursor++;
-      await worker(items[idx]);
-    }
-  }
-  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, () => next());
-  await Promise.all(workers);
-}
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));

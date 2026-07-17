@@ -295,6 +295,7 @@ describe('event editorial membership', () => {
                 title: 'Advisory about PAS',
                 canonical_url: 'https://example.com/a',
                 published_at: new Date('2026-07-14T01:00:00Z'),
+                processing_status: 'DIGESTED',
                 cheap_filter_matched_signals: null,
               },
             ] as T[],
@@ -319,6 +320,7 @@ describe('event editorial membership', () => {
     expect(page.items).toEqual([
       expect.objectContaining({
         id: '101',
+        processingStatus: 'DIGESTED',
         draft: null,
         signals: expect.objectContaining({
           hasVendorOrProduct: false,

@@ -13,7 +13,9 @@ Vendor Threat Watch is an AI-assisted cyber early-warning and vendor-impact tria
 ## Development Workflow (mandatory)
 
 1. **Never commit directly to `main`/`master`.** All changes go on a feature branch (`feat/…`, `fix/…`, `chore/…`, `docs/…`).
-2. **Before merging to `main`, write a code review document** in `docs/code-reviews/` (copy `docs/code-reviews/TEMPLATE.md`, name it `YYYY-MM-DD-<topic>.md`). Audience: senior developer. It must cover what changed and why, risks/behaviour changes, test evidence, and an explicit verdict. The review commit belongs on the same branch as the change.
+2. **Before merging to `main`, provide review evidence** in one of two forms:
+   - **Code review doc** (`docs/code-reviews/YYYY-MM-DD-<topic>.md`, copy `docs/code-reviews/TEMPLATE.md`) — required when the change alters runtime behaviour, pipeline defaults, data semantics (migrations), security/auth, or spans multiple subsystems in non-obvious ways. Audience: senior developer. Cover what changed and why, risks/behaviour changes, test evidence, and an explicit verdict. The review commit belongs on the same branch as the change.
+   - **PR-only review** — sufficient for docs-only, dependency bumps, small fixes, and UI-only changes where the PR description covers behaviour, risks, and test evidence (same template sections). An ADR or engineering note can substitute for the doc when it already records the architectural decision.
 3. Merge only after `npm run check` and `npm test` pass.
 
 ## Commands
@@ -25,9 +27,10 @@ docker compose up -d     # Postgres (pgvector); add `--profile queue` for Redis
 npm run db:migrate       # Apply SQL migrations (src/db/migrations/)
 npm run db:seed          # Seed feeds + monitored vendors
 
-npm run pipeline:run     # Full pipeline once (advisory-locked): ingest → filter →
-                         #   extract → entities → embed → dedup → events → classify → alerts
-npm run scheduler        # Internal loop: full pipeline every RSS_FETCH_INTERVAL_MINUTES
+npm run pipeline:run     # One pipeline run (advisory-locked). Default profile
+                         #   analyst-eval: ingest → filter → extract → entities → digest
+                         #   Pass --profile=full for embed → dedup → events → classify → alerts
+npm run scheduler        # Internal loop: default analyst-eval every RSS_FETCH_INTERVAL_MINUTES
 npm run worker           # BullMQ worker mode (needs Redis via `--profile queue`)
 npm run drift:check      # Per-source extraction quality report (exit 2 on drift)
 npm run latency:check    # Publication→alert p50/p90 vs 2h SLO (exit 2 on violation)
