@@ -53,6 +53,8 @@ qdrant_storage/
 eval/reports/*
 !eval/reports/.gitkeep
 reports/
+!web/app/workspace/eval/digest/reports/
+!web/app/workspace/eval/digest/reports/**
 
 # Claude local settings
 .claude/settings.local.json
