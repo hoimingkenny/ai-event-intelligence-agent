@@ -1,10 +1,16 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import {
+  CveCaseApproveAction,
+  CveCaseReviewArticleAction,
+} from '../../../../components/CveCaseReviewActions';
 import { SiteHeader } from '../../../components/SiteHeader';
 import { WorkspaceNav } from '../../../components/WorkspaceNav';
 import { getDb } from '../../../lib/db';
 import { requireAnalyst } from '../../../lib/require-analyst';
 import { getCveCaseDetail } from '../../../../../src/workspace/cve-case-workspace-read';
+import { CveCaseRepository } from '../../../../../src/db/repositories/cve-case.repository.js';
+import { checkApprovalRequirements } from '../../../../../src/cve/review.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +24,13 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
     redirect(gate.reason === 'unauthenticated' ? `/login?callbackUrl=/workspace/cves/${params.id}` : '/auth/denied');
   }
 
-  const detail = await getCveCaseDetail(getDb(), params.id);
+  const db = getDb();
+  const detail = await getCveCaseDetail(db, params.id);
   if (!detail) notFound();
+
+  const repo = new CveCaseRepository(db);
+  const reviewEvents = await repo.listReviewEvents(params.id);
+  const requirements = await checkApprovalRequirements(db, params.id);
 
   return (
     <>
@@ -38,8 +49,36 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                 ? ` · last enriched ${detail.case.lastEnrichedAt.toISOString()}`
                 : ' · not yet enriched'}
             </p>
+            {detail.case.approvedAt ? (
+              <p className="page-lede">
+                Approved {detail.case.approvedAt.toISOString()}
+                {detail.case.approvedByActor ? ` by ${detail.case.approvedByActor}` : ''}
+                {detail.case.revertedAt
+                  ? ` · auto-reverted ${detail.case.revertedAt.toISOString()}`
+                  : ''}
+              </p>
+            ) : null}
           </div>
+          <CveCaseApproveAction caseId={detail.case.id} approved={detail.case.status === 'approved'} />
         </div>
+
+        <section className="workspace-section">
+          <h2 className="section-title">Approval requirements</h2>
+          <ul>
+            <li>
+              Human-confirmed links: <strong>{requirements.confirmedLinkCount}</strong>{' '}
+              {requirements.confirmedLinkCount === 0 ? '⚠️ approval blocked' : ''}
+            </li>
+            <li>
+              Articles missing summary:{' '}
+              <strong>{requirements.articlesMissingSummary.length}</strong>
+            </li>
+            <li>
+              Missing terminal sources:{' '}
+              <strong>{requirements.missingSources.length === 0 ? 'none' : requirements.missingSources.join(', ')}</strong>
+            </li>
+          </ul>
+        </section>
 
         <section className="workspace-section">
           <h2 className="section-title">Authoritative enrichment</h2>
@@ -108,7 +147,7 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
         ) : null}
 
         <section className="workspace-section">
-          <h2 className="section-title">Article evidence</h2>
+          <h2 className="section-title">Article evidence &amp; verdicts</h2>
           {detail.caseArticles.length === 0 ? (
             <p className="empty-state">No articles linked.</p>
           ) : (
@@ -118,6 +157,7 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                   <th>Article</th>
                   <th>Lifecycle state</th>
                   <th>First evidence</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,6 +175,45 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                     <td>
                       <code>{JSON.stringify(row.firstEvidence ?? {})}</code>
                     </td>
+                    <td>
+                      <CveCaseReviewArticleAction
+                        caseId={detail.case.id}
+                        articleId={row.article.id}
+                        currentState={row.lifecycleState}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+
+        <section className="workspace-section">
+          <h2 className="section-title">Review history</h2>
+          {reviewEvents.length === 0 ? (
+            <p className="empty-state">No review events yet.</p>
+          ) : (
+            <table className="workspace-table">
+              <thead>
+                <tr>
+                  <th>At</th>
+                  <th>Actor</th>
+                  <th>Event</th>
+                  <th>Transition</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reviewEvents.map((evt) => (
+                  <tr key={evt.id}>
+                    <td>{evt.createdAt.toISOString()}</td>
+                    <td>{evt.actor}</td>
+                    <td>{evt.eventKind}</td>
+                    <td>
+                      {evt.fromState ?? '—'} → {evt.toState ?? '—'}
+                    </td>
+                    <td>{evt.reason ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

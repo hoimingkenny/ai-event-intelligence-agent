@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { loadArticlesOverview } from '../../../src/portal/articles-portal';
 import { SiteHeader } from '../../components/SiteHeader';
 import { getDb } from '../../lib/db';
-import { formatConfidence, formatWhen } from '../../lib/format';
+import { listPublicArticles } from '../../../src/public/public-cve-read';
+import { formatWhen } from '../../lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,8 +10,8 @@ export const metadata = {
   title: 'Articles',
 };
 
-export default async function ArticlesPage() {
-  const overview = await loadArticlesOverview(getDb(), { limit: 50, sort: 'recent' });
+export default async function PublicArticlesPage() {
+  const articles = await listPublicArticles(getDb());
 
   return (
     <>
@@ -20,36 +20,43 @@ export default async function ArticlesPage() {
         <p className="page-kicker">Public catalogue</p>
         <h1 className="page-title">Articles</h1>
         <p className="page-lede">
-          Source reports attached to at least one approved event. Draft-only pipeline articles stay
-          private.
+          Source reports attached to at least one approved CVE with a human-confirmed link. Draft
+          pipeline output stays private.
         </p>
 
-        {overview.items.length === 0 ? (
+        {articles.length === 0 ? (
           <div className="empty-state">
             <h2>No public articles yet</h2>
             <p>
-              Articles appear here once they belong to an approved canonical event. Until then the
-              feed stays empty.
+              Articles appear here once an analyst confirms their link to an approved CVE. Until
+              then the feed stays empty.
             </p>
           </div>
         ) : (
           <ul className="event-list">
-            {overview.items.map((article) => (
-              <li key={article.id} className="event-row">
+            {articles.map((article) => (
+              <li key={article.articleId} className="event-row">
                 <div>
-                  <Link className="title" href={`/articles/${article.id}`}>
-                    {article.title || 'Untitled article'}
+                  <Link className="title" href={`/articles/${article.articleId}`}>
+                    {article.title ?? article.canonicalUrl ?? `Article #${article.articleId}`}
                   </Link>
                   <div className="meta">
-                    <span>{article.sourceName || 'Unknown source'}</span>
-                    {article.topVendor ? <span>{article.topVendor}</span> : null}
-                    {article.vendorRelevance !== null ? (
-                      <span>Relevance {formatConfidence(article.vendorRelevance)}</span>
+                    {article.sourceName ? <span>{article.sourceName}</span> : null}
+                    {article.cveIds.length > 0 ? (
+                      <span>
+                        Linked CVEs:{' '}
+                        {article.cveIds.map((cveId, idx) => (
+                          <span key={cveId}>
+                            {idx > 0 ? ', ' : ''}
+                            <Link href={`/cves/${encodeURIComponent(cveId)}`}>{cveId}</Link>
+                          </span>
+                        ))}
+                      </span>
                     ) : null}
                   </div>
                 </div>
                 <div className="meta" style={{ justifyContent: 'flex-end' }}>
-                  <span>{formatWhen(article.publishedAt ?? article.fetchedAt)}</span>
+                  <span>{formatWhen(article.publishedAt)}</span>
                 </div>
               </li>
             ))}
