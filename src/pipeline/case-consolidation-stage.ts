@@ -1,3 +1,4 @@
+import { AnalysisTaskRepository } from '../db/repositories/analysis-task.repository.js';
 import { CveCaseRepository } from '../db/repositories/cve-case.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
 import {
@@ -25,11 +26,8 @@ export interface CaseConsolidationStageOptions {
 
 const RELEVANCE_TASK_NAME = 'article_cve_relevance';
 
-interface RelevanceTaskRecord {
-  id: string;
-  targetId: string;
-  result: { results?: Array<{ cveId: string; relevance: string; evidence: string }> } | null;
-  completedAt: Date | null;
+interface RelevanceTaskResult {
+  results?: Array<{ cveId: string; relevance: string; evidence: string }>;
 }
 
 export async function runCaseConsolidationStage(
@@ -78,12 +76,13 @@ async function collectRelevantEvidence(
   db: Queryable,
   limit: number
 ): Promise<AttachArticleInput[]> {
+  const tasks = new AnalysisTaskRepository(db);
   const queued: AttachArticleInput[] = [];
   const seen = new Set<string>();
 
-  const completedRelevance = await listCompletedRelevanceTasks(db, limit);
+  const completedRelevance = await tasks.listCompletedByName(RELEVANCE_TASK_NAME, limit);
   for (const task of completedRelevance) {
-    const results = task.result?.results ?? [];
+    const results = (task.result as RelevanceTaskResult | null)?.results ?? [];
     for (const item of results) {
       if (item.relevance !== 'relevant') continue;
       const dedupeKey = `${task.targetId}:${item.cveId}`;
@@ -104,31 +103,4 @@ async function collectRelevantEvidence(
     }
   }
   return queued;
-}
-
-async function listCompletedRelevanceTasks(
-  db: Queryable,
-  limit: number
-): Promise<RelevanceTaskRecord[]> {
-  const result = await db.query<{
-    id: string;
-    target_id: string;
-    result: { results?: Array<{ cveId: string; relevance: string; evidence: string }> } | null;
-    completed_at: Date | null;
-  }>(
-    `
-      SELECT id, target_id, result, completed_at
-      FROM analysis_tasks
-      WHERE task_name = $1 AND status = 'completed'
-      ORDER BY completed_at ASC NULLS LAST, id ASC
-      LIMIT $2
-    `,
-    [RELEVANCE_TASK_NAME, limit]
-  );
-  return result.rows.map((row) => ({
-    id: row.id,
-    targetId: row.target_id,
-    result: row.result,
-    completedAt: row.completed_at,
-  }));
 }

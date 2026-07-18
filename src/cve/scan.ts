@@ -101,18 +101,5 @@ export async function persistCveMentions(db: Queryable, mentions: CveMentionRow[
   for (const articleId of Array.from(new Set(mentions.map((m) => m.articleId)))) {
     await repo.deleteCveMentionsForArticle(articleId);
   }
-  const values: unknown[] = [];
-  const placeholders: string[] = [];
-  let i = 1;
-  for (const m of mentions) {
-    placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
-    values.push(m.articleId, m.cveId, m.zone, m.snippet, m.startOffset, m.endOffset);
-  }
-  await db.query(
-    `
-      INSERT INTO cve_mentions (article_id, cve_id, zone, snippet, start_offset, end_offset)
-      VALUES ${placeholders.join(', ')}
-    `,
-    values
-  );
+  await repo.insertCveMentions(mentions);
 }

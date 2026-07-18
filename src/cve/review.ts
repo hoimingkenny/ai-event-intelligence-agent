@@ -5,6 +5,7 @@ import {
   type CveCaseRecord,
 } from '../db/repositories/cve-case.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
+import { buildEnrichmentAdapterSet, runInitialEnrichment } from './cases.js';
 import type { EnrichmentAdapterSet } from './enrichment.js';
 
 /**
@@ -67,6 +68,91 @@ export interface ApprovalRequirements {
   confirmedLinkCount: number;
   articlesMissingSummary: string[];
   missingSources: Array<'nvd' | 'kev' | 'epss'>;
+}
+
+export interface PromoteUncertainInput {
+  articleId: string;
+  cveId: string;
+  actor: string;
+  reason?: string | null;
+}
+
+export interface PromoteUncertainResult {
+  ok: boolean;
+  caseId?: string;
+  caseArticleId?: string;
+  reason?: 'no_uncertain_relationship' | 'already_promoted';
+}
+
+interface RelevanceTaskResult {
+  results?: Array<{ cveId: string; relevance: string; evidence: string }>;
+}
+
+/**
+ * Story 30: a human promotes an uncertain article–CVE relationship to relevant. This
+ * re-injects the pair into the normal deterministic workflow — it ensures one case per
+ * canonical CVE, attaches the article as `automated_relevant` (a later human verdict is
+ * still required for approval), runs initial enrichment, and records an audit event.
+ */
+export async function promoteUncertainRelationship(
+  db: Queryable,
+  input: PromoteUncertainInput,
+  options: { adapters?: Partial<EnrichmentAdapterSet> } = {}
+): Promise<PromoteUncertainResult> {
+  const tasks = new AnalysisTaskRepository(db);
+  const repo = new CveCaseRepository(db);
+
+  const taskRows = await tasks.listForTarget('article', input.articleId);
+  const relevanceTask = taskRows.find(
+    (t) => t.taskName === 'article_cve_relevance' && t.status === 'completed'
+  );
+  const results = (relevanceTask?.result as RelevanceTaskResult | null)?.results ?? [];
+  const match = results.find((r) => r.cveId === input.cveId && r.relevance === 'uncertain');
+  if (!relevanceTask || !match) {
+    return { ok: false, reason: 'no_uncertain_relationship' };
+  }
+
+  const existingCaseId = (await repo.listCaseIdsForCves([input.cveId])).get(input.cveId) ?? null;
+  if (existingCaseId) {
+    const existing = await repo.findCaseArticle(existingCaseId, input.articleId);
+    if (existing) {
+      return { ok: false, reason: 'already_promoted', caseId: existingCaseId, caseArticleId: existing.id };
+    }
+  }
+
+  const caseRecord = await repo.ensureCase(input.cveId, input.articleId);
+  const evidencePayload = {
+    automated_relevance: 'relevant',
+    automated_evidence: match.evidence,
+    automated_at: relevanceTask.completedAt?.toISOString() ?? new Date().toISOString(),
+    automated_task_id: relevanceTask.id,
+    promoted_from: 'uncertain',
+    promoted_by: input.actor,
+  };
+  const caseArticle = await repo.upsertCaseArticle({
+    caseId: caseRecord.id,
+    articleId: input.articleId,
+    lifecycleState: 'automated_relevant',
+    evidence: evidencePayload,
+    firstEvidence: evidencePayload,
+    automatedTaskId: relevanceTask.id,
+  });
+
+  await repo.appendReviewEvent({
+    caseId: caseRecord.id,
+    caseArticleId: caseArticle.id,
+    actor: input.actor,
+    eventKind: 'human_verdict',
+    fromState: 'uncertain',
+    toState: 'automated_relevant',
+    reason: input.reason ?? 'promoted uncertain relationship to relevant',
+    payload: { articleId: input.articleId, cveId: input.cveId },
+  });
+
+  const adapters = buildEnrichmentAdapterSet({ adapters: options.adapters });
+  await runInitialEnrichment(db, [caseRecord.id], adapters);
+
+  return { ok: true, caseId: caseRecord.id, caseArticleId: caseArticle.id };
 }
 
 export async function recordHumanVerdict(

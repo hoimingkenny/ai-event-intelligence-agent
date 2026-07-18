@@ -486,6 +486,33 @@ export class ArticleRepository {
     await this.db.query(`DELETE FROM cve_mentions WHERE article_id = $1`, [articleId]);
   }
 
+  async insertCveMentions(
+    mentions: Array<{
+      articleId: string;
+      cveId: string;
+      zone: string;
+      snippet: string;
+      startOffset: number;
+      endOffset: number;
+    }>
+  ): Promise<void> {
+    if (mentions.length === 0) return;
+    const values: unknown[] = [];
+    const placeholders: string[] = [];
+    let i = 1;
+    for (const m of mentions) {
+      placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
+      values.push(m.articleId, m.cveId, m.zone, m.snippet, m.startOffset, m.endOffset);
+    }
+    await this.db.query(
+      `
+        INSERT INTO cve_mentions (article_id, cve_id, zone, snippet, start_offset, end_offset)
+        VALUES ${placeholders.join(', ')}
+      `,
+      values
+    );
+  }
+
   async listCveMentionsByArticle(articleId: string): Promise<
     Array<{
       cveId: string;

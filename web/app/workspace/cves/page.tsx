@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { SiteHeader } from '../../components/SiteHeader';
-import { WorkspaceNav } from '../../components/WorkspaceNav';
-import { getDb } from '../../lib/db';
-import { requireAnalyst } from '../../lib/require-analyst';
+import { SiteHeader } from '../../../components/SiteHeader';
+import { WorkspaceNav } from '../../../components/WorkspaceNav';
+import { getDb } from '../../../lib/db';
+import { requireAnalyst } from '../../../lib/require-analyst';
 import { listCveCasesForWorkspace, type CveListEntry } from '../../../../src/workspace/cve-case-workspace-read';
 
 export const dynamic = 'force-dynamic';

@@ -207,6 +207,42 @@ export class AnalysisTaskRepository {
     return result.rows.map(mapRow);
   }
 
+  async listCompletedByName(taskName: string, limit: number): Promise<AnalysisTaskRecord[]> {
+    const result = await this.db.query<AnalysisTaskRow>(
+      `
+        SELECT id, target_type, target_id, task_name, status, attempts, max_attempts,
+          next_attempt_at, input_payload, result, prompt_version, model, last_error,
+          completed_at, created_at, updated_at
+        FROM analysis_tasks
+        WHERE task_name = $1 AND status = 'completed'
+        ORDER BY completed_at ASC NULLS LAST, id ASC
+        LIMIT $2
+      `,
+      [taskName, limit]
+    );
+    return result.rows.map(mapRow);
+  }
+
+  async listCompletedByTargetsAndName(
+    targetType: string,
+    targetIds: string[],
+    taskName: string
+  ): Promise<AnalysisTaskRecord[]> {
+    if (targetIds.length === 0) return [];
+    const result = await this.db.query<AnalysisTaskRow>(
+      `
+        SELECT id, target_type, target_id, task_name, status, attempts, max_attempts,
+          next_attempt_at, input_payload, result, prompt_version, model, last_error,
+          completed_at, created_at, updated_at
+        FROM analysis_tasks
+        WHERE target_type = $1 AND target_id = ANY($2::BIGINT[]) AND task_name = $3
+          AND status = 'completed'
+      `,
+      [targetType, targetIds, taskName]
+    );
+    return result.rows.map(mapRow);
+  }
+
   async findById(id: string): Promise<AnalysisTaskRecord | null> {
     const result = await this.db.query<AnalysisTaskRow>(
       `

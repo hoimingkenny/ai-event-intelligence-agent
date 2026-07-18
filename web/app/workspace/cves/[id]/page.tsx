@@ -4,10 +4,10 @@ import {
   CveCaseApproveAction,
   CveCaseReviewArticleAction,
 } from '../../../../components/CveCaseReviewActions';
-import { SiteHeader } from '../../../components/SiteHeader';
-import { WorkspaceNav } from '../../../components/WorkspaceNav';
-import { getDb } from '../../../lib/db';
-import { requireAnalyst } from '../../../lib/require-analyst';
+import { SiteHeader } from '../../../../components/SiteHeader';
+import { WorkspaceNav } from '../../../../components/WorkspaceNav';
+import { getDb } from '../../../../lib/db';
+import { requireAnalyst } from '../../../../lib/require-analyst';
 import { getCveCaseDetail } from '../../../../../src/workspace/cve-case-workspace-read';
 import { CveCaseRepository, type CveSourceObservationRecord } from '../../../../../src/db/repositories/cve-case.repository.js';
 import { checkApprovalRequirements } from '../../../../../src/cve/review.js';

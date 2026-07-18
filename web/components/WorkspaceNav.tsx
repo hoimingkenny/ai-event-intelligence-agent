@@ -6,6 +6,7 @@ const LINKS = [
   { href: '/workspace/drafts', label: 'Drafts', id: 'drafts' as const },
   { href: '/workspace/approved', label: 'Approved', id: 'approved' as const },
   { href: '/workspace/cves', label: 'CVE cases', id: 'cves' as const },
+  { href: '/workspace/cves/uncertain', label: 'Uncertain CVEs', id: 'cves-uncertain' as const },
   { href: '/workspace/eval/digest', label: 'Digest eval', id: 'digest-eval' as const },
   { href: '/workspace/config', label: 'Config', id: 'config' as const },
 ];
