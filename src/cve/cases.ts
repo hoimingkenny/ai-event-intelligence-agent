@@ -15,8 +15,16 @@ import {
   type EnrichmentOutcome,
 } from './enrichment.js';
 import { EpssHttpAdapter, KevHttpAdapter, NvdHttpAdapter } from './enrichment-http.js';
+import type { MaintenanceAdapterSet } from './maintenance-adapters.js';
 
 export type { EnrichmentAdapter, EnrichmentAdapterSet } from './enrichment.js';
+export type {
+  EpssRefreshAdapter,
+  KevRefreshAdapter,
+  MaintenanceAdapterSet,
+  NvdRefreshAdapter,
+  NvdRefreshRecord,
+} from './maintenance-adapters.js';
 
 /**
  * Public surface of the deep CVE module.
@@ -62,6 +70,16 @@ export interface EnrichmentRunResult {
 export function buildEnrichmentAdapterSet(options: {
   adapters?: Partial<EnrichmentAdapterSet>;
 }): EnrichmentAdapterSet {
+  return {
+    nvd: options.adapters?.nvd ?? new NvdHttpAdapter(),
+    kev: options.adapters?.kev ?? new KevHttpAdapter(),
+    epss: options.adapters?.epss ?? new EpssHttpAdapter(),
+  };
+}
+
+export function buildMaintenanceAdapterSet(options: {
+  adapters?: Partial<MaintenanceAdapterSet>;
+}): MaintenanceAdapterSet {
   return {
     nvd: options.adapters?.nvd ?? new NvdHttpAdapter(),
     kev: options.adapters?.kev ?? new KevHttpAdapter(),

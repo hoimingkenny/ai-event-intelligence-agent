@@ -9,14 +9,24 @@ import { WorkspaceNav } from '../../../components/WorkspaceNav';
 import { getDb } from '../../../lib/db';
 import { requireAnalyst } from '../../../lib/require-analyst';
 import { getCveCaseDetail } from '../../../../../src/workspace/cve-case-workspace-read';
-import { CveCaseRepository } from '../../../../../src/db/repositories/cve-case.repository.js';
+import { CveCaseRepository, type CveSourceObservationRecord } from '../../../../../src/db/repositories/cve-case.repository.js';
 import { checkApprovalRequirements } from '../../../../../src/cve/review.js';
+import type { CveSourceName } from '../../../../../src/db/repositories/cve-case.repository.js';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Workspace · CVE detail',
 };
+
+function hasFailedObservation(
+  rows: Array<{ source: CveSourceName; observation: CveSourceObservationRecord }>,
+  source: CveSourceName
+): boolean {
+  const row = rows.find((r) => r.source === source);
+  if (!row) return false;
+  return row.observation.status === 'failed' || row.observation.status === 'transient_failure';
+}
 
 export default async function WorkspaceCveDetailPage({ params }: { params: { id: string } }) {
   const gate = await requireAnalyst();
@@ -30,6 +40,7 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
 
   const repo = new CveCaseRepository(db);
   const reviewEvents = await repo.listReviewEvents(params.id);
+  const allObservations = await repo.listSourceObservations(params.id);
   const requirements = await checkApprovalRequirements(db, params.id);
 
   return (
@@ -81,6 +92,22 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
         </section>
 
         <section className="workspace-section">
+          <h2 className="section-title">Refresh freshness</h2>
+          <ul>
+            {detail.freshness.map((entry) => {
+              const last = entry.lastCheckedAt ? entry.lastCheckedAt.toISOString() : 'never';
+              const status = entry.lastTickStatus ?? 'no tick yet';
+              return (
+                <li key={entry.source}>
+                  <strong>{entry.source.toUpperCase()}</strong>: last check {last} ({status})
+                  {entry.lastError ? <p className="form-error">last error: {entry.lastError}</p> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <section className="workspace-section">
           <h2 className="section-title">Authoritative enrichment</h2>
           <dl className="kv-grid">
             <dt>NVD</dt>
@@ -98,7 +125,14 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                   {detail.nvd.lastModifiedAt ? <p>Last modified: {detail.nvd.lastModifiedAt}</p> : null}
                 </>
               ) : (
-                <em>NVD record unavailable</em>
+                <>
+                  <em>NVD record unavailable</em>
+                  {hasFailedObservation(detail.currentObservations, 'nvd') ? (
+                    <p className="form-error">
+                      Latest refresh failed; the prior NVD record (if any) is retained.
+                    </p>
+                  ) : null}
+                </>
               )}
             </dd>
             <dt>CISA KEV</dt>
@@ -113,7 +147,12 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                   'Not in KEV'
                 )
               ) : (
-                <em>KEV observation unavailable</em>
+                <>
+                  <em>KEV observation unavailable</em>
+                  {hasFailedObservation(detail.currentObservations, 'kev') ? (
+                    <p className="form-error">Latest refresh failed; prior KEV status is retained.</p>
+                  ) : null}
+                </>
               )}
             </dd>
             <dt>EPSS</dt>
@@ -129,7 +168,14 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                   'EPSS reports no score for this CVE'
                 )
               ) : (
-                <em>EPSS observation unavailable</em>
+                <>
+                  <em>EPSS observation unavailable</em>
+                  {hasFailedObservation(detail.currentObservations, 'epss') ? (
+                    <p className="form-error">
+                      Latest refresh failed; prior EPSS score (if any) is retained.
+                    </p>
+                  ) : null}
+                </>
               )}
             </dd>
           </dl>
@@ -223,7 +269,7 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
 
         <section className="workspace-section">
           <h2 className="section-title">Source observation history</h2>
-          {detail.currentObservations.length === 0 ? (
+          {allObservations.length === 0 ? (
             <p className="empty-state">No source observations yet.</p>
           ) : (
             <table className="workspace-table">
@@ -232,16 +278,21 @@ export default async function WorkspaceCveDetailPage({ params }: { params: { id:
                   <th>Source</th>
                   <th>Status</th>
                   <th>Retrieved</th>
-                  <th>Provenance</th>
+                  <th>Attempt</th>
+                  <th>Provenance / error</th>
                 </tr>
               </thead>
               <tbody>
-                {detail.currentObservations.map(({ source, observation }) => (
-                  <tr key={observation.id}>
-                    <td>{source}</td>
-                    <td>{observation.status}</td>
-                    <td>{observation.retrievedAt.toISOString()}</td>
-                    <td>{observation.provenance}</td>
+                {allObservations.map((obs) => (
+                  <tr key={obs.id}>
+                    <td>{obs.source}</td>
+                    <td>{obs.status}</td>
+                    <td>{obs.retrievedAt.toISOString()}</td>
+                    <td>{obs.attemptKind}</td>
+                    <td>
+                      {obs.provenance}
+                      {obs.lastError ? <p className="form-error">{obs.lastError}</p> : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>

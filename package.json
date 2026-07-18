@@ -37,6 +37,8 @@
     "fixtures:review": "tsx scripts/review-extraction.ts",
     "worker": "tsx scripts/run-worker.ts",
     "scheduler": "tsx scripts/run-scheduler.ts",
+    "cve:refresh": "tsx scripts/run-cve-maintenance.ts",
+    "cve:refresh-scheduler": "tsx scripts/run-cve-maintenance-scheduler.ts",
     "eval": "tsx scripts/run-eval.ts",
     "eval:cheap-filter": "tsx eval/scripts/run-cheap-filter-eval.ts",
     "eval:digest": "tsx eval/scripts/run-digest-eval.ts",
