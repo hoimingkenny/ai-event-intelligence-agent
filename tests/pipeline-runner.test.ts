@@ -9,7 +9,7 @@ class EmptyDb implements Queryable {
 }
 
 describe('runPipeline', () => {
-  it('defaults to analyst-eval and stops after digest without clustering stages', async () => {
+  it('defaults to cve-mvp and stops after the analysis-task stage without clustering stages', async () => {
     const result = await runPipeline(new EmptyDb(), {
       limit: 1,
       includeIngest: false,
@@ -17,7 +17,33 @@ describe('runPipeline', () => {
     });
 
     expect(result.filter.reviewed).toBe(0);
+    expect(result.cveScan).toEqual({ reviewed: 0, withMentions: 0, totalMentions: 0, failed: 0 });
+    expect(result.analysisTasks).toEqual({
+      articlesReviewed: 0,
+      tasksScheduled: 0,
+      tasksCompleted: 0,
+      tasksExhausted: 0,
+      tasksFailed: 0,
+    });
+    expect(result.digest).toBeUndefined();
+    expect(result.classification).toBeUndefined();
+    expect(result.alerts).toBeUndefined();
+    expect(result.articleEmbeddings).toBeUndefined();
+    expect(result.events).toBeUndefined();
+  });
+
+  it('keeps the legacy analyst-eval branch selectable and stops after digest', async () => {
+    const result = await runPipeline(new EmptyDb(), {
+      limit: 1,
+      includeIngest: false,
+      includeLlm: false,
+      profile: 'analyst-eval',
+    });
+
+    expect(result.filter.reviewed).toBe(0);
     expect(result.digest).toEqual({ reviewed: 0, digested: 0, skipped: 0, failed: 0 });
+    expect(result.cveScan).toBeUndefined();
+    expect(result.analysisTasks).toBeUndefined();
     expect(result.classification).toBeUndefined();
     expect(result.alerts).toBeUndefined();
     expect(result.articleEmbeddings).toBeUndefined();

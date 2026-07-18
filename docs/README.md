@@ -6,7 +6,11 @@ Three categories, organized by *why* a document exists rather than what feature 
 
 Forward-looking documents: what we intend to build, phased roadmaps, scope decisions. A plan is a snapshot of intent — it is not updated to match reality after the fact (the code and design docs do that job).
 
-Active plans: none at the moment.
+### Active plans
+
+| Document | Scope |
+|---|---|
+| [cve-mvp-architecture.md](plans/cve-mvp-architecture.md) | CVE-centred, human-gated MVP workflow, data boundaries, runtime, and completion criteria |
 
 ### `plans/archive/` — completed / superseded plans
 

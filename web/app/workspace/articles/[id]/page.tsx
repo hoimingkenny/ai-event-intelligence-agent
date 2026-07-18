@@ -5,6 +5,7 @@ import { draftDigestGoldFromStoredDigest } from '../../../../../src/evaluation/d
 import type { DigestGoldFields } from '../../../../../src/evaluation/digest/digest-gold-types';
 import { getWorkspaceArticle } from '../../../../../src/events/event-editorial';
 import { getDigestGoldForArticle } from '../../../../../src/workspace/workspace-digest-eval-read';
+import { getCveMvpArticleView, type CveMvpArticleWorkspaceView } from '../../../../../src/workspace/cve-mvp-workspace-read';
 import { ConfirmSubmitScript } from '../../../../components/ConfirmSubmitScript';
 import { DigestGoldForm } from '../../../../components/DigestGoldForm';
 import { SiteHeader } from '../../../../components/SiteHeader';
@@ -94,9 +95,10 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
   const article = await getWorkspaceArticle(db, id);
   if (!article) notFound();
 
-  const [gold, inventory] = await Promise.all([
+  const [gold, inventory, cveMvp] = await Promise.all([
     getDigestGoldForArticle(db, id),
     listActiveMonitoredInventory(db),
+    getCveMvpArticleView(db, id),
   ]);
   const goldInitial = initialDigestGoldFields(gold, article.llmArticleDigest);
   const showDigestGold =
@@ -246,6 +248,8 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
             </pre>
           )}
 
+          {cveMvp ? <CveMvpSection view={cveMvp} /> : null}
+
           {article.processingStatus === 'IGNORED' ? (
             <form action={requeueArticleForFilterAction} className="requeue-form">
               <input type="hidden" name="articleId" value={article.id} />
@@ -273,5 +277,164 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
       </main>
       <ConfirmSubmitScript />
     </>
+  );
+}
+
+function CveMvpSection({ view }: { view: CveMvpArticleWorkspaceView }) {
+  const mentionGroups = new Map<string, typeof view.mentions>();
+  for (const mention of view.mentions) {
+    const list = mentionGroups.get(mention.cveId) ?? [];
+    list.push(mention);
+    mentionGroups.set(mention.cveId, list);
+  }
+  const cveIds = Array.from(mentionGroups.keys()).sort();
+
+  return (
+    <>
+      <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
+        CVE MVP intelligence
+      </h2>
+
+      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+        Summary
+      </h3>
+      {view.summary ? (
+        view.summary.status === 'completed' && view.summary.summary ? (
+          <p className="meta">{view.summary.summary}</p>
+        ) : (
+          <TaskStatusLine
+            status={view.summary.status}
+            attempts={view.summary.attempts}
+            lastError={view.summary.lastError}
+          />
+        )
+      ) : (
+        <p className="meta">Not scheduled.</p>
+      )}
+
+      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+        Disposition
+      </h3>
+      {view.disposition ? (
+        view.disposition.status === 'completed' ? (
+          <dl className="kv-grid">
+            <div>
+              <dt>Decision</dt>
+              <dd>{view.disposition.disposition ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Reason</dt>
+              <dd>{view.disposition.reason ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Signals</dt>
+              <dd>{view.disposition.signals.length > 0 ? view.disposition.signals.join(', ') : '—'}</dd>
+            </div>
+            <div>
+              <dt>Reasoning</dt>
+              <dd>{view.disposition.reasoning ?? '—'}</dd>
+            </div>
+          </dl>
+        ) : (
+          <TaskStatusLine
+            status={view.disposition.status}
+            attempts={view.disposition.attempts}
+            lastError={view.disposition.lastError}
+          />
+        )
+      ) : (
+        <p className="meta">Not scheduled.</p>
+      )}
+
+      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+        CVE mentions ({cveIds.length})
+      </h3>
+      {cveIds.length === 0 ? (
+        <p className="meta">No CVE mentions detected in title, RSS summary, body, or source links.</p>
+      ) : (
+        <ul className="workspace-mention-list">
+          {cveIds.map((cveId) => (
+            <li key={cveId}>
+              <strong>{cveId}</strong>
+              <ul>
+                {mentionGroups.get(cveId)!.map((mention, idx) => (
+                  <li key={`${cveId}-${mention.zone}-${idx}`}>
+                    <span className="chip">{mention.zone}</span>{' '}
+                    <span className="meta">"{mention.snippet}"</span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+        CVE relevance
+      </h3>
+      {view.relevance ? (
+        view.relevance.status === 'completed' ? (
+          view.relevance.results.length === 0 ? (
+            <p className="meta">No relevance results yet.</p>
+          ) : (
+            <ul className="workspace-relevance-list">
+              {view.relevance.results.map((result) => (
+                <li key={result.cveId}>
+                  <strong>{result.cveId}</strong>{' '}
+                  <span className="chip">{result.relevance}</span>{' '}
+                  <span className="meta">"{result.evidence}"</span>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <TaskStatusLine
+            status={view.relevance.status}
+            attempts={view.relevance.attempts}
+            lastError={view.relevance.lastError}
+          />
+        )
+      ) : (
+        <p className="meta">Not scheduled (requires actionable disposition and at least one CVE mention).</p>
+      )}
+
+      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+        Analysis task history
+      </h3>
+      {view.taskHistory.length === 0 ? (
+        <p className="meta">No analysis tasks scheduled yet.</p>
+      ) : (
+        <ul className="workspace-task-history">
+          {view.taskHistory.map((task) => (
+            <li key={`${task.taskName}-${task.status}`}>
+              <span className="chip">{task.taskName}</span>{' '}
+              <span className="chip">{task.status}</span>{' '}
+              <span className="meta">
+                attempts {task.attempts}/{task.maxAttempts}
+                {task.lastError ? ` · ${task.lastError}` : ''}
+                {task.completedAt ? ` · completed ${formatWhen(task.completedAt)}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+function TaskStatusLine({
+  status,
+  attempts,
+  lastError,
+}: {
+  status: string;
+  attempts: number;
+  lastError: string | null;
+}) {
+  return (
+    <p className="meta">
+      Status: {status} · attempts: {attempts}
+      {lastError ? ` · ${lastError}` : ''}
+    </p>
   );
 }

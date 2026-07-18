@@ -482,6 +482,81 @@ export class ArticleRepository {
     );
   }
 
+  async deleteCveMentionsForArticle(articleId: string): Promise<void> {
+    await this.db.query(`DELETE FROM cve_mentions WHERE article_id = $1`, [articleId]);
+  }
+
+  async listCveMentionsByArticle(articleId: string): Promise<
+    Array<{
+      cveId: string;
+      zone: string;
+      snippet: string;
+      startOffset: number;
+      endOffset: number;
+    }>
+  > {
+    const result = await this.db.query<{
+      cve_id: string;
+      zone: string;
+      snippet: string;
+      start_offset: number;
+      end_offset: number;
+    }>(
+      `
+        SELECT cve_id, zone, snippet, start_offset, end_offset
+        FROM cve_mentions
+        WHERE article_id = $1
+        ORDER BY cve_id ASC, zone ASC, start_offset ASC
+      `,
+      [articleId]
+    );
+    return result.rows.map((row) => ({
+      cveId: row.cve_id,
+      zone: row.zone,
+      snippet: row.snippet,
+      startOffset: row.start_offset,
+      endOffset: row.end_offset,
+    }));
+  }
+
+  async listCveMentionsByArticles(articleIds: string[]): Promise<
+    Map<string, Array<{ cveId: string; zone: string; snippet: string; startOffset: number; endOffset: number }>>
+  > {
+    const map = new Map<
+      string,
+      Array<{ cveId: string; zone: string; snippet: string; startOffset: number; endOffset: number }>
+    >();
+    if (articleIds.length === 0) return map;
+    const result = await this.db.query<{
+      article_id: string;
+      cve_id: string;
+      zone: string;
+      snippet: string;
+      start_offset: number;
+      end_offset: number;
+    }>(
+      `
+        SELECT article_id, cve_id, zone, snippet, start_offset, end_offset
+        FROM cve_mentions
+        WHERE article_id = ANY($1::BIGINT[])
+        ORDER BY article_id ASC, cve_id ASC, zone ASC, start_offset ASC
+      `,
+      [articleIds]
+    );
+    for (const row of result.rows) {
+      const list = map.get(row.article_id) ?? [];
+      list.push({
+        cveId: row.cve_id,
+        zone: row.zone,
+        snippet: row.snippet,
+        startOffset: row.start_offset,
+        endOffset: row.end_offset,
+      });
+      map.set(row.article_id, list);
+    }
+    return map;
+  }
+
   async findSimilarArticles(
     vector: number[],
     options: {

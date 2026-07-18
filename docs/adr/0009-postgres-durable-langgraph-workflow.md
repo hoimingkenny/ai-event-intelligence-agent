@@ -1,0 +1,3 @@
+# Postgres-owned durable workflow with LangGraph coordination
+
+Postgres will remain the source of truth for article lifecycle, independently retryable analysis tasks, task attempts, CVE state, enrichment observations, and review decisions; `articles.processing_status` represents only the coarse ingest/extraction lifecycle. LangGraph coordinates the existing scheduled batch, including parallel and conditional branches, but owns no durable memory, while exhausted retries remain incomplete in `needs_attention`. Redis/BullMQ and per-article workers remain optional until volume or latency justifies the extra operational system.
