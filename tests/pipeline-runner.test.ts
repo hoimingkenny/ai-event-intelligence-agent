@@ -25,6 +25,15 @@ describe('runPipeline', () => {
       tasksExhausted: 0,
       tasksFailed: 0,
     });
+    expect(result.caseConsolidation).toEqual({
+      evidenceCollected: 0,
+      casesEnsured: 0,
+      articlesAttached: 0,
+      enrichmentAttempted: 0,
+      enrichmentAppended: 0,
+      enrichmentFailed: 0,
+      enrichmentTransient: 0,
+    });
     expect(result.digest).toBeUndefined();
     expect(result.classification).toBeUndefined();
     expect(result.alerts).toBeUndefined();

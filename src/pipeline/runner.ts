@@ -8,6 +8,10 @@ import {
   runAnalysisTaskStage,
   type AnalysisTaskStageOptions,
 } from './analysis-task-stage.js';
+import {
+  runCaseConsolidationStage,
+  type CaseConsolidationStageOptions,
+} from './case-consolidation-stage.js';
 import { runClassificationStage } from './classification-stage.js';
 import { runCveScanStage } from './cve-scan-stage.js';
 import { runArticleDigestStage } from './digest-stage.js';
@@ -35,6 +39,7 @@ export interface PipelineRunOptions {
   profile?: PipelineProfile;
   analysisTaskCallers?: AnalysisTaskStageOptions['callers'];
   extractor?: import('../extraction/article-extractor.interface.js').ArticleExtractor;
+  consolidationAdapters?: CaseConsolidationStageOptions['adapters'];
 }
 
 export interface PipelineRunResult {
@@ -45,6 +50,7 @@ export interface PipelineRunResult {
   digest?: Awaited<ReturnType<typeof runArticleDigestStage>>;
   cveScan?: Awaited<ReturnType<typeof runCveScanStage>>;
   analysisTasks?: Awaited<ReturnType<typeof runAnalysisTaskStage>>;
+  caseConsolidation?: Awaited<ReturnType<typeof runCaseConsolidationStage>>;
   articleEmbeddings?: Awaited<ReturnType<typeof runEmbeddingStage>>;
   dedup?: Awaited<ReturnType<typeof runDedupStage>>;
   events?: Awaited<ReturnType<typeof runEventStage>>;
@@ -72,6 +78,7 @@ const PipelineStateAnnotation = Annotation.Root({
   digest: Annotation<PipelineRunResult['digest']>(),
   cveScan: Annotation<PipelineRunResult['cveScan']>(),
   analysisTasks: Annotation<PipelineRunResult['analysisTasks']>(),
+  caseConsolidation: Annotation<PipelineRunResult['caseConsolidation']>(),
   articleEmbeddings: Annotation<PipelineRunResult['articleEmbeddings']>(),
   dedup: Annotation<PipelineRunResult['dedup']>(),
   events: Annotation<PipelineRunResult['events']>(),
@@ -90,6 +97,7 @@ interface GraphBuildOptions {
   profile: PipelineProfile;
   analysisTaskCallers?: AnalysisTaskStageOptions['callers'];
   extractor?: import('../extraction/article-extractor.interface.js').ArticleExtractor;
+  consolidationAdapters?: CaseConsolidationStageOptions['adapters'];
 }
 
 export function buildPipelineGraph(db: Queryable, options: GraphBuildOptions) {
@@ -111,6 +119,7 @@ export function buildPipelineGraph(db: Queryable, options: GraphBuildOptions) {
       filterMode,
       callers: options.analysisTaskCallers,
       extractor: options.extractor,
+      consolidationAdapters: options.consolidationAdapters,
     });
   }
   return buildLegacyGraph(db, node, { limit, includeIngest, includeLlm, profile, filterMode });
@@ -122,6 +131,7 @@ interface BaseBuildArgs {
   filterMode: ReturnType<typeof cheapFilterModeForProfile>;
   callers?: AnalysisTaskStageOptions['callers'];
   extractor?: import('../extraction/article-extractor.interface.js').ArticleExtractor;
+  consolidationAdapters?: CaseConsolidationStageOptions['adapters'];
 }
 
 function buildCveMvpGraph(
@@ -129,7 +139,7 @@ function buildCveMvpGraph(
   node: <K extends keyof PipelineState>(key: K, stageName: string, run: () => Promise<PipelineState[K]>) => () => Promise<Partial<PipelineState>>,
   args: BaseBuildArgs
 ) {
-  const { limit, includeIngest, filterMode, callers, extractor } = args;
+  const { limit, includeIngest, filterMode, callers, extractor, consolidationAdapters } = args;
   return new StateGraph(PipelineStateAnnotation)
     .addNode('ingest_stage', node('ingest', 'ingest', async () =>
       includeIngest ? ingestRssFeeds(db, { limitFeeds: limit }) : undefined
@@ -147,13 +157,17 @@ function buildCveMvpGraph(
     .addNode('analysis_tasks_stage', node('analysisTasks', 'analysis_tasks', () =>
       runAnalysisTaskStage(db, { limit, maxTasksPerRun: limit, concurrency: 3, callers })
     ))
+    .addNode('case_consolidation_stage', node('caseConsolidation', 'case_consolidation', () =>
+      runCaseConsolidationStage(db, { limit, adapters: consolidationAdapters })
+    ))
     .addEdge(START, 'ingest_stage')
     .addEdge('ingest_stage', 'filter_stage')
     .addEdge('filter_stage', 'extraction_stage')
     .addEdge('extraction_stage', 'extraction_drift')
     .addEdge('extraction_drift', 'cve_scan_stage')
     .addEdge('cve_scan_stage', 'analysis_tasks_stage')
-    .addEdge('analysis_tasks_stage', END)
+    .addEdge('analysis_tasks_stage', 'case_consolidation_stage')
+    .addEdge('case_consolidation_stage', END)
     .compile();
 }
 
@@ -243,6 +257,7 @@ export async function runPipeline(
     profile,
     analysisTaskCallers: options.analysisTaskCallers,
     extractor: options.extractor,
+    consolidationAdapters: options.consolidationAdapters,
   });
 
   const state = await graph.invoke({});
@@ -255,6 +270,7 @@ export async function runPipeline(
     digest: state.digest,
     cveScan: state.cveScan,
     analysisTasks: state.analysisTasks,
+    caseConsolidation: state.caseConsolidation,
     articleEmbeddings: state.articleEmbeddings,
     dedup: state.dedup,
     events: state.events,
