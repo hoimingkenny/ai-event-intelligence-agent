@@ -9,27 +9,27 @@ A single source report (RSS item or imported URL) progressing through the pipeli
 _Avoid_: Document, post, story (when meaning a pipeline record)
 
 **Article summary**:
-A short factual synopsis produced for every extracted article, including advertisements and other non-actionable content. It describes what the article is about without determining its disposition or asserting CVE relevance.
+A short factual synopsis produced for every extracted article, including advertisements and other non-actionable content. It describes what the article is about without determining its disposition or asserting CVE impact.
 _Avoid_: RSS summary, disposition reason, event summary, CVE summary
 
 **Article lifecycle status**:
-The coarse state of an article's ingest and full-text extraction journey. It does not encode the independent completion states of disposition, summary, or CVE-relevance analysis.
+The coarse state of an article's ingest and full-text extraction journey. It does not encode the independent completion states of disposition, summary, or CVE-interpretation analysis.
 _Avoid_: Analysis task status, pipeline completion, article disposition
 
 **Analysis-ready content**:
-The full article text recovered from the source or supplied by a genuinely full-content RSS payload. Ordinary title and RSS excerpts are temporary context only and cannot complete disposition, summary, or CVE-relevance analysis.
+The full article text recovered from the source or supplied by a genuinely full-content RSS payload. Ordinary title and RSS excerpts are temporary context only and cannot complete disposition, summary, or CVE-interpretation analysis.
 _Avoid_: RSS summary, extraction attempt, readable preview
 
 **Analysis task**:
-A durable, independently retryable unit of LLM work for an extracted article: disposition, article summary, or per-CVE relevance. Each task records its own state, attempts, retry timing, and prompt/model provenance so parallel analyses do not compete for one linear article status. After five unsuccessful automatic attempts it becomes `needs_attention`; it remains incomplete until an analyst retries or completes it.
+A durable, independently retryable unit of LLM work for an extracted article: disposition, article summary, or per-CVE interpretation. Each task records its own state, attempts, retry timing, and prompt/model provenance so parallel analyses do not compete for one linear article status. After five unsuccessful automatic attempts it becomes `needs_attention`; it remains incomplete until an analyst retries or completes it.
 _Avoid_: Pipeline stage, article lifecycle status, LLM call log
 
-**CVE relevance assessment**:
-The structured LLM result for each explicit CVE mention in an actionable article: `relevant`, `not_relevant`, or `uncertain`, with supporting evidence. All CVEs in an ordinary article are assessed in one call but their results remain independent records; unusually large lists may be chunked.
-_Avoid_: CVE link verdict (human judgement), CVE mention, article disposition
+**CVE interpretation**:
+The LLM's short, article-grounded explanation of what a mentioned CVE is and how the article discusses it. Not a relevance verdict; deterministic scan owns CVE identity. Ordinary articles get one call covering every mention; unusually large lists may be chunked.
+_Avoid_: CVE relevance assessment, CVE link verdict (human), CVE mention, article disposition
 
 **Analysis needs attention**:
-The Workspace queue for analysis tasks that exhausted their automatic retry budget. It represents unresolved work and never counts as a completed summary, disposition, or relevance assessment.
+The Workspace queue for analysis tasks that exhausted their automatic retry budget. It represents unresolved work and never counts as a completed summary, disposition, or interpretation.
 _Avoid_: Needs triage, permanent failure, completed with warning
 
 **Actionable article**:
@@ -53,7 +53,7 @@ The system's single vulnerability record keyed by a canonical CVE identifier, en
 _Avoid_: Canonical event, vulnerability event, CVE page
 
 **CVE batch consolidation**:
-The end-of-batch operation that collects completed relevant article–CVE assessments, upserts one draft case per canonical CVE identifier, and attaches its relevant articles idempotently. Unresolved assessments remain queued without blocking completed evidence for other CVEs.
+The end-of-batch operation that collects completed article–CVE interpretations for actionable articles, upserts one draft case per canonical CVE identifier, and attaches mentioned articles idempotently. Unresolved assessments remain queued without blocking completed evidence for other CVEs.
 _Avoid_: Event grouping, immediate case creation, whole-batch transaction
 
 **Enrichment snapshot**:
@@ -61,32 +61,36 @@ An append-only, source-specific observation of NVD, CISA KEV, or EPSS data for a
 _Avoid_: Current CVE fields, enrichment cache, CVE history
 
 **Attention order**:
-The deterministic ordering of CVE cases for analyst review using KEV status, active-exploitation evidence, EPSS, CVSS, and recency. It is a work-queue ordering, not a composite severity or claim about organizational risk.
+The deterministic ordering of CVE cases. **Workspace** uses KEV status, active-exploitation evidence, EPSS, CVSS, and recency (work-queue ordering). The **public High-alert** catalogue defaults to Published date (HKT calendar day, newest first) → KEV → EPSS → CVSS → CVE id. Neither is a composite severity or claim about organizational risk.
 _Avoid_: Risk score, priority score, company impact score
 
+**Display timezone**:
+UI timestamps and public publish-day sorting use **Asia/Hong_Kong (HKT)**. Postgres still stores UTC instants.
+_Avoid_: Local browser timezone as the product convention; assuming SQL `timestamptz` strings are already HKT
+
 **CVE mention**:
-A normalized CVE identifier found explicitly in an article's title, RSS summary, extracted body, or source link. A mention is retained for evaluation but does not by itself claim that the CVE is relevant or create a CVE case.
+A normalized CVE identifier found explicitly in an article's title, RSS summary, extracted body, or source link. On an actionable article, each mention becomes a draft case link in `mentioned` state with an optional LLM interpretation; a mention alone does not imply human-confirmed evidence.
 _Avoid_: CVE evidence link, confirmed CVE, affected vulnerability
 
 **CVE publication status**:
-Whether a CVE case is visible on the public CVE catalogue: `draft` or `approved`. Approval is continuously invalidated if the case loses its final human-confirmed relevant evidence link; temporary refresh failures do not invalidate the latest successful enrichment observation.
+Whether a CVE case is visible on the public High-alert catalogue: `draft` or `approved`. Cases auto-publish when NVD CVSS ≥ 9 or CISA KEV lists the CVE; they unpublish when neither gate holds or a human pulls back. Temporary refresh failures do not invalidate the latest successful enrichment observation.
 _Avoid_: Enrichment status, CVE status, published CVE
 
-**CVE approval**:
-The human action that confirms an MVP CVE case and its evidence are suitable for the public CVE catalogue. Approval requires terminal NVD, CISA KEV, and EPSS checks plus a completed or human-written summary for every relevant linked article; it also makes those eligible evidence articles visible in the public Article catalogue. Approval outcomes are retained as evaluation evidence for future confidence-gated automation.
-_Avoid_: Enrichment completion, automatic publication, CVE validation
+**CVE approval / auto-publish**:
+Setting a CVE case's publication status to `approved` for the High-alert catalogue. Production path is automatic (`system:cvss_auto_publish`) under the CVSS/KEV gates (ADR 0011). Humans **pull back** rather than Approve; `approveCase` remains a rare override. Eligible non-rejected article links become visible on public Article pages.
+_Avoid_: Enrichment completion, CVE validation
 
 **CVE evidence link**:
-The independently reviewable relationship between an article and a CVE case, representing the claim that the article provides relevant evidence about that vulnerability. Automatic links require an actionable article and a positive LLM relevance assessment; human review may promote a retained mention, and a CVE case requires at least one human-confirmed link before approval. Only human-confirmed relevant links appear on public CVE pages; all assessments remain available in Workspace.
+The independently reviewable relationship between an article and a CVE case. Links start as `mentioned` after consolidation; humans may label `human_confirmed`, `human_rejected`, or `human_uncertain`. Public CVE pages omit `human_rejected` links only.
 _Avoid_: Article attachment, event grouping, CVE mention
 
 **CVE link verdict**:
-The human judgement on a CVE evidence link: `relevant`, `not_relevant`, or `uncertain`. It labels the relationship, not the article or CVE case as a whole.
+The human judgement on a CVE evidence link: `human_confirmed`, `human_rejected`, or `human_uncertain`. It labels the relationship for Workspace triage and evaluation; it does not gate auto-publication.
 _Avoid_: Article disposition, CVE approval, grouping verdict
 
 **CVE MVP scorecard**:
-The observational evaluation of article disposition, explicit CVE extraction, article–CVE relevance, summary quality, retry completion, and enrichment coverage against labelled articles and human review outcomes. It builds evidence for later automation but is not a first-release publication gate.
-_Avoid_: Automatic publication threshold, pipeline health check, LLM judge alone
+The observational evaluation of article disposition, explicit CVE extraction, summary quality, retry completion, and enrichment coverage against labelled articles and human review outcomes. It builds evidence for later automation but is not a publication gate (publication uses CVSS/KEV signals).
+_Avoid_: Automatic publication threshold as eval metric, pipeline health check, LLM judge alone
 
 **Canonical event**:
 The system's single incident record that one or more articles may attach to.

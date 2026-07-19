@@ -7,9 +7,11 @@ import {
   parseWorkspacePage,
   workspacePageOffset,
 } from '../../lib/workspace-page';
+import { formatDate } from '../../lib/format';
 import { cvssTriageGrade } from '../../../src/cve/cvss-grade';
 import {
   listPublicCves,
+  publishDateKey,
   type PublicCveListEntry,
 } from '../../../src/public/public-cve-read';
 
@@ -63,11 +65,14 @@ function sortPublicCves(
   const sorted = [...entries];
   sorted.sort((a, b) => {
     if (sort === 'attention') {
+      const aDay = publishDateKey(a.approvedAt);
+      const bDay = publishDateKey(b.approvedAt);
+      if (aDay !== bDay) return bDay.localeCompare(aDay);
       if (a.signals.kevListed !== b.signals.kevListed) return a.signals.kevListed ? -1 : 1;
-      const cvss = compareNullableNumber(a.signals.cvssV3Base, b.signals.cvssV3Base, 'desc');
-      if (cvss !== 0) return cvss;
       const epss = compareNullableNumber(a.signals.epssScore, b.signals.epssScore, 'desc');
       if (epss !== 0) return epss;
+      const cvss = compareNullableNumber(a.signals.cvssV3Base, b.signals.cvssV3Base, 'desc');
+      if (cvss !== 0) return cvss;
       return a.cveId.localeCompare(b.cveId);
     }
     if (sort === 'cve') {
@@ -89,10 +94,10 @@ function sortPublicCves(
       const cmp = compareNullableNumber(a.signals.cvssV3Base, b.signals.cvssV3Base, dir);
       return cmp !== 0 ? cmp : a.cveId.localeCompare(b.cveId);
     }
-    // published
-    const aTime = a.approvedAt?.getTime() ?? 0;
-    const bTime = b.approvedAt?.getTime() ?? 0;
-    const cmp = dir === 'asc' ? aTime - bTime : bTime - aTime;
+    // published — calendar day only
+    const aDay = publishDateKey(a.approvedAt);
+    const bDay = publishDateKey(b.approvedAt);
+    const cmp = dir === 'asc' ? aDay.localeCompare(bDay) : bDay.localeCompare(aDay);
     return cmp !== 0 ? cmp : a.cveId.localeCompare(b.cveId);
   });
   return sorted;
@@ -221,9 +226,7 @@ export default async function PublicCvesPage({ searchParams }: PageProps) {
                             '—'
                           )}
                         </td>
-                        <td>
-                          {cve.approvedAt ? cve.approvedAt.toISOString().slice(0, 10) : '—'}
-                        </td>
+                        <td>{formatDate(cve.approvedAt)}</td>
                       </tr>
                     );
                   })}
@@ -233,9 +236,9 @@ export default async function PublicCvesPage({ searchParams }: PageProps) {
 
             <p className="meta" style={{ marginTop: '0.75rem' }}>
               {sort === 'attention' ? (
-                <>Default order: Attention (KEV → CVSS → EPSS → CVE).</>
+                <>Default order: Published date → KEV → EPSS → CVSS → CVE.</>
               ) : (
-                <Link href="/cves">Reset to Attention order</Link>
+                <Link href="/cves">Reset to default order</Link>
               )}
             </p>
 

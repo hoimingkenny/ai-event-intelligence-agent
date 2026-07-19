@@ -10,7 +10,7 @@ Forward-looking documents: what we intend to build, phased roadmaps, scope decis
 
 | Document | Scope |
 |---|---|
-| [cve-mvp-architecture.md](plans/cve-mvp-architecture.md) | CVE-centred, human-gated MVP workflow, data boundaries, runtime, and completion criteria |
+| [cve-mvp-architecture.md](plans/cve-mvp-architecture.md) | CVE-centred MVP workflow (interpretation + high-alert auto-publish; see ADR 0011) |
 
 ### `plans/archive/` — completed / superseded plans
 
@@ -39,6 +39,7 @@ The current-state reference: how the system is shaped and why. These documents a
 | [tradeoffs.md](design/tradeoffs.md) | Deliberate trade-offs and their rationale |
 | [limitations.md](design/limitations.md) | Known limits of the current approach |
 | [workspace-config-update-flow.md](design/workspace-config-update-flow.md) | Config hub Feeds/Inventory: before/after for add/edit/soft-deactivate vs next pipeline run (#34) |
+| [cve-mvp-architecture-detailed.mmd](design/cve-mvp-architecture-detailed.mmd) | CVE-MVP pipeline / publish / public-surface diagram (Mermaid source) |
 
 ## `engineering-notes/` — technical write-ups
 
