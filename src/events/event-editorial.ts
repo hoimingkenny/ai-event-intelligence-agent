@@ -1,8 +1,11 @@
 import type { PoolClient } from 'pg';
 import { ArticleRepository, type ArticleRecord } from '../db/repositories/article.repository.js';
+import { AnalysisTaskRepository } from '../db/repositories/analysis-task.repository.js';
 import { EntityRepository } from '../db/repositories/entity.repository.js';
 import { EventRepository, type EventRecord } from '../db/repositories/event.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
+import { CveCaseRepository } from '../db/repositories/cve-case.repository.js';
+import { worstCvssTriageGrade, worstEpssTriageGrade, type CvssTriageGrade, type EpssTriageGrade } from '../cve/cvss-grade.js';
 import {
   filterSignalsFromMatched,
   summarizeTriageSignals,
@@ -12,7 +15,7 @@ import {
 
 export type PublicationStatus = 'draft' | 'approved';
 
-/** Slim Needs-triage list row for presence icons and draft membership. */
+/** Slim Needs-triage list row for CVE-MVP skim icons and draft membership. */
 export interface TriageListItem {
   id: string;
   title: string | null;
@@ -20,11 +23,27 @@ export interface TriageListItem {
   sourceName: string | null;
   publishedAt: Date | null;
   processingStatus: string;
+  /** Legacy cheap-filter / entity skim (kept for tests and future debug). */
   signals: TriageSignalSummary;
+  /** CVE-MVP list icons: disposition actionable, CVE mentions. */
+  mvpSignals: TriageMvpSignals;
   draft: {
     primaryEventId: string;
     eventTitles: string[];
   } | null;
+}
+
+export interface TriageMvpSignals {
+  actionable: boolean;
+  hasCve: boolean;
+  disposition: string | null;
+  cveIds: string[];
+  /** Most severe NVD CVSS grade among mentioned CVEs with scores; null if none. */
+  cvssGrade: CvssTriageGrade | null;
+  /** CVE ids among mentions that are on the CISA KEV catalogue. */
+  kevCveIds: string[];
+  /** Worst EPSS grade among mentioned CVEs that cross triage thresholds; null if none. */
+  epssGrade: EpssTriageGrade | null;
 }
 
 /** Analyst Workspace article detail (not the public catalogue article page). */
@@ -57,21 +76,14 @@ export interface ArticlePeek {
   id: string;
   title: string | null;
   sourceName: string | null;
-  processingStatus: string;
-  extractionStatus: string;
-  excerpt: string;
-  bodySource: 'cleanText' | 'rssSummary' | null;
-  truncated: boolean;
   workspaceArticlePath: string;
-  filterSignals: FilterSignalBlock;
-  extractedEntities: Array<{
-    entityType: string;
-    entityValue: string;
-    confidence: number | null;
-    role: string | null;
-  }>;
-  llmDigest: string | null;
-  llmEmptyReason: string | null;
+  /** CVE-MVP article_summary task result (Article assessment → Summary). */
+  assessmentSummary: {
+    status: string;
+    attempts: number;
+    lastError: string | null;
+    summary: string | null;
+  } | null;
 }
 
 const PEEK_EXCERPT_MAX = 700;
@@ -353,10 +365,23 @@ export async function listArticlesNeedingTriagePage(
   ]);
 
   const articleIds = rows.map((row) => row.id);
-  const [entityHits, drafts] = await Promise.all([
-    entities.listVendorProductCvesForArticles(articleIds),
-    events.listDraftMembershipsForArticles(articleIds),
-  ]);
+  const articles = new ArticleRepository(db);
+  const analysisTasks = new AnalysisTaskRepository(db);
+  const cases = new CveCaseRepository(db);
+  const [entityHits, drafts, mentionsByArticle, dispositionTasks] =
+    await Promise.all([
+      entities.listVendorProductCvesForArticles(articleIds),
+      events.listDraftMembershipsForArticles(articleIds),
+      articles.listCveMentionsByArticles(articleIds),
+      analysisTasks.listCompletedByTargetsAndName('article', articleIds, 'article_disposition'),
+    ]);
+
+  const allCveIds = Array.from(
+    new Set(
+      Array.from(mentionsByArticle.values()).flatMap((mentions) => mentions.map((m) => m.cveId))
+    )
+  );
+  const enrichmentByCve = await cases.listLatestEnrichmentSkim(allCveIds);
 
   const entitiesByArticle = new Map<string, Array<{ entityType: string; entityValue: string }>>();
   for (const entity of entityHits) {
@@ -375,8 +400,17 @@ export async function listArticlesNeedingTriagePage(
     draftsByArticle.set(draft.articleId, list);
   }
 
+  const dispositionByArticle = new Map(dispositionTasks.map((t) => [t.targetId, t]));
+
   const items: TriageListItem[] = rows.map((row) => {
     const articleDrafts = draftsByArticle.get(row.id) ?? [];
+    const mentions = mentionsByArticle.get(row.id) ?? [];
+    const cveIds = Array.from(new Set(mentions.map((m) => m.cveId))).sort();
+    const dispositionTask = dispositionByArticle.get(row.id);
+    const dispositionResult = dispositionTask?.result as { disposition?: string } | undefined;
+    const disposition =
+      typeof dispositionResult?.disposition === 'string' ? dispositionResult.disposition : null;
+
     return {
       id: row.id,
       title: row.title,
@@ -385,6 +419,22 @@ export async function listArticlesNeedingTriagePage(
       publishedAt: row.publishedAt,
       processingStatus: row.processingStatus,
       signals: summarizeTriageSignals(row.matchedSignals, entitiesByArticle.get(row.id) ?? []),
+      mvpSignals: {
+        actionable: disposition === 'actionable',
+        hasCve: cveIds.length > 0,
+        disposition,
+        cveIds,
+        cvssGrade: worstCvssTriageGrade(
+          cveIds.map((cveId) => enrichmentByCve.get(cveId)?.cvssBase ?? null)
+        ),
+        kevCveIds: cveIds.filter((cveId) => enrichmentByCve.get(cveId)?.kevListed === true),
+        epssGrade: worstEpssTriageGrade(
+          cveIds.map((cveId) => {
+            const skim = enrichmentByCve.get(cveId);
+            return { score: skim?.epssScore, percentile: skim?.epssPercentile };
+          })
+        ),
+      },
       draft:
         articleDrafts.length === 0
           ? null
@@ -485,35 +535,39 @@ export async function getArticlePeek(
   db: Queryable,
   articleId: string
 ): Promise<ArticlePeek | null> {
-  const detail = await getWorkspaceArticle(db, articleId);
-  if (!detail) return null;
-
-  const excerptResult =
-    detail.bodySource === 'cleanText'
-      ? truncateArticleExcerpt(detail.bodyText, null)
-      : detail.bodySource === 'rssSummary'
-        ? truncateArticleExcerpt(null, detail.bodyText)
-        : truncateArticleExcerpt(null, null);
-
-  const { digest, emptyReason } = compactLlmDigest(
-    detail.llmArticleDigest ?? detail.llmClassification,
-    detail.processingStatus
+  const result = await db.query<{
+    id: string;
+    title: string | null;
+    source_name: string | null;
+  }>(
+    `
+      SELECT a.id, a.title, a.source_name
+      FROM articles a
+      WHERE a.id = $1
+    `,
+    [articleId]
   );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  const tasks = new AnalysisTaskRepository(db);
+  const taskRows = await tasks.listForTarget('article', articleId);
+  const summaryTask = taskRows.find((task) => task.taskName === 'article_summary');
+  const summaryResult = (summaryTask?.result ?? null) as { summary?: string } | null;
 
   return {
-    id: detail.id,
-    title: detail.title,
-    sourceName: detail.sourceName,
-    processingStatus: detail.processingStatus,
-    extractionStatus: detail.extractionStatus,
-    excerpt: excerptResult.excerpt,
-    bodySource: excerptResult.bodySource,
-    truncated: excerptResult.truncated,
-    workspaceArticlePath: `/workspace/articles/${detail.id}`,
-    filterSignals: detail.filterSignals,
-    extractedEntities: detail.extractedEntities,
-    llmDigest: digest,
-    llmEmptyReason: emptyReason,
+    id: row.id,
+    title: row.title,
+    sourceName: row.source_name,
+    workspaceArticlePath: `/workspace/articles/${row.id}`,
+    assessmentSummary: summaryTask
+      ? {
+          status: summaryTask.status,
+          attempts: summaryTask.attempts,
+          lastError: summaryTask.lastError,
+          summary: summaryResult?.summary ?? null,
+        }
+      : null,
   };
 }
 

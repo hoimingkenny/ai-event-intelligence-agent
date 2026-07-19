@@ -5,16 +5,11 @@ import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useId, useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import type { ArticlePeek } from '../../src/events/event-editorial';
-import { WorkspaceEntityList } from './WorkspaceEntityList';
 
 type Props = {
   articleId: string;
   articleTitle: string;
 };
-
-function formatSignalList(values: string[]): string {
-  return values.length > 0 ? values.join(', ') : '—';
-}
 
 export function ArticlePeekButton({ articleId, articleTitle }: Props) {
   const titleId = useId();
@@ -103,56 +98,34 @@ export function ArticlePeekButton({ articleId, articleTitle }: Props) {
 
                 {peek ? (
                   <>
-                    <p className="meta">
-                      {peek.sourceName || 'Unknown source'}
-                      {peek.bodySource === 'cleanText'
-                        ? ' · extracted text'
-                        : peek.bodySource === 'rssSummary'
-                          ? ' · RSS summary'
-                          : ''}
-                      {peek.truncated ? ' · truncated' : ''}
-                    </p>
-
-                    <h3 className="article-peek-section">Excerpt</h3>
-                    {peek.excerpt ? (
-                      <pre className="workspace-article-body">{peek.excerpt}</pre>
-                    ) : (
-                      <p className="meta">No excerpt available.</p>
-                    )}
-                    <p className="meta" style={{ marginTop: '0.5rem' }}>
+                    <p className="meta">{peek.sourceName || 'Unknown source'}</p>
+                    <p className="meta" style={{ marginTop: '0.35rem' }}>
                       <Link href={peek.workspaceArticlePath} onClick={close}>
                         Open full Workspace article
                       </Link>
                     </p>
 
-                    <h3 className="article-peek-section">Filter signals</h3>
-                    <dl className="kv-grid">
-                      <div>
-                        <dt>Vendors</dt>
-                        <dd>{formatSignalList(peek.filterSignals.vendors)}</dd>
-                      </div>
-                      <div>
-                        <dt>Products</dt>
-                        <dd>{formatSignalList(peek.filterSignals.products)}</dd>
-                      </div>
-                      <div>
-                        <dt>CVEs</dt>
-                        <dd>{formatSignalList(peek.filterSignals.cves)}</dd>
-                      </div>
-                      <div>
-                        <dt>Critical keywords</dt>
-                        <dd>{formatSignalList(peek.filterSignals.criticalKeywords)}</dd>
-                      </div>
-                    </dl>
-
-                    <h3 className="article-peek-section">Extracted entities</h3>
-                    <WorkspaceEntityList entities={peek.extractedEntities} />
-
-                    <h3 className="article-peek-section">LLM digest</h3>
-                    {peek.llmDigest ? (
-                      <pre className="workspace-article-body">{peek.llmDigest}</pre>
+                    <h3 className="article-peek-section">Article assessment</h3>
+                    <h4 className="page-kicker" style={{ marginTop: '0.35rem', marginBottom: '0.5rem' }}>
+                      AI short summary
+                    </h4>
+                    {peek.assessmentSummary ? (
+                      peek.assessmentSummary.status === 'completed' &&
+                      peek.assessmentSummary.summary ? (
+                        <pre className="workspace-article-body">
+                          {peek.assessmentSummary.summary}
+                        </pre>
+                      ) : (
+                        <p className="meta">
+                          Status: {peek.assessmentSummary.status} · attempts:{' '}
+                          {peek.assessmentSummary.attempts}
+                          {peek.assessmentSummary.lastError
+                            ? ` · ${peek.assessmentSummary.lastError}`
+                            : ''}
+                        </p>
+                      )
                     ) : (
-                      <p className="meta">{peek.llmEmptyReason || 'No LLM classification yet.'}</p>
+                      <p className="meta">Not scheduled.</p>
                     )}
                   </>
                 ) : null}

@@ -28,8 +28,8 @@ export default async function WorkspaceConfigHubPage() {
         <p className="page-kicker">Workspace Config</p>
         <h1 className="page-title">Config</h1>
         <p className="page-lede">
-          Live feeds and monitored inventory from Postgres. Queues stay under Overview / Triage /
-          Drafts / Approved.
+          Live feeds and monitored inventory from Postgres. Review queues stay under Overview /
+          Articles / CVE cases.
         </p>
 
         <WorkspaceNav active="config" />

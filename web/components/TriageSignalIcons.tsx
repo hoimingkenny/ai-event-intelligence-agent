@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { Bug, Buildings, NotePencil, Warning } from '@phosphor-icons/react/dist/ssr';
+import { Bug, ChartLineUp, Lightning, ShieldWarning } from '@phosphor-icons/react/dist/ssr';
 import type { TriageListItem } from '../../src/events/event-editorial';
 
 const ICON_SIZE = 16;
@@ -9,61 +8,114 @@ type Props = {
 };
 
 export function TriageSignalIcons({ article }: Props) {
-  const { signals, draft } = article;
-  const hasAny =
-    signals.hasVendorOrProduct ||
-    signals.hasCve ||
-    signals.hasCriticalKeyword ||
-    draft !== null;
-
-  if (!hasAny) return null;
+  const { mvpSignals } = article;
+  const kevListed = mvpSignals.kevCveIds.length > 0;
 
   return (
-    <span className="triage-icons" aria-label="Article signals">
-      {signals.hasVendorOrProduct ? (
-        <span
-          className="triage-icon"
-          title={signals.vendorProductNames.join(', ') || 'Monitored vendor or product'}
-        >
-          <Buildings size={ICON_SIZE} weight="duotone" aria-hidden />
-          <span className="sr-only">
-            Vendor or product: {signals.vendorProductNames.join(', ')}
-          </span>
+    <span className="triage-icons" aria-label="CVE MVP signals">
+      <span
+        className={mvpSignals.actionable ? 'triage-icon triage-icon-on' : 'triage-icon triage-icon-off'}
+        title={
+          mvpSignals.actionable
+            ? 'Disposition: actionable'
+            : mvpSignals.disposition
+              ? `Disposition: ${mvpSignals.disposition}`
+              : 'Disposition not assessed yet'
+        }
+      >
+        <Lightning
+          size={ICON_SIZE}
+          weight={mvpSignals.actionable ? 'fill' : 'regular'}
+          aria-hidden
+        />
+        <span className="sr-only">
+          {mvpSignals.actionable ? 'Actionable' : 'Not actionable or not assessed'}
         </span>
-      ) : null}
-      {signals.hasCve ? (
-        <span className="triage-icon" title={signals.cveIds.join(', ') || 'CVE mentioned'}>
-          <Bug size={ICON_SIZE} weight="duotone" aria-hidden />
-          <span className="sr-only">CVE: {signals.cveIds.join(', ')}</span>
+      </span>
+
+      <span
+        className={
+          !mvpSignals.hasCve
+            ? 'triage-icon triage-icon-off'
+            : mvpSignals.cvssGrade === 'critical'
+              ? 'triage-icon triage-icon-cve-critical'
+              : mvpSignals.cvssGrade === 'high'
+                ? 'triage-icon triage-icon-cve-high'
+                : 'triage-icon triage-icon-on'
+        }
+        title={
+          mvpSignals.hasCve
+            ? mvpSignals.cvssGrade
+              ? `CVE mentions (${mvpSignals.cvssGrade}): ${mvpSignals.cveIds.join(', ')}`
+              : `CVE mentions: ${mvpSignals.cveIds.join(', ')}`
+            : 'No CVE mentions'
+        }
+      >
+        <Bug size={ICON_SIZE} weight={mvpSignals.hasCve ? 'fill' : 'regular'} aria-hidden />
+        <span className="sr-only">
+          {mvpSignals.hasCve
+            ? mvpSignals.cvssGrade
+              ? `Has CVE (${mvpSignals.cvssGrade}): ${mvpSignals.cveIds.join(', ')}`
+              : `Has CVE: ${mvpSignals.cveIds.join(', ')}`
+            : 'No CVE mentions'}
         </span>
-      ) : null}
-      {signals.hasCriticalKeyword ? (
-        <span
-          className="triage-icon triage-icon-warn"
-          title={signals.criticalKeywords.join(', ') || 'Critical cyber keyword'}
-        >
-          <Warning size={ICON_SIZE} weight="duotone" aria-hidden />
-          <span className="sr-only">
-            Critical keywords: {signals.criticalKeywords.join(', ')}
-          </span>
+      </span>
+
+      <span
+        className={
+          kevListed
+            ? 'triage-icon triage-icon-cve-critical'
+            : mvpSignals.hasCve
+              ? 'triage-icon triage-icon-on'
+              : 'triage-icon triage-icon-off'
+        }
+        title={
+          kevListed
+            ? `CISA KEV listed: ${mvpSignals.kevCveIds.join(', ')}`
+            : mvpSignals.hasCve
+              ? 'CISA KEV: none of the mentioned CVEs are listed'
+              : 'CISA KEV: no CVE mentions'
+        }
+      >
+        <ShieldWarning
+          size={ICON_SIZE}
+          weight={kevListed || mvpSignals.hasCve ? 'fill' : 'regular'}
+          aria-hidden
+        />
+        <span className="sr-only">
+          {kevListed
+            ? `KEV listed: ${mvpSignals.kevCveIds.join(', ')}`
+            : 'KEV not listed'}
         </span>
-      ) : null}
-      {draft ? (
-        <Link
-          className="triage-icon triage-icon-draft"
-          href={`/workspace/events/${draft.primaryEventId}`}
-          title={
-            draft.eventTitles.length > 1
-              ? `Drafts: ${draft.eventTitles.join(' · ')}`
-              : `Draft: ${draft.eventTitles[0]}`
-          }
-        >
-          <NotePencil size={ICON_SIZE} weight="duotone" aria-hidden />
-          <span className="sr-only">
-            On draft event: {draft.eventTitles.join(', ')}
-          </span>
-        </Link>
-      ) : null}
+      </span>
+
+      <span
+        className={
+          mvpSignals.epssGrade === 'critical'
+            ? 'triage-icon triage-icon-cve-critical'
+            : mvpSignals.epssGrade === 'high'
+              ? 'triage-icon triage-icon-cve-high'
+              : mvpSignals.hasCve
+                ? 'triage-icon triage-icon-on'
+                : 'triage-icon triage-icon-off'
+        }
+        title={
+          mvpSignals.epssGrade
+            ? `EPSS ${mvpSignals.epssGrade} (≥${mvpSignals.epssGrade === 'critical' ? '0.10 / p0.95' : '0.05 / p0.90'})`
+            : mvpSignals.hasCve
+              ? 'EPSS below triage thresholds'
+              : 'EPSS: no CVE mentions'
+        }
+      >
+        <ChartLineUp
+          size={ICON_SIZE}
+          weight={mvpSignals.epssGrade || mvpSignals.hasCve ? 'fill' : 'regular'}
+          aria-hidden
+        />
+        <span className="sr-only">
+          {mvpSignals.epssGrade ? `EPSS ${mvpSignals.epssGrade}` : 'EPSS not elevated'}
+        </span>
+      </span>
     </span>
   );
 }

@@ -4,7 +4,16 @@ import type { Queryable } from '../db/repositories/types.js';
 import { logInfo } from '../utils/logger.js';
 import { recordStageResult } from '../utils/metrics.js';
 import { runAlertStage } from './alert-stage.js';
+import {
+  runAnalysisTaskStage,
+  type AnalysisTaskStageOptions,
+} from './analysis-task-stage.js';
+import {
+  runCaseConsolidationStage,
+  type CaseConsolidationStageOptions,
+} from './case-consolidation-stage.js';
 import { runClassificationStage } from './classification-stage.js';
+import { runCveScanStage } from './cve-scan-stage.js';
 import { runArticleDigestStage } from './digest-stage.js';
 import { runDedupStage } from './dedup-stage.js';
 import { runEmbeddingStage } from './embedding-stage.js';
@@ -28,14 +37,20 @@ export interface PipelineRunOptions {
   includeIngest?: boolean;
   includeLlm?: boolean;
   profile?: PipelineProfile;
+  analysisTaskCallers?: AnalysisTaskStageOptions['callers'];
+  extractor?: import('../extraction/article-extractor.interface.js').ArticleExtractor;
+  consolidationAdapters?: CaseConsolidationStageOptions['adapters'];
 }
 
 export interface PipelineRunResult {
   ingest?: Awaited<ReturnType<typeof ingestRssFeeds>>;
   filter: Awaited<ReturnType<typeof runCheapFilterStage>>;
   extraction: Awaited<ReturnType<typeof runExtractionStage>>;
-  entities: Awaited<ReturnType<typeof runEntityStage>>;
-  digest: Awaited<ReturnType<typeof runArticleDigestStage>>;
+  entities?: Awaited<ReturnType<typeof runEntityStage>>;
+  digest?: Awaited<ReturnType<typeof runArticleDigestStage>>;
+  cveScan?: Awaited<ReturnType<typeof runCveScanStage>>;
+  analysisTasks?: Awaited<ReturnType<typeof runAnalysisTaskStage>>;
+  caseConsolidation?: Awaited<ReturnType<typeof runCaseConsolidationStage>>;
   articleEmbeddings?: Awaited<ReturnType<typeof runEmbeddingStage>>;
   dedup?: Awaited<ReturnType<typeof runDedupStage>>;
   events?: Awaited<ReturnType<typeof runEventStage>>;
@@ -61,6 +76,9 @@ const PipelineStateAnnotation = Annotation.Root({
   extraction: Annotation<PipelineRunResult['extraction']>(),
   entities: Annotation<PipelineRunResult['entities']>(),
   digest: Annotation<PipelineRunResult['digest']>(),
+  cveScan: Annotation<PipelineRunResult['cveScan']>(),
+  analysisTasks: Annotation<PipelineRunResult['analysisTasks']>(),
+  caseConsolidation: Annotation<PipelineRunResult['caseConsolidation']>(),
   articleEmbeddings: Annotation<PipelineRunResult['articleEmbeddings']>(),
   dedup: Annotation<PipelineRunResult['dedup']>(),
   events: Annotation<PipelineRunResult['events']>(),
@@ -77,6 +95,9 @@ interface GraphBuildOptions {
   includeIngest: boolean;
   includeLlm: boolean;
   profile: PipelineProfile;
+  analysisTaskCallers?: AnalysisTaskStageOptions['callers'];
+  extractor?: import('../extraction/article-extractor.interface.js').ArticleExtractor;
+  consolidationAdapters?: CaseConsolidationStageOptions['adapters'];
 }
 
 export function buildPipelineGraph(db: Queryable, options: GraphBuildOptions) {
@@ -91,6 +112,71 @@ export function buildPipelineGraph(db: Queryable, options: GraphBuildOptions) {
       return { [key]: result } as Partial<PipelineState>;
     };
 
+  if (profile === 'cve-mvp') {
+    return buildCveMvpGraph(db, node, {
+      limit,
+      includeIngest,
+      filterMode,
+      callers: options.analysisTaskCallers,
+      extractor: options.extractor,
+      consolidationAdapters: options.consolidationAdapters,
+    });
+  }
+  return buildLegacyGraph(db, node, { limit, includeIngest, includeLlm, profile, filterMode });
+}
+
+interface BaseBuildArgs {
+  limit: number;
+  includeIngest: boolean;
+  filterMode: ReturnType<typeof cheapFilterModeForProfile>;
+  callers?: AnalysisTaskStageOptions['callers'];
+  extractor?: import('../extraction/article-extractor.interface.js').ArticleExtractor;
+  consolidationAdapters?: CaseConsolidationStageOptions['adapters'];
+}
+
+function buildCveMvpGraph(
+  db: Queryable,
+  node: <K extends keyof PipelineState>(key: K, stageName: string, run: () => Promise<PipelineState[K]>) => () => Promise<Partial<PipelineState>>,
+  args: BaseBuildArgs
+) {
+  const { limit, includeIngest, filterMode, callers, extractor, consolidationAdapters } = args;
+  return new StateGraph(PipelineStateAnnotation)
+    .addNode('ingest_stage', node('ingest', 'ingest', async () =>
+      includeIngest ? ingestRssFeeds(db, { limitFeeds: limit }) : undefined
+    ))
+    .addNode('filter_stage', node('filter', 'filter', () =>
+      runCheapFilterStage(db, { limit, mode: filterMode })
+    ))
+    .addNode('extraction_stage', node('extraction', 'extraction', () => runExtractionStage(db, { limit, extractor })))
+    .addNode('extraction_drift', async () => {
+      const drift = await checkExtractionDrift(db);
+      recordAndLog('extraction_drift', { driftedSources: drift.driftedSources });
+      return {};
+    })
+    .addNode('cve_scan_stage', node('cveScan', 'cve_scan', () => runCveScanStage(db, { limit })))
+    .addNode('analysis_tasks_stage', node('analysisTasks', 'analysis_tasks', () =>
+      runAnalysisTaskStage(db, { limit, maxTasksPerRun: limit, concurrency: 3, callers })
+    ))
+    .addNode('case_consolidation_stage', node('caseConsolidation', 'case_consolidation', () =>
+      runCaseConsolidationStage(db, { limit, adapters: consolidationAdapters })
+    ))
+    .addEdge(START, 'ingest_stage')
+    .addEdge('ingest_stage', 'filter_stage')
+    .addEdge('filter_stage', 'extraction_stage')
+    .addEdge('extraction_stage', 'extraction_drift')
+    .addEdge('extraction_drift', 'cve_scan_stage')
+    .addEdge('cve_scan_stage', 'analysis_tasks_stage')
+    .addEdge('analysis_tasks_stage', 'case_consolidation_stage')
+    .addEdge('case_consolidation_stage', END)
+    .compile();
+}
+
+function buildLegacyGraph(
+  db: Queryable,
+  node: <K extends keyof PipelineState>(key: K, stageName: string, run: () => Promise<PipelineState[K]>) => () => Promise<Partial<PipelineState>>,
+  args: BaseBuildArgs & { includeLlm: boolean; profile: PipelineProfile }
+) {
+  const { limit, includeIngest, includeLlm, profile, filterMode } = args;
   const graph = new StateGraph(PipelineStateAnnotation)
     .addNode('ingest_stage', node('ingest', 'ingest', async () =>
       includeIngest ? ingestRssFeeds(db, { limitFeeds: limit }) : undefined
@@ -169,6 +255,9 @@ export async function runPipeline(
     includeIngest: options.includeIngest !== false,
     includeLlm: options.includeLlm ?? Boolean(env.minimaxApiKey),
     profile,
+    analysisTaskCallers: options.analysisTaskCallers,
+    extractor: options.extractor,
+    consolidationAdapters: options.consolidationAdapters,
   });
 
   const state = await graph.invoke({});
@@ -179,6 +268,9 @@ export async function runPipeline(
     extraction: state.extraction,
     entities: state.entities,
     digest: state.digest,
+    cveScan: state.cveScan,
+    analysisTasks: state.analysisTasks,
+    caseConsolidation: state.caseConsolidation,
     articleEmbeddings: state.articleEmbeddings,
     dedup: state.dedup,
     events: state.events,

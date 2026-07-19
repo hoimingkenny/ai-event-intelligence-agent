@@ -66,8 +66,7 @@ function scriptedDb(
 }
 
 describe('getArticlePeek', () => {
-  it('returns excerpt, both signal blocks, and compact digest without full body', async () => {
-    const clean = `Full extracted ${'body '.repeat(200)}`;
+  it('returns article assessment summary without excerpt or legacy digest blocks', async () => {
     const db = scriptedDb([
       {
         match: 'FROM articles',
@@ -76,40 +75,29 @@ describe('getArticlePeek', () => {
             id: '101',
             title: 'PAS advisory',
             source_name: 'CISA',
-            processing_status: 'CLASSIFIED',
-            extraction_status: 'ok',
-            rss_summary: 'Short RSS',
-            clean_text: clean,
-            llm_article_digest: {
-              relatedToMonitoredInventory: true,
-              incidentSummary: 'Actively exploited PAS issue',
-              cves: ['CVE-2026-1'],
-              matchedVendors: ['CyberArk'],
-              matchedProducts: ['Privileged Access Security'],
-              mentionedVendors: ['CyberArk'],
-              mentionedProducts: ['Privileged Access Security'],
-              affectedOrganizations: [],
-              confidence: 0.9,
-              reasoning: 'PAS exploitation.',
-            },
-            llm_classification: null,
-            cheap_filter_matched_signals: {
-              vendors: ['CyberArk'],
-              products: [],
-              cves: [],
-              criticalCyberKeywords: ['ransomware'],
-            },
           },
         ],
       },
       {
-        match: 'FROM article_entities',
+        match: 'FROM analysis_tasks',
         rows: [
           {
-            entity_type: 'product',
-            entity_value: 'PAS',
-            confidence: '0.9',
-            role: 'affected',
+            id: '1',
+            target_type: 'article',
+            target_id: '101',
+            task_name: 'article_summary',
+            status: 'completed',
+            attempts: 1,
+            max_attempts: 3,
+            next_attempt_at: null,
+            input_payload: {},
+            result: { summary: 'Actively exploited PAS issue requiring patch review.' },
+            prompt_version: 'v1',
+            model: 'test',
+            last_error: null,
+            completed_at: new Date('2026-07-01T00:00:00Z'),
+            created_at: new Date('2026-07-01T00:00:00Z'),
+            updated_at: new Date('2026-07-01T00:00:00Z'),
           },
         ],
       },
@@ -119,21 +107,20 @@ describe('getArticlePeek', () => {
     expect(peek).not.toBeNull();
     expect(peek!.id).toBe('101');
     expect(peek!.title).toBe('PAS advisory');
-    expect(peek!.excerpt.length).toBeLessThan(clean.length);
-    expect(peek!.truncated).toBe(true);
-    expect(peek!.bodySource).toBe('cleanText');
+    expect(peek!.sourceName).toBe('CISA');
     expect(peek!.workspaceArticlePath).toBe('/workspace/articles/101');
-    expect(peek!.filterSignals.vendors).toEqual(['CyberArk']);
-    expect(peek!.extractedEntities).toEqual([
-      expect.objectContaining({ entityType: 'product', entityValue: 'PAS' }),
-    ]);
-    expect(peek!.llmDigest).toContain('Actively exploited PAS issue');
-    expect(peek!.llmEmptyReason).toBeNull();
-    expect(peek).not.toHaveProperty('bodyText');
-    expect(peek).not.toHaveProperty('llmClassification');
+    expect(peek!.assessmentSummary).toEqual({
+      status: 'completed',
+      attempts: 1,
+      lastError: null,
+      summary: 'Actively exploited PAS issue requiring patch review.',
+    });
+    expect(peek).not.toHaveProperty('excerpt');
+    expect(peek).not.toHaveProperty('llmDigest');
+    expect(peek).not.toHaveProperty('filterSignals');
   });
 
-  it('returns empty digest reason when classification is missing', async () => {
+  it('returns null assessment when summary task is missing', async () => {
     const db = scriptedDb([
       {
         match: 'FROM articles',
@@ -142,24 +129,14 @@ describe('getArticlePeek', () => {
             id: '202',
             title: 'Pending',
             source_name: 'MSRC',
-            processing_status: 'EXTRACTED',
-            extraction_status: 'ok',
-            rss_summary: 'RSS',
-            clean_text: null,
-            llm_article_digest: null,
-            llm_classification: null,
-            cheap_filter_matched_signals: null,
           },
         ],
       },
-      { match: 'FROM article_entities', rows: [] },
+      { match: 'FROM analysis_tasks', rows: [] },
     ]);
 
     const peek = await getArticlePeek(db, '202');
-    expect(peek?.excerpt).toBe('RSS');
-    expect(peek?.bodySource).toBe('rssSummary');
-    expect(peek?.llmDigest).toBeNull();
-    expect(peek?.llmEmptyReason).toMatch(/No LLM digest yet/);
+    expect(peek?.assessmentSummary).toBeNull();
   });
 });
 

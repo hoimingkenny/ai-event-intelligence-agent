@@ -1,4 +1,5 @@
 export const WORKSPACE_PAGE_SIZE = 25;
+export const CVE_REVIEW_HISTORY_PAGE_SIZE = 10;
 
 export function parseWorkspacePage(raw: string | string[] | undefined): number {
   const value = Array.isArray(raw) ? raw[0] : raw;

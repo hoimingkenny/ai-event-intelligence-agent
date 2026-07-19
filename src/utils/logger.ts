@@ -38,3 +38,23 @@ export function logWarn(bindings: Record<string, unknown>, message: string): voi
 export function logError(bindings: Record<string, unknown>, message: string): void {
   logger.error(redactLogObject(bindings), message);
 }
+
+/** Batch of article ids a pipeline stage is about to process. */
+export function logStageBatch(
+  stage: string,
+  action: string,
+  articleIds: string[],
+  extra: Record<string, unknown> = {}
+): void {
+  logInfo({ stage, action, articleIds, count: articleIds.length, ...extra }, 'pipeline_stage_batch');
+}
+
+/** One article-level action inside a pipeline stage. */
+export function logStageArticle(
+  stage: string,
+  articleId: string,
+  action: string,
+  extra: Record<string, unknown> = {}
+): void {
+  logInfo({ stage, articleId, action, ...extra }, 'pipeline_stage_article');
+}
