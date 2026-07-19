@@ -15,6 +15,7 @@ import {
   type EnrichmentOutcome,
 } from './enrichment.js';
 import { EpssHttpAdapter, KevHttpAdapter, NvdHttpAdapter } from './enrichment-http.js';
+import { stableStringify } from '../utils/stable-json.js';
 import type { MaintenanceAdapterSet } from './maintenance-adapters.js';
 
 export type { EnrichmentAdapter, EnrichmentAdapterSet } from './enrichment.js';
@@ -257,5 +258,7 @@ function sameNormalizedValue(
   a: CveSourceObservationRecord['normalizedValue'],
   b: EnrichmentOutcome['normalizedValue']
 ): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  // Key order differs between stored jsonb and freshly-normalized values, so compare
+  // canonically to avoid appending a spurious observation for unchanged enrichment.
+  return stableStringify(a) === stableStringify(b);
 }

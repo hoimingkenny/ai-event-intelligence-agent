@@ -93,9 +93,11 @@ export async function runAnalysisTaskStage(
     relevanceCallerAdapter,
     async (article, caller, task) => {
       const cveIds = Array.isArray(task.inputPayload.cveIds) ? (task.inputPayload.cveIds as string[]) : [];
-      const result = await generateCveRelevance(article, cveIds, {
-        call: async (system, user) => ({ results: await caller(system, user) }),
-      });
+      const result = await generateCveRelevance(
+        article,
+        cveIds,
+        caller ? { call: async (system, user) => ({ results: await caller(system, user) }) } : {}
+      );
       return { results: result };
     }
   );
@@ -186,7 +188,7 @@ async function drainTaskQueue<TSchemaResult>(
   caller: ((system: string, user: string) => Promise<TSchemaResult>) | undefined,
   runner: (
     article: ArticleRecord,
-    caller: (system: string, user: string) => Promise<TSchemaResult>,
+    caller: ((system: string, user: string) => Promise<TSchemaResult>) | undefined,
     task: AnalysisTaskRecord
   ) => Promise<Record<string, unknown>>
 ): Promise<DrainResult> {
@@ -201,10 +203,6 @@ async function drainTaskQueue<TSchemaResult>(
   let completed = 0;
   let exhausted = 0;
   let failed = 0;
-  const effectiveCaller: (system: string, user: string) => Promise<TSchemaResult> =
-    caller ?? (async () => {
-      throw new Error(`no caller provided for task ${taskName}`);
-    });
 
   await runWithConcurrency(drained, 3, async (task) => {
     const article = await loadArticleForTask(articles, task);
@@ -215,7 +213,9 @@ async function drainTaskQueue<TSchemaResult>(
     }
     const requestJson = { taskId: task.id, inputPayload: task.inputPayload };
     try {
-      const result = await runner(article, effectiveCaller, task);
+      // When no caller is injected (production runs), the prompt helpers fall back to
+      // the configured MiniMax LLM. Tests inject deterministic callers instead.
+      const result = await runner(article, caller, task);
       await tasks.recordSuccess(task.id, result);
       await audit.insert({
         targetType: 'article',

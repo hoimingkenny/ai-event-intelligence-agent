@@ -1,6 +1,7 @@
 import { CveCaseRepository, type CveSourceName } from '../db/repositories/cve-case.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
 import { logInfo, logWarn, logError } from '../utils/logger.js';
+import { stableStringify } from '../utils/stable-json.js';
 import type { MaintenanceAdapterSet, NvdRefreshRecord } from './maintenance-adapters.js';
 import type {
   EpssNormalized,
@@ -331,7 +332,9 @@ function sameNormalizedValue(
   b: SourceNormalizedValue
 ): boolean {
   if (!a) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
+  // Key order differs between stored jsonb and freshly-normalized values, so compare
+  // canonically to avoid appending a spurious observation on an unchanged tick.
+  return stableStringify(a) === stableStringify(b);
 }
 
 // Re-export so callers don't have to import the adapters module separately.
