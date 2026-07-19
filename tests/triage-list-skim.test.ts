@@ -146,6 +146,15 @@ describe('listArticlesNeedingTriagePage skim enrichment', () => {
       primaryEventId: '60',
       eventTitles: ['Newer draft', 'Older draft'],
     });
+    expect(item.mvpSignals).toEqual({
+      actionable: false,
+      hasCve: false,
+      disposition: null,
+      cveIds: [],
+      cvssGrade: null,
+      kevCveIds: [],
+      epssGrade: null,
+    });
   });
 
   it('returns null draft when the article is not on any draft event', async () => {
@@ -183,5 +192,91 @@ describe('listArticlesNeedingTriagePage skim enrichment', () => {
     expect(page.items[0]?.signals.hasVendorOrProduct).toBe(false);
     expect(page.items[0]?.signals.hasCve).toBe(false);
     expect(page.items[0]?.signals.hasCriticalKeyword).toBe(false);
+    expect(page.items[0]?.mvpSignals.actionable).toBe(false);
+    expect(page.items[0]?.mvpSignals.hasCve).toBe(false);
+  });
+
+  it('marks mvpSignals from disposition and cve_mentions', async () => {
+    let dispositionSeen = false;
+    const richDb: Queryable = {
+      async query<T>(sql: string, params?: unknown[]) {
+        if (sql.includes('COUNT(*)')) return { rows: [{ count: '1' }] as T[], rowCount: 1 };
+        if (sql.includes('FROM articles a')) {
+          return {
+            rows: [
+              {
+                id: '303',
+                title: '7-Zip RCE',
+                canonical_url: 'https://example.com/7zip',
+                source_name: 'THN',
+                published_at: new Date('2026-07-18T00:00:00Z'),
+                processing_status: 'EXTRACTION_SUCCESS',
+                cheap_filter_matched_signals: null,
+              },
+            ] as T[],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('FROM article_entities')) return { rows: [] as T[], rowCount: 0 };
+        if (sql.includes("publication_status = 'draft'")) return { rows: [] as T[], rowCount: 0 };
+        if (sql.includes('FROM cve_mentions')) {
+          return {
+            rows: [
+              {
+                article_id: '303',
+                cve_id: 'CVE-2025-8088',
+                zone: 'clean_text',
+                snippet: 'mention',
+                start_offset: 0,
+                end_offset: 10,
+              },
+            ] as T[],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('FROM analysis_tasks') && sql.includes("status = 'completed'")) {
+          const taskName = typeof params?.[2] === 'string' ? params[2] : '';
+          if (taskName === 'article_disposition') {
+            dispositionSeen = true;
+            return {
+              rows: [
+                {
+                  id: '1',
+                  target_type: 'article',
+                  target_id: '303',
+                  task_name: 'article_disposition',
+                  status: 'completed',
+                  attempts: 1,
+                  max_attempts: 5,
+                  next_attempt_at: null,
+                  input_payload: {},
+                  result: { disposition: 'actionable', reason: null, signals: [], reasoning: 'x' },
+                  prompt_version: 'v1',
+                  model: 'test',
+                  last_error: null,
+                  completed_at: new Date(),
+                  created_at: new Date(),
+                  updated_at: new Date(),
+                },
+              ] as T[],
+              rowCount: 1,
+            };
+          }
+        }
+        return { rows: [] as T[], rowCount: 0 };
+      },
+    };
+
+    const page = await listArticlesNeedingTriagePage(richDb, { limit: 10, offset: 0 });
+    expect(dispositionSeen).toBe(true);
+    expect(page.items[0]?.mvpSignals).toEqual({
+      actionable: true,
+      hasCve: true,
+      disposition: 'actionable',
+      cveIds: ['CVE-2025-8088'],
+      cvssGrade: null,
+      kevCveIds: [],
+      epssGrade: null,
+    });
   });
 });

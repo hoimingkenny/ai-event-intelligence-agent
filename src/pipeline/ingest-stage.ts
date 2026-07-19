@@ -3,7 +3,7 @@ import { FeedRepository, type FeedRecord } from '../db/repositories/feed.reposit
 import { normalizeFeedItem, type NormalizedFeedItem } from '../rss/feed-normalizer.js';
 import { ParserRssFetcher, type RssFetcher } from '../rss/rss-fetcher.js';
 import type { Queryable } from '../db/repositories/types.js';
-import { logInfo } from '../utils/logger.js';
+import { logInfo, logStageArticle } from '../utils/logger.js';
 
 type PreparedItem = {
   feedOrdinal: number;
@@ -77,16 +77,16 @@ export async function ingestRssFeeds(db: Queryable, options: IngestOptions = {})
     const saved = await articleRepository.insertDiscoveredArticle(item.normalized);
     if (saved.created) {
       item.feedResult.created += 1;
-      logInfo(
-        { source: item.feedResult.sourceName, url: item.normalized.canonicalUrl },
-        'article_discovered'
-      );
+      logStageArticle('ingest', saved.article.id, 'discovered', {
+        source: item.feedResult.sourceName,
+        url: item.normalized.canonicalUrl,
+      });
     } else {
       item.feedResult.duplicates += 1;
-      logInfo(
-        { source: item.feedResult.sourceName, url: item.normalized.canonicalUrl },
-        'article_skipped_duplicate'
-      );
+      logStageArticle('ingest', saved.article.id, 'skipped_duplicate', {
+        source: item.feedResult.sourceName,
+        url: item.normalized.canonicalUrl,
+      });
     }
   }
 

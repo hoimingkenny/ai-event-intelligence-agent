@@ -54,11 +54,7 @@ export default async function PublicArticleDetailPage({ params }: PageProps) {
         <section className="workspace-section">
           <h2 className="section-title">Analyst summary</h2>
           {summary ? (
-            <article>
-              {summary.split(/\n+/).map((para, idx) => (
-                <p key={idx}>{para}</p>
-              ))}
-            </article>
+            <pre className="workspace-article-body">{summary}</pre>
           ) : (
             <p className="empty-state">No analyst summary available yet.</p>
           )}

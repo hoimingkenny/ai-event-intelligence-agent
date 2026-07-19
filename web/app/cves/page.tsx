@@ -1,63 +1,251 @@
 import Link from 'next/link';
 import { SiteHeader } from '../../components/SiteHeader';
+import { WorkspacePagination } from '../../components/WorkspacePagination';
 import { getDb } from '../../lib/db';
-import { listPublicCves } from '../../../src/public/public-cve-read';
+import {
+  WORKSPACE_PAGE_SIZE,
+  parseWorkspacePage,
+  workspacePageOffset,
+} from '../../lib/workspace-page';
+import { cvssTriageGrade } from '../../../src/cve/cvss-grade';
+import {
+  listPublicCves,
+  type PublicCveListEntry,
+} from '../../../src/public/public-cve-read';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'CVEs',
+  title: 'High-alert CVEs',
 };
 
-export default async function PublicCvesPage() {
-  const cves = await listPublicCves(getDb());
+const SORT_KEYS = ['attention', 'cve', 'kev', 'epss', 'cvss', 'published'] as const;
+type SortKey = (typeof SORT_KEYS)[number];
+type SortDir = 'asc' | 'desc';
+
+type PageProps = {
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string }>;
+};
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function parseSort(raw: string | undefined): SortKey {
+  if (raw && (SORT_KEYS as readonly string[]).includes(raw)) return raw as SortKey;
+  return 'attention';
+}
+
+function defaultDir(sort: SortKey): SortDir {
+  return sort === 'cve' ? 'asc' : 'desc';
+}
+
+function parseDir(raw: string | undefined, sort: SortKey): SortDir {
+  if (raw === 'asc' || raw === 'desc') return raw;
+  return defaultDir(sort);
+}
+
+function compareNullableNumber(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  dir: SortDir
+): number {
+  const aVal = a ?? -1;
+  const bVal = b ?? -1;
+  return dir === 'asc' ? aVal - bVal : bVal - aVal;
+}
+
+function sortPublicCves(
+  entries: PublicCveListEntry[],
+  sort: SortKey,
+  dir: SortDir
+): PublicCveListEntry[] {
+  const sorted = [...entries];
+  sorted.sort((a, b) => {
+    if (sort === 'attention') {
+      if (a.signals.kevListed !== b.signals.kevListed) return a.signals.kevListed ? -1 : 1;
+      const cvss = compareNullableNumber(a.signals.cvssV3Base, b.signals.cvssV3Base, 'desc');
+      if (cvss !== 0) return cvss;
+      const epss = compareNullableNumber(a.signals.epssScore, b.signals.epssScore, 'desc');
+      if (epss !== 0) return epss;
+      return a.cveId.localeCompare(b.cveId);
+    }
+    if (sort === 'cve') {
+      const cmp = a.cveId.localeCompare(b.cveId);
+      return dir === 'asc' ? cmp : -cmp;
+    }
+    if (sort === 'kev') {
+      if (a.signals.kevListed !== b.signals.kevListed) {
+        const listedFirst = a.signals.kevListed ? -1 : 1;
+        return dir === 'desc' ? listedFirst : -listedFirst;
+      }
+      return a.cveId.localeCompare(b.cveId);
+    }
+    if (sort === 'epss') {
+      const cmp = compareNullableNumber(a.signals.epssScore, b.signals.epssScore, dir);
+      return cmp !== 0 ? cmp : a.cveId.localeCompare(b.cveId);
+    }
+    if (sort === 'cvss') {
+      const cmp = compareNullableNumber(a.signals.cvssV3Base, b.signals.cvssV3Base, dir);
+      return cmp !== 0 ? cmp : a.cveId.localeCompare(b.cveId);
+    }
+    // published
+    const aTime = a.approvedAt?.getTime() ?? 0;
+    const bTime = b.approvedAt?.getTime() ?? 0;
+    const cmp = dir === 'asc' ? aTime - bTime : bTime - aTime;
+    return cmp !== 0 ? cmp : a.cveId.localeCompare(b.cveId);
+  });
+  return sorted;
+}
+
+function sortHref(target: SortKey, current: SortKey, dir: SortDir): string {
+  const nextDir =
+    target === current ? (dir === 'asc' ? 'desc' : 'asc') : defaultDir(target);
+  const params = new URLSearchParams();
+  if (target !== 'attention') params.set('sort', target);
+  if (nextDir !== defaultDir(target)) params.set('dir', nextDir);
+  const qs = params.toString();
+  return qs ? `/cves?${qs}` : '/cves';
+}
+
+function paginationBasePath(sort: SortKey, dir: SortDir): string {
+  const params = new URLSearchParams();
+  if (sort !== 'attention') params.set('sort', sort);
+  if (dir !== defaultDir(sort)) params.set('dir', dir);
+  const qs = params.toString();
+  return qs ? `/cves?${qs}` : '/cves';
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  current,
+  dir,
+  numeric,
+}: {
+  label: string;
+  sortKey: SortKey;
+  current: SortKey;
+  dir: SortDir;
+  numeric?: boolean;
+}) {
+  const active = current === sortKey;
+  const marker = active ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
+  return (
+    <th scope="col" className={numeric ? 'workspace-table-num' : undefined}>
+      <Link className="cve-sort-link" href={sortHref(sortKey, current, dir)}>
+        {label}
+        {marker}
+      </Link>
+    </th>
+  );
+}
+
+export default async function PublicCvesPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const sort = parseSort(params.sort);
+  const dir = parseDir(params.dir, sort);
+  const page = parseWorkspacePage(params.page);
+
+  const all = sortPublicCves(await listPublicCves(getDb()), sort, dir);
+  const offset = workspacePageOffset(page);
+  const pageRows = all.slice(offset, offset + WORKSPACE_PAGE_SIZE);
 
   return (
     <>
       <SiteHeader active="cves" />
       <main className="page">
         <p className="page-kicker">Public catalogue</p>
-        <h1 className="page-title">Approved CVEs</h1>
-        <p className="page-lede">
-          Only CVEs that an analyst has approved are published here. Sorted by Attention order
-          (KEV, EPSS, CVSS, identifier).
-        </p>
+        <h1 className="page-title">High-alert CVEs</h1>
 
-        {cves.length === 0 ? (
+        {all.length === 0 ? (
           <div className="empty-state">
-            <h2>No approved CVEs yet</h2>
+            <h2>No high-alert CVEs yet</h2>
             <p>
-              Approved cases with at least one human-confirmed source link will appear here. Until
-              then the catalogue stays empty.
+              Cases reach this catalogue when enrichment reports CVSS ≥ 9 or a CISA KEV
+              listing. Until then the list stays empty.
             </p>
           </div>
         ) : (
-          <ul className="event-list">
-            {cves.map((cve) => (
-              <li key={cve.cveId} className="event-row">
-                <div>
-                  <Link className="title" href={`/cves/${encodeURIComponent(cve.cveId)}`}>
-                    {cve.cveId}
-                  </Link>
-                  <div className="meta">
-                    {cve.signals.kevListed ? <span>KEV</span> : null}
-                    {cve.signals.epssScore != null ? (
-                      <span>EPSS: {cve.signals.epssScore.toFixed(4)}</span>
-                    ) : null}
-                    {cve.signals.cvssV3Base != null ? (
-                      <span>CVSS v3: {cve.signals.cvssV3Base.toFixed(1)}</span>
-                    ) : null}
-                    {cve.approvedByActor ? <span>Approved by {cve.approvedByActor}</span> : null}
-                  </div>
-                </div>
-                <div className="meta" style={{ justifyContent: 'flex-end' }}>
-                  <span>
-                    {cve.approvedAt ? cve.approvedAt.toISOString().slice(0, 10) : '—'}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <>
+            <div className="workspace-table-wrap">
+              <table className="workspace-table">
+                <thead>
+                  <tr>
+                    <SortHeader label="CVE" sortKey="cve" current={sort} dir={dir} />
+                    <SortHeader label="KEV" sortKey="kev" current={sort} dir={dir} />
+                    <SortHeader label="EPSS" sortKey="epss" current={sort} dir={dir} numeric />
+                    <SortHeader label="CVSS" sortKey="cvss" current={sort} dir={dir} numeric />
+                    <SortHeader
+                      label="Published"
+                      sortKey="published"
+                      current={sort}
+                      dir={dir}
+                    />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((cve) => {
+                    const cvssGrade =
+                      cve.signals.cvssV3Base != null
+                        ? cvssTriageGrade(cve.signals.cvssV3Base)
+                        : null;
+                    return (
+                      <tr key={cve.cveId}>
+                        <td>
+                          <Link
+                            className="workspace-table-cve"
+                            href={`/cves/${encodeURIComponent(cve.cveId)}`}
+                          >
+                            {cve.cveId}
+                          </Link>
+                        </td>
+                        <td>
+                          {cve.signals.kevListed ? (
+                            <span className="chip">Listed</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="workspace-table-num">
+                          {cve.signals.epssScore != null
+                            ? cve.signals.epssScore.toFixed(4)
+                            : '—'}
+                        </td>
+                        <td className="workspace-table-num">
+                          {cvssGrade && cve.signals.cvssV3Base != null ? (
+                            <span className={`chip ${cvssGrade}`}>
+                              {titleCase(cvssGrade)} {cve.signals.cvssV3Base.toFixed(1)}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td>
+                          {cve.approvedAt ? cve.approvedAt.toISOString().slice(0, 10) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="meta" style={{ marginTop: '0.75rem' }}>
+              {sort === 'attention' ? (
+                <>Default order: Attention (KEV → CVSS → EPSS → CVE).</>
+              ) : (
+                <Link href="/cves">Reset to Attention order</Link>
+              )}
+            </p>
+
+            <WorkspacePagination
+              basePath={paginationBasePath(sort, dir)}
+              page={page}
+              total={all.length}
+              limit={WORKSPACE_PAGE_SIZE}
+            />
+          </>
         )}
       </main>
     </>

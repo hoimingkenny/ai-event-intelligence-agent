@@ -6,6 +6,7 @@ import type { DigestGoldFields } from '../../../../../src/evaluation/digest/dige
 import { getWorkspaceArticle } from '../../../../../src/events/event-editorial';
 import { getDigestGoldForArticle } from '../../../../../src/workspace/workspace-digest-eval-read';
 import { getCveMvpArticleView, type CveMvpArticleWorkspaceView } from '../../../../../src/workspace/cve-mvp-workspace-read';
+import { cvssTriageGrade } from '../../../../../src/cve/cvss-grade';
 import { ConfirmSubmitScript } from '../../../../components/ConfirmSubmitScript';
 import { DigestGoldForm } from '../../../../components/DigestGoldForm';
 import { SiteHeader } from '../../../../components/SiteHeader';
@@ -109,13 +110,10 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
       <SiteHeader active="workspace" />
       <main className="page">
         <Link className="back-link" href="/workspace/triage">
-          ← Needs triage
+          ← Articles
         </Link>
         <p className="page-kicker">Workspace article</p>
         <h1 className="page-title">{article.title || 'Untitled article'}</h1>
-        <p className="page-lede">
-          <span className="chip">{article.processingStatus}</span>
-        </p>
 
         <WorkspaceNav active="triage" />
 
@@ -171,84 +169,92 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
             <p className="meta">No extracted text or RSS summary.</p>
           )}
 
-          <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
-            Filter signals
-          </h2>
-          <dl className="kv-grid">
-            <div>
-              <dt>Cheap filter</dt>
-              <dd>{article.cheapFilterDecision ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Vendors</dt>
-              <dd>{formatSignalList(article.filterSignals.vendors)}</dd>
-            </div>
-            <div>
-              <dt>Products</dt>
-              <dd>{formatSignalList(article.filterSignals.products)}</dd>
-            </div>
-            <div>
-              <dt>CVEs</dt>
-              <dd>{formatSignalList(article.filterSignals.cves)}</dd>
-            </div>
-            <div>
-              <dt>Critical keywords</dt>
-              <dd>{formatSignalList(article.filterSignals.criticalKeywords)}</dd>
-            </div>
-          </dl>
-
-          <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
-            Extracted entities
-          </h2>
-          <WorkspaceEntityList entities={article.extractedEntities} />
-
-          <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
-            LLM digest (post-extraction)
-          </h2>
-          {article.llmArticleDigest == null ? (
-            <p className="meta">
-              No LLM digest yet (status: {article.processingStatus}).
-            </p>
-          ) : (
-            <pre className="workspace-article-body">
-              {JSON.stringify(article.llmArticleDigest, null, 2)}
-            </pre>
-          )}
-
-          {showDigestGold ? (
-            <>
-              <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
-                Digest gold
-              </h2>
-              <p className="meta" style={{ marginBottom: '0.75rem' }}>
-                Human ground truth for digest eval. Saving freezes article text and inventory at
-                this moment.
-              </p>
-              <DigestGoldForm
-                articleId={article.id}
-                inventory={inventory}
-                initial={goldInitial}
-                saved={gold_saved === '1'}
-                saveError={gold_error ? GOLD_ERROR_MESSAGES[gold_error] ?? gold_error : undefined}
-                assistError={assist_error}
-              />
-            </>
-          ) : null}
-
-          <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
-            LLM classification
-          </h2>
-          {article.llmClassification == null ? (
-            <p className="meta">
-              No LLM classification yet (status: {article.processingStatus}).
-            </p>
-          ) : (
-            <pre className="workspace-article-body">
-              {JSON.stringify(article.llmClassification, null, 2)}
-            </pre>
-          )}
-
           {cveMvp ? <CveMvpSection view={cveMvp} /> : null}
+
+          <details className="workspace-expand-section">
+            <summary>Legacy pipeline signals</summary>
+            <p className="meta" style={{ marginBottom: '0.75rem' }}>
+              Cheap-filter, entity, digest, and classification outputs from the older
+              analyst-eval / full profiles. Hidden by default on the CVE-MVP path.
+            </p>
+
+            <h2 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+              Filter signals
+            </h2>
+            <dl className="kv-grid">
+              <div>
+                <dt>Cheap filter</dt>
+                <dd>{article.cheapFilterDecision ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>Vendors</dt>
+                <dd>{formatSignalList(article.filterSignals.vendors)}</dd>
+              </div>
+              <div>
+                <dt>Products</dt>
+                <dd>{formatSignalList(article.filterSignals.products)}</dd>
+              </div>
+              <div>
+                <dt>CVEs</dt>
+                <dd>{formatSignalList(article.filterSignals.cves)}</dd>
+              </div>
+              <div>
+                <dt>Critical keywords</dt>
+                <dd>{formatSignalList(article.filterSignals.criticalKeywords)}</dd>
+              </div>
+            </dl>
+
+            <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
+              Extracted entities
+            </h2>
+            <WorkspaceEntityList entities={article.extractedEntities} />
+
+            <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
+              LLM digest (post-extraction)
+            </h2>
+            {article.llmArticleDigest == null ? (
+              <p className="meta">
+                No LLM digest yet (status: {article.processingStatus}).
+              </p>
+            ) : (
+              <pre className="workspace-article-body">
+                {JSON.stringify(article.llmArticleDigest, null, 2)}
+              </pre>
+            )}
+
+            {showDigestGold ? (
+              <>
+                <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
+                  Digest gold
+                </h2>
+                <p className="meta" style={{ marginBottom: '0.75rem' }}>
+                  Human ground truth for digest eval. Saving freezes article text and inventory at
+                  this moment.
+                </p>
+                <DigestGoldForm
+                  articleId={article.id}
+                  inventory={inventory}
+                  initial={goldInitial}
+                  saved={gold_saved === '1'}
+                  saveError={gold_error ? GOLD_ERROR_MESSAGES[gold_error] ?? gold_error : undefined}
+                  assistError={assist_error}
+                />
+              </>
+            ) : null}
+
+            <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
+              LLM classification
+            </h2>
+            {article.llmClassification == null ? (
+              <p className="meta">
+                No LLM classification yet (status: {article.processingStatus}).
+              </p>
+            ) : (
+              <pre className="workspace-article-body">
+                {JSON.stringify(article.llmClassification, null, 2)}
+              </pre>
+            )}
+          </details>
 
           {article.processingStatus === 'IGNORED' ? (
             <form action={requeueArticleForFilterAction} className="requeue-form">
@@ -281,144 +287,241 @@ export default async function WorkspaceArticlePage({ params, searchParams }: Pag
 }
 
 function CveMvpSection({ view }: { view: CveMvpArticleWorkspaceView }) {
-  const mentionGroups = new Map<string, typeof view.mentions>();
-  for (const mention of view.mentions) {
-    const list = mentionGroups.get(mention.cveId) ?? [];
-    list.push(mention);
-    mentionGroups.set(mention.cveId, list);
-  }
-  const cveIds = Array.from(mentionGroups.keys()).sort();
+  const uniqueCveCount = new Set(view.mentions.map((m) => m.cveId)).size;
+  const mentions = [...view.mentions].sort((a, b) =>
+    a.cveId === b.cveId ? a.zone.localeCompare(b.zone) : a.cveId.localeCompare(b.cveId)
+  );
 
   return (
-    <>
+    <div className="workspace-cve-mvp">
       <h2 className="page-kicker" style={{ marginTop: '1.25rem', marginBottom: '0.5rem' }}>
         CVE MVP intelligence
       </h2>
 
-      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-        Summary
-      </h3>
-      {view.summary ? (
-        view.summary.status === 'completed' && view.summary.summary ? (
-          <p className="meta">{view.summary.summary}</p>
+      <details className="workspace-expand-section" open>
+        <summary>Article assessment</summary>
+        <h3 className="page-kicker" style={{ marginTop: '0.25rem', marginBottom: '0.5rem' }}>
+          AI short summary
+        </h3>
+        {view.summary ? (
+          view.summary.status === 'completed' && view.summary.summary ? (
+            <p className="meta">{view.summary.summary}</p>
+          ) : (
+            <TaskStatusLine
+              status={view.summary.status}
+              attempts={view.summary.attempts}
+              lastError={view.summary.lastError}
+            />
+          )
         ) : (
-          <TaskStatusLine
-            status={view.summary.status}
-            attempts={view.summary.attempts}
-            lastError={view.summary.lastError}
-          />
-        )
-      ) : (
-        <p className="meta">Not scheduled.</p>
-      )}
+          <p className="meta">Not scheduled.</p>
+        )}
 
-      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-        Disposition
-      </h3>
-      {view.disposition ? (
-        view.disposition.status === 'completed' ? (
-          <dl className="kv-grid">
-            <div>
-              <dt>Decision</dt>
-              <dd>{view.disposition.disposition ?? '—'}</dd>
+        <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+          Disposition
+        </h3>
+        {view.disposition ? (
+          view.disposition.status === 'completed' ? (
+            <div className="workspace-disposition">
+              <dl className="kv-grid">
+                <div>
+                  <dt>Decision</dt>
+                  <dd>{view.disposition.disposition ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>Reason</dt>
+                  <dd>{view.disposition.reason ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>Signals</dt>
+                  <dd>
+                    {view.disposition.signals.length > 0
+                      ? view.disposition.signals.join(', ')
+                      : '—'}
+                  </dd>
+                </div>
+              </dl>
+              <div className="workspace-disposition-reasoning">
+                <p className="workspace-disposition-reasoning-label">Reasoning</p>
+                <p className="workspace-disposition-reasoning-body">
+                  {view.disposition.reasoning ?? '—'}
+                </p>
+              </div>
             </div>
-            <div>
-              <dt>Reason</dt>
-              <dd>{view.disposition.reason ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Signals</dt>
-              <dd>{view.disposition.signals.length > 0 ? view.disposition.signals.join(', ') : '—'}</dd>
-            </div>
-            <div>
-              <dt>Reasoning</dt>
-              <dd>{view.disposition.reasoning ?? '—'}</dd>
-            </div>
-          </dl>
+          ) : (
+            <TaskStatusLine
+              status={view.disposition.status}
+              attempts={view.disposition.attempts}
+              lastError={view.disposition.lastError}
+            />
+          )
         ) : (
-          <TaskStatusLine
-            status={view.disposition.status}
-            attempts={view.disposition.attempts}
-            lastError={view.disposition.lastError}
-          />
-        )
-      ) : (
-        <p className="meta">Not scheduled.</p>
-      )}
+          <p className="meta">Not scheduled.</p>
+        )}
+      </details>
 
-      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-        CVE mentions ({cveIds.length})
-      </h3>
-      {cveIds.length === 0 ? (
-        <p className="meta">No CVE mentions detected in title, RSS summary, body, or source links.</p>
-      ) : (
-        <ul className="workspace-mention-list">
-          {cveIds.map((cveId) => (
-            <li key={cveId}>
-              <strong>{cveId}</strong>
-              <ul>
-                {mentionGroups.get(cveId)!.map((mention, idx) => (
-                  <li key={`${cveId}-${mention.zone}-${idx}`}>
-                    <span className="chip">{mention.zone}</span>{' '}
-                    <span className="meta">"{mention.snippet}"</span>
+      <details className="workspace-expand-section" open>
+        <summary>CVE evidence</summary>
+        <h3 className="page-kicker" style={{ marginTop: '0.25rem', marginBottom: '0.5rem' }}>
+          CVE mentions · text scan ({uniqueCveCount})
+        </h3>
+        {mentions.length === 0 ? (
+          <p className="meta">No CVE IDs found in those fields.</p>
+        ) : (
+          <div className="workspace-table-wrap">
+            <table className="workspace-table">
+              <thead>
+                <tr>
+                  <th className="workspace-table-col-cve">CVE</th>
+                  <th>Snippet</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mentions.map((mention, idx) => (
+                  <tr key={`${mention.cveId}-${mention.zone}-${idx}`}>
+                    <td className="workspace-table-col-cve">
+                      <span className="workspace-table-cve">{mention.cveId}</span>
+                    </td>
+                    <td className="meta">"{mention.snippet}"</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+          CVE scores
+        </h3>
+        {view.scores.length === 0 ? (
+          <p className="meta">No mentioned CVEs to score.</p>
+        ) : (
+          <div className="workspace-table-wrap">
+            <table className="workspace-table">
+              <thead>
+                <tr>
+                  <th className="workspace-table-col-cve">CVE</th>
+                  <th>NVD CVSS</th>
+                  <th>CISA KEV</th>
+                  <th>EPSS</th>
+                  <th>Case</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.scores.map((score) => (
+                  <tr key={score.cveId}>
+                    <td className="workspace-table-col-cve">
+                      {score.caseId ? (
+                        <Link className="workspace-table-cve" href={`/workspace/cves/${score.caseId}`}>
+                          {score.cveId}
+                        </Link>
+                      ) : (
+                        <span className="workspace-table-cve">{score.cveId}</span>
+                      )}
+                    </td>
+                    <td>
+                      {score.cvssBase != null ? (
+                        <span className="workspace-cvss-cell">
+                          <span className={`chip ${cvssTriageGrade(score.cvssBase)}`}>
+                            {cvssTriageGrade(score.cvssBase)}
+                          </span>
+                          <span className="workspace-table-mono">
+                            {score.cvssLabel
+                              ? `${score.cvssLabel.replace('CVSS ', '')} ${score.cvssBase.toFixed(1)}`
+                              : score.cvssBase.toFixed(1)}
+                          </span>
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>
+                      {score.kevListed == null
+                        ? '—'
+                        : score.kevListed
+                          ? 'Listed'
+                          : 'Not listed'}
+                    </td>
+                    <td className="workspace-table-mono">
+                      {score.epssScore != null
+                        ? `${score.epssScore.toFixed(4)}${
+                            score.epssPercentile != null
+                              ? ` · p${score.epssPercentile.toFixed(2)}`
+                              : ''
+                          }`
+                        : '—'}
+                    </td>
+                    <td>
+                      {score.caseId ? (
+                        <Link href={`/workspace/cves/${score.caseId}`}>Open</Link>
+                      ) : (
+                        <span className="meta">No case yet</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
+          CVE interpretation · AI
+        </h3>
+        <p className="meta" style={{ marginBottom: '0.65rem' }}>
+          Analyst-style briefing per CVE from the article: what it is and which system is
+          affected, attacker impact, and why it looks serious or actionable — only what the
+          article states.
+        </p>
+        {view.interpretation ? (
+          view.interpretation.status === 'completed' ? (
+            view.interpretation.results.length === 0 ? (
+              <p className="meta">No interpretations yet.</p>
+            ) : (
+              <ul className="workspace-relevance-list">
+                {view.interpretation.results.map((result) => (
+                  <li key={result.cveId}>
+                    <strong>{result.cveId}</strong>{' '}
+                    <span className="meta">{result.interpretation}</span>
                   </li>
                 ))}
               </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-        CVE relevance
-      </h3>
-      {view.relevance ? (
-        view.relevance.status === 'completed' ? (
-          view.relevance.results.length === 0 ? (
-            <p className="meta">No relevance results yet.</p>
+            )
           ) : (
-            <ul className="workspace-relevance-list">
-              {view.relevance.results.map((result) => (
-                <li key={result.cveId}>
-                  <strong>{result.cveId}</strong>{' '}
-                  <span className="chip">{result.relevance}</span>{' '}
-                  <span className="meta">"{result.evidence}"</span>
-                </li>
-              ))}
-            </ul>
+            <TaskStatusLine
+              status={view.interpretation.status}
+              attempts={view.interpretation.attempts}
+              lastError={view.interpretation.lastError}
+            />
           )
         ) : (
-          <TaskStatusLine
-            status={view.relevance.status}
-            attempts={view.relevance.attempts}
-            lastError={view.relevance.lastError}
-          />
-        )
-      ) : (
-        <p className="meta">Not scheduled (requires actionable disposition and at least one CVE mention).</p>
-      )}
+          <p className="meta">
+            Not scheduled (requires actionable disposition and at least one CVE mention).
+          </p>
+        )}
+      </details>
 
-      <h3 className="page-kicker" style={{ marginTop: '0.75rem', marginBottom: '0.5rem' }}>
-        Analysis task history
-      </h3>
-      {view.taskHistory.length === 0 ? (
-        <p className="meta">No analysis tasks scheduled yet.</p>
-      ) : (
-        <ul className="workspace-task-history">
-          {view.taskHistory.map((task) => (
-            <li key={`${task.taskName}-${task.status}`}>
-              <span className="chip">{task.taskName}</span>{' '}
-              <span className="chip">{task.status}</span>{' '}
-              <span className="meta">
-                attempts {task.attempts}/{task.maxAttempts}
-                {task.lastError ? ` · ${task.lastError}` : ''}
-                {task.completedAt ? ` · completed ${formatWhen(task.completedAt)}` : ''}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
+      <details className="workspace-expand-section">
+        <summary>Analysis task history</summary>
+        {view.taskHistory.length === 0 ? (
+          <p className="meta">No analysis tasks scheduled yet.</p>
+        ) : (
+          <ul className="workspace-task-history">
+            {view.taskHistory.map((task) => (
+              <li key={`${task.taskName}-${task.status}`}>
+                <span className="chip">{task.taskName}</span>{' '}
+                <span className="chip">{task.status}</span>{' '}
+                <span className="meta">
+                  attempts {task.attempts}/{task.maxAttempts}
+                  {task.lastError ? ` · ${task.lastError}` : ''}
+                  {task.completedAt ? ` · completed ${formatWhen(task.completedAt)}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+    </div>
   );
 }
 

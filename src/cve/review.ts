@@ -3,21 +3,25 @@ import {
   CveCaseRepository,
   type CveCaseArticleLifecycleState,
   type CveCaseRecord,
+  type CveSourceObservationRecord,
 } from '../db/repositories/cve-case.repository.js';
 import type { Queryable } from '../db/repositories/types.js';
-import { buildEnrichmentAdapterSet, runInitialEnrichment } from './cases.js';
-import type { EnrichmentAdapterSet } from './enrichment.js';
+import type { EnrichmentAdapterSet, NvdNormalized } from './enrichment.js';
 
 /**
- * Public surface for the human-gated review + publication workflow (ticket #59).
+ * Public surface for the CVE case review + publication workflow.
  *
- * The pipeline and the Workspace UI call this module rather than writing to the
- * underlying lifecycle / case tables directly. Every state transition writes a
- * `review_events` row, and the auto-revert rule runs after each verdict write so
- * the public surface stays consistent with the human-confirmed link count.
+ * Publication is automatic when NVD CVSS ≥ {@link CVSS_AUTO_PUBLISH_THRESHOLD}
+ * **or** the CVE is listed in CISA KEV. Analysts can pull a case back from the
+ * public catalogue at any time; the next enrichment/refresh that still meets a
+ * gate will publish it again.
  */
 
 export type HumanVerdict = 'human_confirmed' | 'human_rejected' | 'human_uncertain';
+
+/** NVD CVSS base score at or above this value auto-publishes the case. */
+export const CVSS_AUTO_PUBLISH_THRESHOLD = 9;
+export const CVSS_AUTO_PUBLISH_ACTOR = 'system:cvss_auto_publish';
 
 const TERMINAL_OBSERVATION_STATUSES = new Set(['ok', 'not_found', 'no_score']);
 
@@ -70,89 +74,22 @@ export interface ApprovalRequirements {
   missingSources: Array<'nvd' | 'kev' | 'epss'>;
 }
 
-export interface PromoteUncertainInput {
-  articleId: string;
-  cveId: string;
+export interface UnpublishCaseInput {
+  caseId: string;
   actor: string;
   reason?: string | null;
 }
 
-export interface PromoteUncertainResult {
+export interface UnpublishCaseResult {
   ok: boolean;
-  caseId?: string;
-  caseArticleId?: string;
-  reason?: 'no_uncertain_relationship' | 'already_promoted';
+  reason?: 'case_not_found' | 'not_published';
+  caseRecord?: CveCaseRecord | null;
 }
 
-interface RelevanceTaskResult {
-  results?: Array<{ cveId: string; relevance: string; evidence: string }>;
-}
-
-/**
- * Story 30: a human promotes an uncertain article–CVE relationship to relevant. This
- * re-injects the pair into the normal deterministic workflow — it ensures one case per
- * canonical CVE, attaches the article as `automated_relevant` (a later human verdict is
- * still required for approval), runs initial enrichment, and records an audit event.
- */
-export async function promoteUncertainRelationship(
-  db: Queryable,
-  input: PromoteUncertainInput,
-  options: { adapters?: Partial<EnrichmentAdapterSet> } = {}
-): Promise<PromoteUncertainResult> {
-  const tasks = new AnalysisTaskRepository(db);
-  const repo = new CveCaseRepository(db);
-
-  const taskRows = await tasks.listForTarget('article', input.articleId);
-  const relevanceTask = taskRows.find(
-    (t) => t.taskName === 'article_cve_relevance' && t.status === 'completed'
-  );
-  const results = (relevanceTask?.result as RelevanceTaskResult | null)?.results ?? [];
-  const match = results.find((r) => r.cveId === input.cveId && r.relevance === 'uncertain');
-  if (!relevanceTask || !match) {
-    return { ok: false, reason: 'no_uncertain_relationship' };
-  }
-
-  const existingCaseId = (await repo.listCaseIdsForCves([input.cveId])).get(input.cveId) ?? null;
-  if (existingCaseId) {
-    const existing = await repo.findCaseArticle(existingCaseId, input.articleId);
-    if (existing) {
-      return { ok: false, reason: 'already_promoted', caseId: existingCaseId, caseArticleId: existing.id };
-    }
-  }
-
-  const caseRecord = await repo.ensureCase(input.cveId, input.articleId);
-  const evidencePayload = {
-    automated_relevance: 'relevant',
-    automated_evidence: match.evidence,
-    automated_at: relevanceTask.completedAt?.toISOString() ?? new Date().toISOString(),
-    automated_task_id: relevanceTask.id,
-    promoted_from: 'uncertain',
-    promoted_by: input.actor,
-  };
-  const caseArticle = await repo.upsertCaseArticle({
-    caseId: caseRecord.id,
-    articleId: input.articleId,
-    lifecycleState: 'automated_relevant',
-    evidence: evidencePayload,
-    firstEvidence: evidencePayload,
-    automatedTaskId: relevanceTask.id,
-  });
-
-  await repo.appendReviewEvent({
-    caseId: caseRecord.id,
-    caseArticleId: caseArticle.id,
-    actor: input.actor,
-    eventKind: 'human_verdict',
-    fromState: 'uncertain',
-    toState: 'automated_relevant',
-    reason: input.reason ?? 'promoted uncertain relationship to relevant',
-    payload: { articleId: input.articleId, cveId: input.cveId },
-  });
-
-  const adapters = buildEnrichmentAdapterSet({ adapters: options.adapters });
-  await runInitialEnrichment(db, [caseRecord.id], adapters);
-
-  return { ok: true, caseId: caseRecord.id, caseArticleId: caseArticle.id };
+export interface SyncPublicationResult {
+  caseId: string;
+  action: 'published' | 'unpublished' | 'unchanged';
+  cvssBase: number | null;
 }
 
 export async function recordHumanVerdict(
@@ -169,62 +106,50 @@ export async function recordHumanVerdict(
     return { ok: false, caseArticleId: null, fromState: null, toState: null, reason: 'case_not_found' };
   }
 
-  const caseArticle = await repo.findCaseArticle(input.caseId, input.articleId);
-  if (!caseArticle) {
+  const link = await repo.findCaseArticle(input.caseId, input.articleId);
+  if (!link) {
     return { ok: false, caseArticleId: null, fromState: null, toState: null, reason: 'case_article_not_found' };
   }
 
-  if (caseArticle.lifecycleState === input.verdict) {
+  if (link.lifecycleState === input.verdict) {
     return {
       ok: true,
-      caseArticleId: caseArticle.id,
-      fromState: caseArticle.lifecycleState,
-      toState: caseArticle.lifecycleState,
+      caseArticleId: link.id,
+      fromState: link.lifecycleState,
+      toState: link.lifecycleState,
       reason: 'no_change',
     };
   }
 
-  const updated = await repo.updateCaseArticleLifecycleState(caseArticle.id, input.verdict);
+  const fromState = link.lifecycleState;
+  const updated = await repo.updateCaseArticleLifecycleState(link.id, input.verdict);
   await repo.appendReviewEvent({
-    caseId: caseRecord.id,
-    caseArticleId: caseArticle.id,
+    caseId: input.caseId,
+    caseArticleId: link.id,
     actor: input.actor,
     eventKind: 'human_verdict',
-    fromState: caseArticle.lifecycleState,
+    fromState,
     toState: input.verdict,
     reason: input.reason ?? null,
     payload: { articleId: input.articleId },
   });
 
-  const autoRevertedCaseId = await maybeAutoRevert(repo, caseRecord, input.actor);
-
   return {
     ok: true,
-    caseArticleId: updated?.id ?? caseArticle.id,
-    fromState: caseArticle.lifecycleState,
+    caseArticleId: updated?.id ?? link.id,
+    fromState,
     toState: input.verdict,
-    autoRevertedCaseId,
   };
 }
 
+/**
+ * Force-publish a case (tests / rare manual override). Production publication is
+ * driven by {@link syncCasePublicationFromCvss}.
+ */
 export async function approveCase(db: Queryable, input: ApproveCaseInput): Promise<ApproveCaseResult> {
   const repo = new CveCaseRepository(db);
   const caseRecord = await repo.findCaseById(input.caseId);
   if (!caseRecord) return { ok: false, reason: 'case_not_found' };
-
-  const requirements = await checkApprovalRequirements(db, caseRecord.id);
-  if (!requirements.ok) {
-    const blockedBy: Array<{ articleId?: string; reason: ApprovalBlockReason }> = [];
-    if (requirements.confirmedLinkCount === 0) blockedBy.push({ reason: 'no_human_confirmed_link' });
-    for (const articleId of requirements.articlesMissingSummary) {
-      blockedBy.push({ articleId, reason: 'article_missing_summary' });
-    }
-    for (const source of requirements.missingSources) {
-      blockedBy.push({ reason: `missing_${source}_observation` as ApprovalBlockReason });
-    }
-    const reason = blockedBy[0]?.reason ?? 'no_human_confirmed_link';
-    return { ok: false, reason, blockedBy };
-  }
 
   if (caseRecord.status === 'approved') {
     return { ok: true, caseRecord };
@@ -246,6 +171,93 @@ export async function approveCase(db: Queryable, input: ApproveCaseInput): Promi
   return { ok: true, caseRecord: fresh };
 }
 
+/** Pull a published case back from the public catalogue. */
+export async function unpublishCase(db: Queryable, input: UnpublishCaseInput): Promise<UnpublishCaseResult> {
+  const repo = new CveCaseRepository(db);
+  const caseRecord = await repo.findCaseById(input.caseId);
+  if (!caseRecord) return { ok: false, reason: 'case_not_found' };
+  if (caseRecord.status !== 'approved') return { ok: false, reason: 'not_published' };
+
+  await repo.markUnpublished(caseRecord.id, input.actor);
+  await repo.appendReviewEvent({
+    caseId: caseRecord.id,
+    caseArticleId: null,
+    actor: input.actor,
+    eventKind: 'unapproval',
+    fromState: 'approved',
+    toState: 'draft',
+    reason: input.reason ?? 'pulled_back_from_public',
+    payload: {},
+  });
+
+  const fresh = await repo.findCaseById(caseRecord.id);
+  return { ok: true, caseRecord: fresh };
+}
+
+/**
+ * Publish when NVD CVSS ≥ threshold or CISA KEV lists the CVE; unpublish when
+ * neither gate holds. Idempotent. Called after enrichment / maintenance.
+ */
+export async function syncCasePublicationFromCvss(
+  db: Queryable,
+  caseId: string
+): Promise<SyncPublicationResult> {
+  const repo = new CveCaseRepository(db);
+  const caseRecord = await repo.findCaseById(caseId);
+  if (!caseRecord) {
+    return { caseId, action: 'unchanged', cvssBase: null };
+  }
+
+  const observations = await repo.listCurrentTerminalObservations(caseId);
+  const cvssBase = readCvssBase(observations.get('nvd'));
+  const kevListed = readKevListed(observations.get('kev'));
+  const shouldPublish =
+    (cvssBase != null && cvssBase >= CVSS_AUTO_PUBLISH_THRESHOLD) || kevListed;
+
+  if (shouldPublish && caseRecord.status !== 'approved') {
+    await repo.markApproved(caseId, CVSS_AUTO_PUBLISH_ACTOR);
+    await repo.appendReviewEvent({
+      caseId,
+      caseArticleId: null,
+      actor: CVSS_AUTO_PUBLISH_ACTOR,
+      eventKind: 'approval',
+      fromState: 'draft',
+      toState: 'approved',
+      reason: 'auto_publish',
+      payload: { cvssBase, kevListed },
+    });
+    return { caseId, action: 'published', cvssBase };
+  }
+
+  if (!shouldPublish && caseRecord.status === 'approved') {
+    await repo.markUnpublished(caseId, CVSS_AUTO_PUBLISH_ACTOR);
+    await repo.appendReviewEvent({
+      caseId,
+      caseArticleId: null,
+      actor: CVSS_AUTO_PUBLISH_ACTOR,
+      eventKind: 'unapproval',
+      fromState: 'approved',
+      toState: 'draft',
+      reason: 'auto_publish_gates_cleared',
+      payload: { cvssBase, kevListed },
+    });
+    return { caseId, action: 'unpublished', cvssBase };
+  }
+
+  return { caseId, action: 'unchanged', cvssBase };
+}
+
+export async function syncAllCasePublicationsFromCvss(db: Queryable): Promise<SyncPublicationResult[]> {
+  const repo = new CveCaseRepository(db);
+  const cases = await repo.listAllCases();
+  const results: SyncPublicationResult[] = [];
+  for (const caseRecord of cases) {
+    results.push(await syncCasePublicationFromCvss(db, caseRecord.id));
+  }
+  return results;
+}
+
+/** @deprecated Human-gated approval requirements are no longer used for publication. */
 export async function checkApprovalRequirements(db: Queryable, caseId: string): Promise<ApprovalRequirements> {
   const repo = new CveCaseRepository(db);
   const caseArticles = await repo.listCaseArticlesByCase(caseId);
@@ -281,26 +293,17 @@ export async function checkApprovalRequirements(db: Queryable, caseId: string): 
   return { ok, confirmedLinkCount: confirmedCount, articlesMissingSummary, missingSources };
 }
 
-async function maybeAutoRevert(
-  repo: CveCaseRepository,
-  caseRecord: CveCaseRecord,
-  actor: string
-): Promise<string | undefined> {
-  if (caseRecord.status !== 'approved') return undefined;
-  const confirmed = await repo.countConfirmedLinks(caseRecord.id);
-  if (confirmed > 0) return undefined;
-  await repo.markAutoReverted(caseRecord.id, actor);
-  await repo.appendReviewEvent({
-    caseId: caseRecord.id,
-    caseArticleId: null,
-    actor,
-    eventKind: 'auto_revert',
-    fromState: 'approved',
-    toState: 'draft',
-    reason: 'last human_confirmed link removed',
-    payload: {},
-  });
-  return caseRecord.id;
+function readCvssBase(obs: CveSourceObservationRecord | undefined): number | null {
+  if (!obs || obs.status !== 'ok') return null;
+  const value = (obs.normalizedValue as { value?: NvdNormalized } | null)?.value ?? null;
+  const base = value?.cvssV3?.base ?? value?.cvssV2?.base ?? null;
+  return typeof base === 'number' && Number.isFinite(base) ? base : null;
+}
+
+function readKevListed(obs: CveSourceObservationRecord | undefined): boolean {
+  if (!obs || obs.status !== 'ok') return false;
+  const value = (obs.normalizedValue as { value?: { listed?: unknown } } | null)?.value ?? null;
+  return value?.listed === true;
 }
 
 export function isHumanVerdict(value: string): value is HumanVerdict {

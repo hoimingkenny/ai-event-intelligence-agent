@@ -11,20 +11,21 @@ import { model } from '../config/llm.js';
 import {
   generateArticleDisposition,
   generateArticleSummary,
-  generateCveRelevance,
-  ARTICLE_CVE_RELEVANCE_PROMPT_VERSION,
+  generateCveInterpretation,
+  ARTICLE_CVE_INTERPRETATION_PROMPT_VERSION,
   ARTICLE_DISPOSITION_PROMPT_VERSION,
   ARTICLE_SUMMARY_PROMPT_VERSION,
   type GenerateDispositionOptions,
-  type GenerateRelevanceOptions,
+  type GenerateInterpretationOptions,
   type GenerateSummaryOptions,
 } from '../cve/prompts.js';
 import type {
   ArticleDispositionResult,
   ArticleSummary,
-  CveRelevanceItem,
+  CveInterpretationItem,
 } from '../cve/schemas.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
+import { logStageArticle, logStageBatch } from '../utils/logger.js';
 import { isAnalysisReady } from './cve-scan-stage.js';
 
 export interface AnalysisTaskStageResult {
@@ -42,7 +43,7 @@ export interface AnalysisTaskStageOptions {
   callers?: {
     summary?: GenerateSummaryOptions['call'];
     disposition?: GenerateDispositionOptions['call'];
-    relevance?: GenerateRelevanceOptions['call'];
+    interpretation?: GenerateInterpretationOptions['call'];
   };
 }
 
@@ -62,38 +63,72 @@ export async function runAnalysisTaskStage(
   );
   const analysisReady = ready.filter(isAnalysisReady);
 
+  logStageBatch(
+    'analysis_tasks',
+    'review',
+    analysisReady.map((article) => article.id)
+  );
+
   let tasksScheduled = 0;
   for (const article of analysisReady) {
     tasksScheduled += await scheduleTasksForArticle(db, tasks, article);
   }
 
   const maxTasks = options.maxTasksPerRun ?? 20;
-  const concurrency = options.concurrency ?? 3;
 
-  const summaryQueue = drainTaskQueue<ArticleSummary>(db, tasks, audit, 'article_summary', maxTasks, options.callers?.summary, async (article, caller) => {
-    const result = await generateArticleSummary(article, { call: caller });
-    return { summary: result.summary };
-  });
-  const dispositionQueue = drainTaskQueue<ArticleDispositionResult>(db, tasks, audit, 'article_disposition', maxTasks, options.callers?.disposition, async (article, caller) => {
-    return generateArticleDisposition(article, { call: caller });
-  });
-  const relevanceCallerAdapter: ((system: string, user: string) => Promise<CveRelevanceItem[]>) | undefined =
-    options.callers?.relevance
+  const interpretationCallerAdapter: ((system: string, user: string) => Promise<CveInterpretationItem[]>) | undefined =
+    options.callers?.interpretation
       ? async (system, user) => {
-          const wrapped = await options.callers!.relevance!(system, user);
+          const wrapped = await options.callers!.interpretation!(system, user);
           return wrapped.results;
         }
       : undefined;
-  const relevanceQueue = drainTaskQueue<CveRelevanceItem[]>(
+
+  // Phase 1: run summary + disposition. Interpretation is only eligible after disposition
+  // completes as actionable, so it is deliberately not drained yet.
+  logStageBatch('analysis_tasks', 'phase1_drain_summary_disposition', analysisReady.map((a) => a.id));
+  const [summaryResult, dispositionResult] = await Promise.all([
+    drainTaskQueue<ArticleSummary>(
+      db,
+      tasks,
+      audit,
+      'article_summary',
+      maxTasks,
+      options.callers?.summary,
+      async (article, caller) => {
+        const result = await generateArticleSummary(article, { call: caller });
+        return { summary: result.summary };
+      }
+    ),
+    drainTaskQueue<ArticleDispositionResult>(
+      db,
+      tasks,
+      audit,
+      'article_disposition',
+      maxTasks,
+      options.callers?.disposition,
+      async (article, caller) => generateArticleDisposition(article, { call: caller })
+    ),
+  ]);
+
+  // Phase 2 (same stage / same pipeline:run): re-schedule now that disposition may be
+  // complete, then drain interpretation so scan → interpretation → consolidation/scores
+  // finish in one command.
+  for (const article of analysisReady) {
+    tasksScheduled += await scheduleTasksForArticle(db, tasks, article);
+  }
+
+  logStageBatch('analysis_tasks', 'phase2_drain_interpretation', analysisReady.map((a) => a.id));
+  const interpretationResult = await drainTaskQueue<CveInterpretationItem[]>(
     db,
     tasks,
     audit,
-    'article_cve_relevance',
+    'article_cve_interpretation',
     maxTasks,
-    relevanceCallerAdapter,
+    interpretationCallerAdapter,
     async (article, caller, task) => {
       const cveIds = Array.isArray(task.inputPayload.cveIds) ? (task.inputPayload.cveIds as string[]) : [];
-      const result = await generateCveRelevance(
+      const result = await generateCveInterpretation(
         article,
         cveIds,
         caller ? { call: async (system, user) => ({ results: await caller(system, user) }) } : {}
@@ -102,18 +137,12 @@ export async function runAnalysisTaskStage(
     }
   );
 
-  const [summaryResult, dispositionResult, relevanceResult] = await Promise.all([
-    summaryQueue,
-    dispositionQueue,
-    relevanceQueue,
-  ]);
-
   return {
     articlesReviewed: analysisReady.length,
     tasksScheduled,
-    tasksCompleted: summaryResult.completed + dispositionResult.completed + relevanceResult.completed,
-    tasksExhausted: summaryResult.exhausted + dispositionResult.exhausted + relevanceResult.exhausted,
-    tasksFailed: summaryResult.failed + dispositionResult.failed + relevanceResult.failed,
+    tasksCompleted: summaryResult.completed + dispositionResult.completed + interpretationResult.completed,
+    tasksExhausted: summaryResult.exhausted + dispositionResult.exhausted + interpretationResult.exhausted,
+    tasksFailed: summaryResult.failed + dispositionResult.failed + interpretationResult.failed,
   };
 }
 
@@ -142,6 +171,7 @@ export async function scheduleTasksForArticle(
       promptVersion: ARTICLE_SUMMARY_PROMPT_VERSION,
     });
     scheduled += 1;
+    logStageArticle('analysis_tasks', article.id, 'scheduled', { taskName: 'article_summary' });
   }
   if (!completedByName.has('article_disposition')) {
     await tasks.upsertPending({
@@ -150,6 +180,7 @@ export async function scheduleTasksForArticle(
       promptVersion: ARTICLE_DISPOSITION_PROMPT_VERSION,
     });
     scheduled += 1;
+    logStageArticle('analysis_tasks', article.id, 'scheduled', { taskName: 'article_disposition' });
   }
 
   const disposition = existing.find(
@@ -159,14 +190,18 @@ export async function scheduleTasksForArticle(
   if (dispositionResult?.disposition === 'actionable') {
     const mentions = await new ArticleRepository(db).listCveMentionsByArticle(article.id);
     const cveIds = Array.from(new Set(mentions.map((m) => m.cveId)));
-    if (cveIds.length > 0 && !completedByName.has('article_cve_relevance')) {
+    if (cveIds.length > 0 && !completedByName.has('article_cve_interpretation')) {
       await tasks.upsertPending({
         ...baseInput,
-        taskName: 'article_cve_relevance',
+        taskName: 'article_cve_interpretation',
         inputPayload: { articleId: article.id, cveIds },
-        promptVersion: ARTICLE_CVE_RELEVANCE_PROMPT_VERSION,
+        promptVersion: ARTICLE_CVE_INTERPRETATION_PROMPT_VERSION,
       });
       scheduled += 1;
+      logStageArticle('analysis_tasks', article.id, 'scheduled', {
+        taskName: 'article_cve_interpretation',
+        cveIds,
+      });
     }
   }
 
@@ -183,7 +218,7 @@ async function drainTaskQueue<TSchemaResult>(
   db: Queryable,
   tasks: AnalysisTaskRepository,
   audit: LlmAuditRepository,
-  taskName: 'article_summary' | 'article_disposition' | 'article_cve_relevance',
+  taskName: 'article_summary' | 'article_disposition' | 'article_cve_interpretation',
   maxTasks: number,
   caller: ((system: string, user: string) => Promise<TSchemaResult>) | undefined,
   runner: (
@@ -228,6 +263,7 @@ async function drainTaskQueue<TSchemaResult>(
         validationStatus: 'valid',
       });
       completed += 1;
+      logStageArticle('analysis_tasks', task.targetId, 'completed', { taskName: task.taskName });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const nextStatus: AnalysisTaskStatus = await tasks.recordFailure(task.id, message, backoffForAttempt(task.attempts));
@@ -243,6 +279,10 @@ async function drainTaskQueue<TSchemaResult>(
       });
       if (nextStatus === 'needs_attention') exhausted += 1;
       else failed += 1;
+      logStageArticle('analysis_tasks', task.targetId, nextStatus === 'needs_attention' ? 'exhausted' : 'failed', {
+        taskName: task.taskName,
+        error: message,
+      });
     }
   });
 

@@ -1,7 +1,7 @@
 import type { Queryable } from './types.js';
 
 export type AnalysisTaskStatus = 'pending' | 'running' | 'completed' | 'needs_attention';
-export type AnalysisTaskName = 'article_summary' | 'article_disposition' | 'article_cve_relevance';
+export type AnalysisTaskName = 'article_summary' | 'article_disposition' | 'article_cve_interpretation';
 
 export interface AnalysisTaskRecord {
   id: string;

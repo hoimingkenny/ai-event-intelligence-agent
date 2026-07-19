@@ -6,6 +6,7 @@ import { loadMonitoredInventoryFromDb } from '../storage/monitoredInventoryStore
 import type { Queryable } from '../db/repositories/types.js';
 import type { VendorProduct } from '../types/domain.js';
 import type { CheapFilterMode } from './profile.js';
+import { logStageArticle, logStageBatch } from '../utils/logger.js';
 
 export type CheapFilterDecision = 'KEEP' | 'MAYBE_KEEP' | 'DROP';
 export type SourceTier =
@@ -261,6 +262,12 @@ export async function runCheapFilterStage(
   let extractionPendingLowPriority = 0;
   let ignored = 0;
 
+  logStageBatch(
+    'filter',
+    'review',
+    candidates.map((article) => article.id)
+  );
+
   for (const article of candidates) {
     const decision = decideCheapFilter(article, inventory);
     await articles.saveCheapFilterResult(article.id, decision);
@@ -268,15 +275,23 @@ export async function runCheapFilterStage(
     if (decision.decision === 'KEEP') {
       await articles.updateProcessingStatus(article.id, 'EXTRACTION_PENDING');
       extractionPending += 1;
+      logStageArticle('filter', article.id, 'keep', { decision: decision.decision, score: decision.score });
     } else if (decision.decision === 'MAYBE_KEEP') {
       await articles.updateProcessingStatus(article.id, 'EXTRACTION_PENDING_LOW_PRIORITY');
       extractionPendingLowPriority += 1;
+      logStageArticle('filter', article.id, 'maybe_keep', { decision: decision.decision, score: decision.score });
     } else if (mode === 'advisory') {
       await articles.updateProcessingStatus(article.id, 'EXTRACTION_PENDING_LOW_PRIORITY');
       extractionPendingLowPriority += 1;
+      logStageArticle('filter', article.id, 'advisory_pass', { decision: decision.decision, score: decision.score });
     } else {
       await articles.updateProcessingStatus(article.id, 'IGNORED', decision.blockingReasons.join(','));
       ignored += 1;
+      logStageArticle('filter', article.id, 'ignored', {
+        decision: decision.decision,
+        score: decision.score,
+        blockingReasons: decision.blockingReasons,
+      });
     }
   }
 

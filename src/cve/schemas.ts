@@ -23,8 +23,17 @@ export const CyberSignalSchema = z.enum([
 
 export const ArticleDispositionSchema = z.enum(['actionable', 'non_actionable', 'uncertain']);
 
+export const ARTICLE_SUMMARY_MAX_CHARS = 800;
+
 export const ArticleSummarySchema = z.object({
-  summary: z.string().min(1).max(800),
+  // Soft-truncate oversize model output so a slightly long summary does not fail the task.
+  summary: z.preprocess(
+    (value) =>
+      typeof value === 'string' && value.length > ARTICLE_SUMMARY_MAX_CHARS
+        ? value.slice(0, ARTICLE_SUMMARY_MAX_CHARS)
+        : value,
+    z.string().min(1).max(ARTICLE_SUMMARY_MAX_CHARS)
+  ),
 });
 
 export const ArticleDispositionResultSchema = z.object({
@@ -34,17 +43,25 @@ export const ArticleDispositionResultSchema = z.object({
   reasoning: z.string().min(1),
 });
 
-export const CveRelevanceItemSchema = z.object({
+export const CVE_INTERPRETATION_MAX_CHARS = 1500;
+
+export const CveInterpretationItemSchema = z.object({
   cveId: z.string().regex(/^CVE-\d{4}-\d{4,}$/),
-  relevance: z.enum(['relevant', 'not_relevant', 'uncertain']),
-  evidence: z.string().min(1).max(400),
+  // Soft-truncate oversize model output so a slightly long briefing does not fail the task.
+  interpretation: z.preprocess(
+    (value) =>
+      typeof value === 'string' && value.length > CVE_INTERPRETATION_MAX_CHARS
+        ? value.slice(0, CVE_INTERPRETATION_MAX_CHARS)
+        : value,
+    z.string().min(1).max(CVE_INTERPRETATION_MAX_CHARS)
+  ),
 });
 
-export const CveRelevanceResultSchema = z.object({
-  results: z.array(CveRelevanceItemSchema).min(1),
+export const CveInterpretationResultSchema = z.object({
+  results: z.array(CveInterpretationItemSchema).min(1),
 });
 
 export type ArticleSummary = z.infer<typeof ArticleSummarySchema>;
 export type ArticleDispositionResult = z.infer<typeof ArticleDispositionResultSchema>;
-export type CveRelevanceItem = z.infer<typeof CveRelevanceItemSchema>;
-export type CveRelevanceResult = z.infer<typeof CveRelevanceResultSchema>;
+export type CveInterpretationItem = z.infer<typeof CveInterpretationItemSchema>;
+export type CveInterpretationResult = z.infer<typeof CveInterpretationResultSchema>;

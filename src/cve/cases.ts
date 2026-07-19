@@ -15,6 +15,7 @@ import {
   type EnrichmentOutcome,
 } from './enrichment.js';
 import { EpssHttpAdapter, KevHttpAdapter, NvdHttpAdapter } from './enrichment-http.js';
+import { syncCasePublicationFromCvss } from './review.js';
 import { stableStringify } from '../utils/stable-json.js';
 import type { MaintenanceAdapterSet } from './maintenance-adapters.js';
 
@@ -32,17 +33,16 @@ export type {
  *
  * The module hides four write concerns:
  *  1. cve_cases                       — one row per canonical CVE identifier
- *  2. cve_case_articles               — article–CVE lifecycle (mentioned → automated_relevant → human_*)
+ *  2. cve_case_articles               — article–CVE lifecycle (mentioned → human_*)
  *  3. cve_source_observations         — NVD / KEV / EPSS append-only snapshots
  *  4. review_events                   — append-only review history (added in #59; surface exists here for read parity)
  *
  * Pipeline and UI code call this module rather than coordinating the tables directly.
  */
 
-export interface ArticleCveRelevanceEvidence {
+export interface ArticleCveInterpretationEvidence {
   cveId: string;
-  relevance: 'relevant' | 'not_relevant' | 'uncertain';
-  evidence: string;
+  interpretation: string;
   automatedAt: string;
   automatedTaskId: string | null;
 }
@@ -51,7 +51,7 @@ export interface AttachArticleInput {
   cveId: string;
   articleId: string;
   lifecycleState: CveCaseArticleRecord['lifecycleState'];
-  evidence: ArticleCveRelevanceEvidence;
+  evidence: ArticleCveInterpretationEvidence;
 }
 
 export interface ConsolidatedResult {
@@ -91,10 +91,10 @@ export function buildMaintenanceAdapterSet(options: {
 /**
  * Idempotent end-of-batch consolidation.
  *
- * Given a list of completed relevance outcomes (one per (article, cveId) pair), create
- * or reuse one cve_cases row per canonical CVE and one cve_case_articles row per
- * (case, article). Retrying / uncertain / needs_attention tasks are excluded upstream
- * and must not appear in `evidence` here.
+ * Given every article↔CVE the interpretation task reported, create or reuse one cve_cases row
+ * per canonical CVE and one cve_case_articles row per (case, article) in the neutral
+ * `mentioned` state. Retrying / needs_attention tasks are excluded upstream and must not
+ * appear here. Human review is what later promotes a link to relevant evidence.
  */
 export async function consolidateArticleCveEvidence(
   db: Queryable,
@@ -121,17 +121,15 @@ export async function consolidateArticleCveEvidence(
     const article = await articles.findByIds([item.articleId]).then((rows) => rows[0] ?? null);
     if (!article) continue;
 
-    const lifecycleState = mapLifecycleState(item);
     const evidencePayload = {
-      automated_relevance: item.evidence.relevance,
-      automated_evidence: item.evidence.evidence,
+      automated_interpretation: item.evidence.interpretation,
       automated_at: item.evidence.automatedAt,
       automated_task_id: item.evidence.automatedTaskId,
     };
     await repo.upsertCaseArticle({
       caseId: ensured.id,
       articleId: item.articleId,
-      lifecycleState,
+      lifecycleState: item.lifecycleState,
       evidence: evidencePayload,
       firstEvidence: evidencePayload,
       automatedTaskId: item.evidence.automatedTaskId,
@@ -174,6 +172,7 @@ export async function runInitialEnrichment(
       else if (result === 'transient') transient += 1;
     }
     await repo.markEnriched(caseId);
+    await syncCasePublicationFromCvss(db, caseId);
   }
 
   return { attempted: caseIds.length * 3, appended, failed, transient };
@@ -246,12 +245,6 @@ async function persistObservation(
     lastError: null,
   });
   return 'appended';
-}
-
-function mapLifecycleState(item: AttachArticleInput): CveCaseArticleRecord['lifecycleState'] {
-  if (item.evidence.relevance === 'relevant') return 'automated_relevant';
-  if (item.evidence.relevance === 'not_relevant') return 'mentioned';
-  return 'mentioned';
 }
 
 function sameNormalizedValue(

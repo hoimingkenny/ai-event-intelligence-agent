@@ -22,8 +22,8 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Vendor Threat Watch',
-    template: '%s · Vendor Threat Watch',
+    default: 'Threat Watch',
+    template: '%s · Threat Watch',
   },
   description: 'Public catalogue of approved cyber incidents affecting monitored vendors.',
 };

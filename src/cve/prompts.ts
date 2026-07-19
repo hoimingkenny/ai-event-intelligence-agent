@@ -4,25 +4,26 @@ import { ArticleDigestSchema, type ArticleDigest } from '../llm/schemas.js';
 import {
   ArticleDispositionResultSchema,
   ArticleSummarySchema,
-  CveRelevanceItemSchema,
-  CveRelevanceResultSchema,
+  CveInterpretationItemSchema,
+  CveInterpretationResultSchema,
   type ArticleDispositionResult,
   type ArticleSummary,
-  type CveRelevanceItem,
-  type CveRelevanceResult,
+  type CveInterpretationItem,
+  type CveInterpretationResult,
 } from './schemas.js';
 
 export type SchemaCaller<T> = (systemPrompt: string, userPrompt: string) => Promise<T>;
 
-export const ARTICLE_SUMMARY_PROMPT_VERSION = 'cve-mvp-summary-v1';
+export const ARTICLE_SUMMARY_PROMPT_VERSION = 'cve-mvp-summary-v2';
 export const ARTICLE_DISPOSITION_PROMPT_VERSION = 'cve-mvp-disposition-v1';
-export const ARTICLE_CVE_RELEVANCE_PROMPT_VERSION = 'cve-mvp-cve-relevance-v1';
-export const RELEVANCE_CHUNK_SIZE = 10;
+export const ARTICLE_CVE_INTERPRETATION_PROMPT_VERSION = 'cve-mvp-cve-interpretation-v3';
+export const INTERPRETATION_CHUNK_SIZE = 10;
 
 const summarySystemPrompt = [
   'You produce a short factual summary of a cyber news article for analyst triage.',
   'The article may be an advertisement, vendor marketing, generic commentary, an incident report,',
-  'or a vulnerability disclosure. Summarise what the article is actually about in 1-3 sentences.',
+  'or a vulnerability disclosure. Summarise what the article is actually about in 1-3 sentences',
+  '(at most 800 characters).',
   'Do NOT decide whether the article is relevant, actionable, or related to any specific vendor.',
   'Do NOT include CVE IDs in the summary; that information is recorded separately.',
   'Return strict JSON only with key "summary".',
@@ -42,12 +43,24 @@ const dispositionSystemPrompt = [
   'Return strict JSON only with keys disposition, reason, signals, reasoning.',
 ].join(' ');
 
-const relevanceSystemPrompt = [
-  'You assess whether each explicitly mentioned CVE in an article is genuinely relevant.',
-  'cveId MUST exactly match one of the provided CVE identifiers; never invent new ones.',
-  'relevance MUST be exactly one of: relevant, not_relevant, uncertain.',
-  'evidence is one short sentence explaining the judgement, anchored to the article.',
-  'Return strict JSON only with key "results" containing one item per input CVE.',
+const interpretationSystemPrompt = [
+  'You are a security analyst briefing a manager on the CVEs named in a news article.',
+  'For each provided CVE identifier, write 2-4 plain-language sentences covering, as far as',
+  'the article supports: (1) what the CVE is — the flaw type and the affected product,',
+  'vendor, or system named in the article; (2) the impact — what an attacker could do',
+  '(e.g. remote code execution, privilege escalation, data theft) and which systems or',
+  'assets are exposed; (3) how serious and urgent it looks based on the article — active',
+  'exploitation or in-the-wild use, ransomware or campaign links, whether a patch or',
+  'mitigation exists, and anything that would make a manager treat it as actionable.',
+  'Write as a briefing, not as commentary about the article. Do NOT judge whether the',
+  'article is really "about" this CVE, and do NOT assign a relevance verdict.',
+  'Ground every statement in the article text; if the article does not say something,',
+  'omit it rather than speculating. cveId MUST exactly match one of the provided CVE',
+  'identifiers; never invent new ones.',
+  'Return strict JSON only with key "results": an array with one object per input CVE.',
+  'Each object MUST use exactly these keys: "cveId" (string) and "interpretation" (string,',
+  'the 2-4 sentence briefing, at most 1500 characters). Do not use other field names such',
+  'as evidence, summary, relevance, or description.',
 ].join(' ');
 
 export interface GenerateSummaryOptions {
@@ -95,26 +108,26 @@ export async function generateArticleDisposition(
   );
 }
 
-export interface GenerateRelevanceOptions {
-  call?: SchemaCaller<CveRelevanceResult>;
+export interface GenerateInterpretationOptions {
+  call?: SchemaCaller<CveInterpretationResult>;
 }
 
-export async function generateCveRelevance(
+export async function generateCveInterpretation(
   article: ArticleRecord,
   cveIds: string[],
-  options: GenerateRelevanceOptions = {}
-): Promise<CveRelevanceItem[]> {
+  options: GenerateInterpretationOptions = {}
+): Promise<CveInterpretationItem[]> {
   if (cveIds.length === 0) return [];
   const call =
     options.call ??
     ((system, user) =>
-      callLLMWithSchema(system, user, CveRelevanceResultSchema, { temperature: 0.1 }));
+      callLLMWithSchema(system, user, CveInterpretationResultSchema, { temperature: 0.1 }));
 
-  const merged = new Map<string, CveRelevanceItem>();
-  for (let i = 0; i < cveIds.length; i += RELEVANCE_CHUNK_SIZE) {
-    const chunk = cveIds.slice(i, i + RELEVANCE_CHUNK_SIZE);
+  const merged = new Map<string, CveInterpretationItem>();
+  for (let i = 0; i < cveIds.length; i += INTERPRETATION_CHUNK_SIZE) {
+    const chunk = cveIds.slice(i, i + INTERPRETATION_CHUNK_SIZE);
     const response = await call(
-      relevanceSystemPrompt,
+      interpretationSystemPrompt,
       JSON.stringify({
         cves: chunk,
         article: {
@@ -126,7 +139,7 @@ export async function generateCveRelevance(
       })
     );
     for (const item of response.results) {
-      const parsed = CveRelevanceItemSchema.parse(item);
+      const parsed = CveInterpretationItemSchema.parse(item);
       if (!chunk.includes(parsed.cveId)) continue;
       merged.set(parsed.cveId, parsed);
     }
@@ -134,8 +147,7 @@ export async function generateCveRelevance(
 
   return cveIds.map((cveId) => merged.get(cveId) ?? {
     cveId,
-    relevance: 'uncertain' as const,
-    evidence: 'Model returned no assessment for this CVE.',
+    interpretation: 'Model returned no interpretation for this CVE.',
   });
 }
 

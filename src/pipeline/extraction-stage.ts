@@ -5,6 +5,7 @@ import { ExtractionRouter } from '../extraction/extraction-router.js';
 import type { ArticleExtractor } from '../extraction/article-extractor.interface.js';
 import { sha256Hex } from '../utils/hash.js';
 import { wordRecall } from '../utils/word-overlap.js';
+import { logStageArticle, logStageBatch } from '../utils/logger.js';
 
 export interface ExtractionStageResult {
   reviewed: number;
@@ -22,10 +23,17 @@ export async function runExtractionStage(
   let succeeded = 0;
   let failed = 0;
 
+  logStageBatch(
+    'extraction',
+    'extract',
+    candidates.map((article) => article.id)
+  );
+
   for (const article of candidates) {
     if (!article.canonicalUrl) {
       await articles.updateProcessingStatus(article.id, 'EXTRACTION_FAILED', 'missing canonical URL');
       failed += 1;
+      logStageArticle('extraction', article.id, 'failed', { reason: 'missing canonical URL' });
       continue;
     }
 
@@ -55,8 +63,20 @@ export async function runExtractionStage(
       rssRecall,
     });
 
-    if (success) succeeded += 1;
-    else failed += 1;
+    if (success) {
+      succeeded += 1;
+      logStageArticle('extraction', article.id, 'succeeded', {
+        method: result.method,
+        status: result.status,
+      });
+    } else {
+      failed += 1;
+      logStageArticle('extraction', article.id, 'failed', {
+        method: result.method,
+        status: result.status,
+        error: result.error ?? null,
+      });
+    }
   }
 
   return {

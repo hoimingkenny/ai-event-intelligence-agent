@@ -8,6 +8,8 @@ import {
   type AttachArticleInput,
 } from '../cve/cases.js';
 import type { EnrichmentAdapterSet } from '../cve/enrichment.js';
+import { syncCasePublicationFromCvss } from '../cve/review.js';
+import { logStageArticle, logStageBatch } from '../utils/logger.js';
 
 export interface CaseConsolidationStageResult {
   evidenceCollected: number;
@@ -24,10 +26,13 @@ export interface CaseConsolidationStageOptions {
   adapters?: Partial<EnrichmentAdapterSet>;
 }
 
-const RELEVANCE_TASK_NAME = 'article_cve_relevance';
+const INTERPRETATION_TASK_NAME = 'article_cve_interpretation';
 
-interface RelevanceTaskResult {
-  results?: Array<{ cveId: string; relevance: string; evidence: string }>;
+interface InterpretationTaskResult {
+  results?: Array<{
+    cveId: string;
+    interpretation: string;
+  }>;
 }
 
 export async function runCaseConsolidationStage(
@@ -37,9 +42,10 @@ export async function runCaseConsolidationStage(
   const cases = new CveCaseRepository(db);
   const adapters = buildEnrichmentAdapterSet({ adapters: options.adapters });
 
-  const evidenceInputs = await collectRelevantEvidence(db, options.limit ?? 200);
+  const evidenceInputs = await collectInterpretedEvidence(db, options.limit ?? 200);
 
   if (evidenceInputs.length === 0) {
+    logStageBatch('case_consolidation', 'none', []);
     return {
       evidenceCollected: 0,
       casesEnsured: 0,
@@ -51,6 +57,19 @@ export async function runCaseConsolidationStage(
     };
   }
 
+  const articleIds = Array.from(new Set(evidenceInputs.map((item) => item.articleId)));
+  logStageBatch('case_consolidation', 'consolidate', articleIds, {
+    evidenceCount: evidenceInputs.length,
+    cveIds: Array.from(new Set(evidenceInputs.map((item) => item.cveId))).sort(),
+  });
+
+  for (const item of evidenceInputs) {
+    logStageArticle('case_consolidation', item.articleId, 'attach', {
+      cveId: item.cveId,
+      lifecycleState: item.lifecycleState,
+    });
+  }
+
   const consolidation = await consolidateArticleCveEvidence(db, evidenceInputs);
 
   const newCaseIds: string[] = [];
@@ -59,7 +78,23 @@ export async function runCaseConsolidationStage(
     if (existingObservations.size === 0) newCaseIds.push(ensured.id);
   }
 
+  if (newCaseIds.length > 0) {
+    logStageBatch('case_consolidation', 'enrich_scores', articleIds, {
+      caseIds: newCaseIds,
+      cveIds: consolidation.cases
+        .filter((c) => newCaseIds.includes(c.id))
+        .map((c) => c.cveId)
+        .sort(),
+    });
+  }
+
   const enrichment = await runInitialEnrichment(db, newCaseIds, adapters);
+
+  // Re-sync every case touched this run (covers already-enriched cases whose CVSS
+  // already meets the auto-publish threshold).
+  for (const ensured of consolidation.cases) {
+    await syncCasePublicationFromCvss(db, ensured.id);
+  }
 
   return {
     evidenceCollected: evidenceInputs.length,
@@ -72,7 +107,14 @@ export async function runCaseConsolidationStage(
   };
 }
 
-async function collectRelevantEvidence(
+/**
+ * Collect article↔CVE pairs ready for case ensure + enrichment.
+ *
+ * Every CVE the interpretation task reported for an actionable article becomes a case-article
+ * link in the neutral `mentioned` state, so each mention carries NVD/KEV/EPSS scores. Human
+ * review (Confirm / Reject / Uncertain) is what later promotes a link to relevant evidence.
+ */
+async function collectInterpretedEvidence(
   db: Queryable,
   limit: number
 ): Promise<AttachArticleInput[]> {
@@ -80,22 +122,20 @@ async function collectRelevantEvidence(
   const queued: AttachArticleInput[] = [];
   const seen = new Set<string>();
 
-  const completedRelevance = await tasks.listCompletedByName(RELEVANCE_TASK_NAME, limit);
-  for (const task of completedRelevance) {
-    const results = (task.result as RelevanceTaskResult | null)?.results ?? [];
+  const completed = await tasks.listCompletedByName(INTERPRETATION_TASK_NAME, limit);
+  for (const task of completed) {
+    const results = (task.result as InterpretationTaskResult | null)?.results ?? [];
     for (const item of results) {
-      if (item.relevance !== 'relevant') continue;
       const dedupeKey = `${task.targetId}:${item.cveId}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       queued.push({
         cveId: item.cveId,
         articleId: task.targetId,
-        lifecycleState: 'automated_relevant',
+        lifecycleState: 'mentioned',
         evidence: {
           cveId: item.cveId,
-          relevance: 'relevant',
-          evidence: item.evidence,
+          interpretation: item.interpretation,
           automatedAt: task.completedAt?.toISOString() ?? new Date().toISOString(),
           automatedTaskId: task.id,
         },

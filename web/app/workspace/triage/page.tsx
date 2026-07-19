@@ -18,7 +18,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Triage · Workspace',
+  title: 'Articles · Workspace',
 };
 
 type PageProps = {
@@ -46,16 +46,12 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
       <SiteHeader active="workspace" />
       <main className="page">
         <p className="page-kicker">Analyst workspace</p>
-        <h1 className="page-title">Needs triage</h1>
-        <p className="page-lede">
-          Articles not yet on any approved event. Use{' '}
-          <Link href="/workspace/new">Create event</Link> to open a draft from one or more of them.
-        </p>
+        <h1 className="page-title">Articles</h1>
 
         <WorkspaceNav active="triage" />
 
         {result.items.length === 0 ? (
-          <p className="meta">No untriaged articles right now.</p>
+          <p className="meta">No articles in this queue right now.</p>
         ) : (
           <ul className="triage-grid">
             {result.items.map((article) => (
@@ -73,7 +69,6 @@ export default async function WorkspaceTriagePage({ searchParams }: PageProps) {
                     <span className="triage-mono">#{article.id}</span>{' '}
                     {article.title || article.canonicalUrl || 'Untitled article'}
                   </Link>
-                  <span className="chip">{article.processingStatus}</span>
                 </div>
                 <span className="triage-end">
                   <span className="triage-icons-row">

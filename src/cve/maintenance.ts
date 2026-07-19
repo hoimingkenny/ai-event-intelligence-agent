@@ -2,6 +2,7 @@ import { CveCaseRepository, type CveSourceName } from '../db/repositories/cve-ca
 import type { Queryable } from '../db/repositories/types.js';
 import { logInfo, logWarn, logError } from '../utils/logger.js';
 import { stableStringify } from '../utils/stable-json.js';
+import { syncAllCasePublicationsFromCvss } from './review.js';
 import type { MaintenanceAdapterSet, NvdRefreshRecord } from './maintenance-adapters.js';
 import type {
   EpssNormalized,
@@ -293,6 +294,10 @@ export async function runMaintenanceTick(
     },
     'cve_maintenance_tick_completed'
   );
+
+  // Keep public catalogue in sync with CVSS after refresh (including human pull-backs
+  // that should be republished when CVSS is still ≥ threshold).
+  await syncAllCasePublicationsFromCvss(db);
 
   return { sources, totalDurationMs: Date.now() - nvdStart };
 }
